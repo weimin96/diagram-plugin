@@ -67,9 +67,21 @@ pnpm check:hosts
 
 `pnpm benchmark:architecture:engines --case=microservices` 继续用于现有 Canvas 布局与三种 ELK 实验候选的几何质量对照。**不直接开启 ELK 正式路由。**
 
-`pnpm benchmark:architecture:d2` 将同一架构图中的真实节点、功能容器和有向关系转换为 D2 测试输入，输出 `test-results/architecture-d2-review/` 下的 `.d2`、当前引擎 SVG 和对照画廊。安装 D2 0.9.0+，使用 `d2 layout` 确认 TALA 已内置，再运行 `pnpm benchmark:architecture:d2 --render` 实际生成 TALA、D2 ELK、Dagre 的独立 SVG。也支持 `--case=...` 和 `D2_BIN=/path/to/d2`。
+`pnpm benchmark:architecture:d2` 将同一架构图中的真实节点、节点尺寸、功能容器和有向关系转换为 D2 测试输入，输出 `test-results/architecture-d2-review/` 下的 `.d2`、当前引擎 SVG 和对照画廊。安装 D2 0.9.0+，使用 `d2 layout` 确认 TALA 已内置，再运行 `pnpm benchmark:architecture:d2 --render` 实际生成 TALA、D2 ELK、Dagre。支持 `--case=...` 和 `D2_BIN=/path/to/d2`。实验额外解析 D2 SVG 的真实节点位置（支持 0.9.0 的 base64 CSS 类名），保留原始 Canvas 图元、尺寸、业务关系和标签，以现有 Canvas 布线器生成独立的 `--canvas.svg` 和 `--canvas.diagram.json`，再使用相同的质量指标比较布局。
 
-**重要限制：**D2 使用自己的文字度量、节点尺寸、主题与 SVG 渲染，所以这一步只能看空间布局、容器和关系是否更自然，不是同一 Canvas 像素风格的公平 A/B，也不把不同计时范围直接比较。当前尚无经过验证的 TALA → 可编辑 Canvas 坐标与折点转换器；TALA 未完成真正的可编辑 Canvas 集成及正式引擎验收之前，不允许切换默认生成路由。
+**重要限制：**原生 D2 SVG 使用 D2 自己的主题与连线；回灌的 Canvas 只取 D2 的节点位置，**不保留 D2 边线折点或端口优化**，不能用这项实验直接评价 TALA 原生边线的质量。当前项目生成器耗时包含候选搜索，而 D2 CLI 耗时包含进程启动、布局及 SVG 渲染，两者不可直接当作布局速度比较。锁定节点、异常或缺失的坐标明确拒绝导入。所有路径都只在 `scripts/` 实验中使用，不新增正式运行依赖、保存格式或默认模型路由。
+
+在 macOS ARM64 上实测官方 D2 v0.9.0（release SHA-256：`eaf6c0c143e56dd9fa97bfb6df25ea9c1ebce40245f056a0768cf1a6c15d3064`），五组结果均成功回灌可编辑 Canvas。以下为「交叉 / 重叠 / 适配字号」；不是主观审美打分：
+
+| 样例 | 当前布局 | TALA 位置 + 本地正交布线 |
+| --- | --- | --- |
+| 企业系统 | 0 / 0 / 12px | 0 / 0 / 8.9px |
+| 微服务 | 0 / 1 / 12px | 0 / 0 / 9px |
+| 微服务高扇出 | 0 / 6 / 12px | 1 / 4 / 5.8px |
+| 数据平台 | 0 / 1 / 11.2px | 0 / 3 / 14px |
+| 数据平台高扇出 | 0 / 4 / 8.3px | 6 / 0 / 8.9px |
+
+对照中的 TALA 候选没有一组同时满足不增加交叉/重叠、不恶化文字可读性的基本门禁；绝不因原生 D2 SVG 看起来较干净就将其自动发布成 Canvas。实验门禁输出具体拒绝原因；允许进入人工视觉审查不代表可以上线。后续优先在现有求解层解决紧凑度、分区排布与端口联动，再复评 TALA 的真实价值。
 
 ```sh
 pnpm visual:smoke       # 真实 Chrome 渲染全部 Mermaid 模板，捕获 lexer / 渲染兼容问题

@@ -20,18 +20,23 @@ export function architectureSceneToD2(scene: CanvasScene): {
 
   const quote = (value: string) => JSON.stringify(value.replace(/[\r\n]+/g, ' ').trim())
   const groupLabels = new Map((scene.groups ?? []).map((group) => [group.id, group.label]))
-  const declaration = (node: CanvasNode, indent = '') =>
-    `${indent}${byNodeId.get(node.id)}: ${quote(node.text)}`
+  const declaration = (node: CanvasNode, indent = '') => [
+    `${indent}${byNodeId.get(node.id)}: ${quote(node.text)} {`,
+    `${indent}  shape: rectangle`,
+    `${indent}  width: ${Math.round(node.width)}`,
+    `${indent}  height: ${Math.round(node.height)}`,
+    `${indent}}`,
+  ]
   const lines = [
     '# Diagram Plugin experimental benchmark; only semantic nodes and directional relations',
     'direction: right',
   ]
   for (const [id, alias] of groups) {
     lines.push(`${alias}: {`, `  label: ${quote(groupLabels.get(id) ?? id)}`)
-    for (const node of nodes.filter((item) => item.groupId === id)) lines.push(declaration(node, '  '))
+    for (const node of nodes.filter((item) => item.groupId === id)) lines.push(...declaration(node, '  '))
     lines.push('}')
   }
-  for (const node of nodes.filter((item) => !item.groupId)) lines.push(declaration(node))
+  for (const node of nodes.filter((item) => !item.groupId)) lines.push(...declaration(node))
   const fullId = (id: string) => {
     const node = nodes.find((item) => item.id === id)!
     const alias = byNodeId.get(id)!

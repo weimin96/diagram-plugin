@@ -21,7 +21,7 @@ test('D2 engine benchmark preserves semantic graph with stable safe aliases and 
   assert.deepEqual(architectureSceneToD2(scene), one)
   assert.equal(one.nodes.length, 2)
   assert.equal(one.relations.length, 2)
-  assert.match(one.source, /g0: \{\n  label: "核心应用"\n  n0: "API 网关"\n\}/)
+  assert.match(one.source, /g0: \{\n  label: "核心应用"\n  n0: "API 网关" \{\n    shape: rectangle\n    width: 180\n    height: 80\n  \}\n\}/)
   assert.match(one.source, /g0\.n0 -> n1: "SQL 写入"/)
   assert.match(one.source, /g0\.n0 -> n1: "SQL 读取"/)
   assert.equal(one.source.includes('api.a'), false)
