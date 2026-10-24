@@ -269,7 +269,8 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
   const architectureCard = displayItem.type === 'node' && Boolean(displayItem.iconRef || displayItem.icon || displayItem.stencil || displayItem.c4Type)
   const cardTemplate = canvasArchitectureCardTemplate(displayItem)
   const cardMeta = displayItem.iconRef ? canvasIconRefLabel(displayItem.iconRef) : displayItem.stencil ? canvasStencilLabel(displayItem.stencil) : architectureCard ? cardTemplate.label : displayItem.icon ? canvasIconLabel(displayItem.icon) : undefined
-  const architectureMark = Boolean(architecture && architectureCard && (displayItem.iconRef || displayItem.stencil || (displayItem.icon && displayItem.icon !== 'user' && displayItem.icon !== 'external')))
+  // Actor, external and technical nodes share a common card/icon/title grid.
+  const architectureMark = Boolean(architecture && architectureCard)
   const titleColor = architectureMark && !originalItem.fillColor
     ? darkTheme ? '#f8fafc' : '#243247'
     : canvasFillTextColor(displayItem.fillColor, skin?.text ?? (darkTheme ? '#f8fafc' : '#243247'))
@@ -3146,7 +3147,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
             <pattern id="canvas-grid" width={GRID * 2} height={GRID * 2} patternUnits="userSpaceOnUse">
               <path d={`M${GRID * 2} 0H0V${GRID * 2}`} className="freeform-grid-line" fill="none" />
             </pattern>
-            <marker id="canvas-arrow" markerWidth="12" markerHeight="12" refX="9" refY="4" orient="auto">
+            <marker id="canvas-arrow" markerUnits={scene.architecture ? 'userSpaceOnUse' : 'strokeWidth'} markerWidth="12" markerHeight="12" refX={scene.architecture ? 10 : 9} refY="4" orient="auto">
               <path d="M0,0 L0,8 L10,4 z" fill="context-stroke" />
             </marker>
           </defs>
@@ -3428,7 +3429,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
             const imageSource = imagePath ? imageSources[imagePath] : undefined
             const architectureCard = displayItem.type === 'node' && Boolean(displayItem.iconRef || displayItem.icon || displayItem.stencil || displayItem.c4Type)
             const cardTemplate = canvasArchitectureCardTemplate(displayItem)
-            const architectureMark = Boolean(scene.architecture && architectureCard && (displayItem.iconRef || displayItem.stencil || (displayItem.icon && displayItem.icon !== 'user' && displayItem.icon !== 'external')))
+            const architectureMark = Boolean(scene.architecture && architectureCard)
             const selectedForLod = selectedIdSet.has(item.id)
             const showAnchorPoints = !imagePath && !(displayItem.type === 'note' && displayItem.textOnly) && (selectedForLod || tool === 'connect' || connectFrom === item.id)
             return (

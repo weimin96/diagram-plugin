@@ -380,7 +380,7 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
   const border = colors?.border || '#8a8a8a'
   const note = colors?.note || '#fff7cc'
   const darkArchitecture = architectureMode && hexLuminance(background) < 0.18
-  const architectureBorder = darkArchitecture ? '#71717a' : border
+  const architectureBorder = colors?.border ?? (darkArchitecture ? '#9bafc6' : '#53677d')
   const allNodes = new Map(scene.elements.filter((item): item is CanvasNode | CanvasNote => item.type !== 'arrow').map((item) => [item.id, item]))
   const groupFrames = canvasGroupFrames(scene)
   const collapsedOwners = canvasCollapsedOwners(scene)
@@ -412,13 +412,13 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
       : arrow.lineStyle === 'dashed' || (architectureMode && architectureProfile.sketchEdges) ? ' stroke-dasharray="8 6"' : ''
     const geometry = canvasArrowRoutePath(route, arrow.freehand)
     const strokeWidth = arrow.strokeWidth ?? (architectureMode
-      ? (arrow.emphasis === 'primary' ? 1.8 : arrow.emphasis === 'muted' ? 0.85 : 1.2) * architectureProfile.edgeScale
+      ? (arrow.emphasis === 'primary' ? 2.6 : arrow.emphasis === 'muted' ? 1.7 : 2.1) * architectureProfile.edgeScale
       : arrow.emphasis === 'primary' ? 3.2 : arrow.emphasis === 'muted' ? 1.35 : 2)
     const groupBundle = architectureMode && arrow.bundleKey?.startsWith('group:')
     const opacity = arrow.opacity ?? (architectureMode
       ? groupBundle
         ? arrow.emphasis === 'muted' ? darkArchitecture ? '0.24' : '0.20' : arrow.emphasis === 'secondary' ? darkArchitecture ? '0.56' : '0.48' : darkArchitecture ? '0.84' : '0.78'
-        : arrow.emphasis === 'muted' ? '0.34' : arrow.emphasis === 'secondary' ? '0.72' : '0.94'
+        : arrow.emphasis === 'muted' ? '0.62' : arrow.emphasis === 'secondary' ? '0.90' : '1'
       : arrow.emphasis === 'muted' ? '0.48' : arrow.emphasis === 'secondary' ? '0.78' : '1')
     const stroke = arrow.strokeColor ?? visualSkin?.edge ?? (architectureMode ? architectureBorder : border)
     const visibleLabel = architectureMode && arrow.label && !canvasArchitectureRelationLabelVisible(arrow) ? undefined : arrow.label
@@ -518,10 +518,11 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
       ? group.collapsed ? '0.34' : String(architectureProfile.groupFillOpacity)
       : group.collapsed ? '0.5' : softwareSystem ? '0.10' : container ? '0.05' : '0'
     const collapsed = group.collapsed ? ' · collapsed' : ''
-    const fill = group.collapsed || softwareSystem || container ? escapeXml(palette.fill) : 'none'
+    const fill = architectureMode || group.collapsed || softwareSystem || container ? escapeXml(palette.fill) : 'none'
     if (architectureMode) {
-      const groupStrokeOpacity = softwareSystem ? architectureProfile.groupStrokeOpacity * 0.78 : architectureProfile.groupStrokeOpacity
-      return `<g><rect x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" rx="${architectureProfile.groupRadius}" fill="${fill}" fill-opacity="${fillOpacity}" stroke="${escapeXml(softwareSystem ? architectureBorder : palette.stroke)}" stroke-opacity="${groupStrokeOpacity}" stroke-width="${strokeWidth}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>${group.label ? `<text x="${group.x + 10}" y="${group.y + 18}" font-size="${softwareSystem ? 10.5 : 10.5}" font-weight="${softwareSystem ? 620 : 600}" fill="${escapeXml(text)}" opacity="${softwareSystem ? '0.66' : '0.72'}">${escapeXml(`${group.label}${collapsed}`)}</text>` : ''}</g>`
+      const groupStrokeOpacity = softwareSystem ? 0.55 : 0.78
+      const frameFillOpacity = group.collapsed ? fillOpacity : '0.07'
+      return `<g><rect x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" rx="${architectureProfile.groupRadius}" fill="${fill}" fill-opacity="${frameFillOpacity}" stroke="${escapeXml(softwareSystem ? architectureBorder : palette.stroke)}" stroke-opacity="${groupStrokeOpacity}" stroke-width="${Math.max(1.35, strokeWidth)}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>${group.label ? `<text x="${group.x + 10}" y="${group.y + 18}" font-size="11.5" font-weight="650" fill="${escapeXml(text)}" opacity="0.90">${escapeXml(`${group.label}${collapsed}`)}</text>` : ''}</g>`
     }
     const c4 = group.c4Type ? ` · ${c4Label(group.c4Type)}` : ''
     const header = group.label && softwareSystem
@@ -539,7 +540,7 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
   }).join('')
   const header = architectureHeader ? architectureHeaderToSvg(scene, architectureHeader, { background, text, border }) : ''
   const marker = architectureMode
-    ? '<marker id="arrow" markerWidth="7" markerHeight="7" refX="6" refY="2.5" orient="auto"><path d="M0,0 L0,5 L7,2.5 z" fill="context-stroke"/></marker>'
+    ? '<marker id="arrow" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" refX="10" refY="4" orient="auto"><path d="M0,0 L0,8 L10,4 z" fill="context-stroke"/></marker>'
     : '<marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="context-stroke"/></marker>'
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${scene.width} ${scene.height}" width="${scene.width}" height="${scene.height}"><defs>${marker}</defs><rect width="100%" height="100%" fill="${escapeXml(background)}"/>${header}${lanes}${groups}${bundleTrunks}${arrows}${collapsedConnections}${shapes}</svg>`
 }
@@ -1477,17 +1478,17 @@ function renderArchitectureCanvasNode(
 ): string {
   const profile = canvasArchitectureThemeProfile(theme)
   const compact = density === 'dense'
-  const baseIconSize = item.iconRef || item.stencil ? compact ? 32 : 40 : compact ? 28 : 34
-  const iconSize = baseIconSize * profile.iconScale
-  const iconX = item.x + (compact ? 10 : 12)
+  const iconSize = (compact ? 30 : density === 'compact' ? 34 : 38) * profile.iconScale
+  const iconX = item.x + 14
   const iconY = item.y + (item.height - iconSize) / 2
-  const textX = iconX + iconSize + (compact ? 9 : 11)
+  const hasIcon = Boolean(item.iconRef || item.stencil || item.icon)
+  const textX = hasIcon ? iconX + iconSize + 12 : item.x + 16
   const titleY = item.y + item.height / 2 + (item.subtitle ? -4 : 4)
   const subtitleY = titleY + 17
   const titleSize = compact ? 12 : density === 'compact' ? 12.5 : 13
   const focused = item.emphasis === 'primary' && theme === 'enterprise'
   const subtitleSize = compact ? 9 : 9.5
-  const opacity = item.emphasis === 'muted' ? '0.68' : '1'
+  const opacity = item.opacity ?? (item.emphasis === 'muted' ? '0.88' : '1')
   const darkSurface = hexLuminance(palette.text) > 0.62
   const mark = item.iconRef
     ? architectureIconRefMark(item.iconRef, iconX, iconY, iconSize, palette.text, darkSurface)
@@ -1501,18 +1502,10 @@ function renderArchitectureCanvasNode(
   const subtitle = item.subtitle
     ? `<text x="${textX}" y="${subtitleY}" font-size="${subtitleSize}" fill="${escapeXml(palette.text)}" opacity="${profile.subtitleOpacity}"${fontFamily}>${escapeXml(truncateCanvasText(item.subtitle, compact ? 20 : 26))}</text>`
     : ''
-  if (item.iconRef || item.stencil || isArchitectureTechnicalRole(item.icon)) {
-    const plateOpacity = focused ? 0.14 : profile.nodePlateOpacity
-    const strokeOpacity = focused ? 0.35 : profile.nodeStrokeOpacity
-    const plate = plateOpacity > 0
-      ? `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="${profile.nodeRadius}" fill="${escapeXml(palette.fill)}" fill-opacity="${plateOpacity}" stroke="${escapeXml(palette.stroke)}" stroke-opacity="${strokeOpacity}" stroke-width="${focused ? 1 : profile.nodeStrokeWidth}"${profile.sketchEdges ? ' stroke-dasharray="6 5"' : ''}/>`
-      : ''
-    return `<g opacity="${opacity}">${plate}${mark}<text x="${textX}" y="${titleY}" font-size="${(titleSize + profile.titleSizeDelta + (focused ? 0.8 : 0)) * titleScale}" font-weight="${focused ? 730 : profile.titleWeight}" fill="${escapeXml(palette.text)}"${fontFamily}>${escapeXml(truncateCanvasText(item.text.replace(/\n/g, ' '), compact ? 20 : 26))}</text>${subtitle}</g>`
-  }
-  const borderDash = item.icon === 'external' || item.c4Type === 'software-system' ? ' stroke-dasharray="5 4"' : ''
-  const fillOpacity = item.emphasis === 'primary' ? '0.54' : '0.32'
-  const strokeOpacity = item.emphasis === 'primary' ? '0.50' : '0.30'
-  return `<g opacity="${opacity}"><rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="7" fill="${escapeXml(palette.fill)}" fill-opacity="${fillOpacity}" stroke="${escapeXml(palette.stroke)}" stroke-opacity="${strokeOpacity}" stroke-width="${item.emphasis === 'primary' ? 1.25 : 0.9}"${borderDash}/>${mark}<text x="${textX}" y="${titleY}" font-size="${titleSize * titleScale}" font-weight="650" fill="${escapeXml(palette.text)}">${escapeXml(truncateCanvasText(item.text.replace(/\n/g, ' '), compact ? 20 : 26))}</text>${subtitle}</g>`
+  // Every architecture node, including a technology logo or external actor,
+  // has the same hit area and visible card. No invisible technical-node plates.
+  const plate = `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="${profile.nodeRadius || 8}" fill="${escapeXml(item.fillColor ?? palette.fill)}" fill-opacity="${item.fillColor ? 1 : 0.94}" stroke="${escapeXml(item.strokeColor ?? palette.stroke)}" stroke-opacity="${item.strokeColor ? 1 : focused ? 0.9 : 0.72}" stroke-width="${item.strokeWidth ?? (focused ? 1.7 : 1.25)}"/>`
+  return `<g opacity="${opacity}">${plate}${mark}<text x="${textX}" y="${titleY}" font-size="${(titleSize + profile.titleSizeDelta + (focused ? 0.8 : 0)) * titleScale}" font-weight="${focused ? 730 : profile.titleWeight}" fill="${escapeXml(palette.text)}"${fontFamily}>${escapeXml(truncateCanvasText(item.text.replace(/\n/g, ' '), compact ? 20 : 26))}</text>${subtitle}</g>`
 }
 
 function canvasArchitectureThemeProfile(theme: CanvasArchitectureTheme) {
@@ -1530,10 +1523,6 @@ function canvasArchitectureThemeProfile(theme: CanvasArchitectureTheme) {
     default:
       return { edgeScale: 1, sketchEdges: false, groupSolid: false, groupScale: 0.9, groupFillOpacity: 0, groupStrokeOpacity: 0.50, groupRadius: 8, nodePlateOpacity: 0, nodeStrokeOpacity: 0, nodeStrokeWidth: 0, nodeRadius: 7, titleWeight: 650, titleSizeDelta: 0, iconScale: 1, fontFamily: '', subtitleOpacity: 0.58 }
   }
-}
-
-function isArchitectureTechnicalRole(icon: CanvasIcon | undefined): boolean {
-  return Boolean(icon && icon !== 'user' && icon !== 'external')
 }
 
 export function canvasArchitectureRelationLabelVisible(arrow: CanvasArrow): boolean {

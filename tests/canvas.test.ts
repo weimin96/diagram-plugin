@@ -279,7 +279,11 @@ test('architecture themes produce distinct SVG treatments without changing node 
   assert.notEqual(cloud, sketch)
   assert.match(engineering, /Spring API/)
   assert.match(cloud, /Spring API/)
-  assert.match(sketch, /stroke-opacity="0.62"/)
+  assert.match(sketch, /font-family="ui-rounded, system-ui, sans-serif"/)
+  for (const output of [engineering, cloud, sketch]) {
+    assert.equal((output.match(/fill-opacity="0\.94"/g) ?? []).length, 2, 'every technology node has a solid-enough card')
+    assert.match(output, /markerUnits="userSpaceOnUse" markerWidth="12"/)
+  }
 })
 
 test('places relationship labels on routed segments without stacking them at the same point', () => {
@@ -354,7 +358,7 @@ test('renders compact presentation architecture without dashboard metadata in SV
   assert.doesNotMatch(svg, />PG</)
 })
 
-test('enterprise architecture renders primary technical nodes with a restrained focus plate in SVG export', () => {
+test('enterprise architecture renders visible aligned cards and a legible primary arrow', () => {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas', version: 1, title: 'Main business path',
     width: 960, height: 620, architecture: { theme: 'enterprise', view: 'detail' },
@@ -365,12 +369,34 @@ test('enterprise architecture renders primary technical nodes with a restrained 
     ],
   }
   const svg = canvasSceneToSvg(scene)
-  assert.match(svg, /fill-opacity="0\.14" stroke="[^"]+" stroke-opacity="0\.35" stroke-width="1"/)
+  assert.match(svg, /fill-opacity="0\.94" stroke="[^"]+" stroke-opacity="0\.9" stroke-width="1\.7"/)
   assert.match(svg, /font-weight="730"[^>]*>Core API<\/text>/)
   assert.doesNotMatch(svg, /font-weight="730"[^>]*>Aux Worker<\/text>/)
-  assert.equal((svg.match(/fill-opacity="0\.14"/g) ?? []).length, 1)
+  assert.equal((svg.match(/fill-opacity="0\.94"/g) ?? []).length, 2)
+  assert.match(svg, /stroke-width="2\.6" marker-end="url\(#arrow\)"/)
   const technical = canvasSceneToSvg({ ...scene, architecture: { theme: 'technical' } })
   assert.doesNotMatch(technical, /font-weight="730"[^>]*>Core API<\/text>/)
+})
+
+test('architecture actors, branded nodes and manual fill share card geometry and readable arrows', () => {
+  const scene: CanvasScene = {
+    type: 'diagram-plugin-canvas', version: 1, title: 'Unified architectural glyphs', width: 980, height: 480,
+    architecture: { theme: 'enterprise', view: 'detail' },
+    elements: [
+      { id: 'actor', type: 'node', x: 40, y: 130, width: 180, height: 80, text: '用户', icon: 'user' },
+      { id: 'brand', type: 'node', x: 330, y: 130, width: 180, height: 80, text: 'PostgreSQL', icon: 'database', stencil: 'postgres' },
+      { id: 'custom', type: 'node', x: 620, y: 130, width: 180, height: 80, text: '手工底色', icon: 'api', fillColor: '#123456', strokeWidth: 3 },
+      { id: 'a', type: 'arrow', from: 'actor', to: 'brand', emphasis: 'secondary' },
+      { id: 'b', type: 'arrow', from: 'brand', to: 'custom', emphasis: 'muted' },
+    ],
+  }
+  const before = serializeCanvasScene(scene)
+  const svg = canvasSceneToSvg(scene)
+  assert.equal((svg.match(/fill-opacity="0\.94"/g) ?? []).length, 2)
+  assert.match(svg, /fill="#123456" fill-opacity="1"[^>]+stroke-width="3"/)
+  assert.match(svg, /opacity="0\.62"><path[^>]+marker-end="url\(#arrow\)"/)
+  for (const label of ['用户', 'PostgreSQL', '手工底色']) assert.match(svg, new RegExp(`>${label}<\\/text>`))
+  assert.equal(serializeCanvasScene(scene), before)
 })
 
 test('overview projection keeps source data intact while reducing low-priority architecture detail', () => {

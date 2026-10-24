@@ -1277,3 +1277,45 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 }
 
 .freeform-source-error { color: var(--danger); font-size: 12px; line-height: 1.5; }
+
+/* Architecture visual grammar: one card silhouette regardless of glyph source.
+ * The editor and exported SVG share a visible plate, aligned role/title grid,
+ * legible edges and boundary hierarchy. Authored per-node colors still win. */
+.freeform-editor.is-architecture-mode .freeform-box.is-architecture-card { --arch-card-tint: var(--text-secondary); }
+.freeform-editor.is-architecture-mode .freeform-box.is-architecture-card.tone-accent { --arch-card-tint: #6366f1; }
+.freeform-editor.is-architecture-mode .freeform-box.is-architecture-card.tone-success { --arch-card-tint: #059669; }
+.freeform-editor.is-architecture-mode .freeform-box.is-architecture-card.tone-warning { --arch-card-tint: #b45309; }
+.freeform-editor.is-architecture-mode .freeform-box.is-architecture-card.tone-muted { --arch-card-tint: var(--text-secondary); }
+.freeform-editor.is-architecture-mode .freeform-box.is-architecture-card:not(.has-custom-fill) > rect:first-of-type {
+  fill: color-mix(in srgb, var(--arch-card-tint) 6%, var(--surface-panel));
+}
+.freeform-editor.is-architecture-mode .freeform-box.is-architecture-card:not(.has-custom-stroke) > rect:first-of-type {
+  stroke: color-mix(in srgb, var(--arch-card-tint) 52%, var(--border-strong));
+}
+.freeform-editor.is-architecture-mode .freeform-box.is-architecture-card:not(.has-custom-stroke-width) > rect:first-of-type { stroke-width: 1.25; }
+.freeform-editor.is-architecture-mode .freeform-box.is-architecture-card.emphasis-primary:not(.has-custom-stroke-width) > rect:first-of-type { stroke-width: 1.7; }
+.freeform-editor.is-architecture-mode .freeform-box.is-architecture-card.is-selected > rect:first-of-type { stroke: var(--accent); stroke-width: 2; }
+.freeform-editor.is-architecture-mode .freeform-box.emphasis-muted { opacity: .88; }
+.freeform-editor.is-architecture-mode .freeform-box.is-architecture-mark .freeform-node-title { font-size: 13px; font-weight: 680; }
+.freeform-editor.is-architecture-mode .freeform-node-role.is-architecture-role > rect { fill: color-mix(in srgb, var(--arch-card-tint, var(--text-secondary)) 8%, var(--surface-panel)); stroke: color-mix(in srgb, var(--arch-card-tint, var(--text-secondary)) 35%, var(--border)); }
+
+.freeform-editor.is-architecture-mode .freeform-group-frame:not(.c4-software-system) > rect:first-of-type {
+  fill: color-mix(in srgb, var(--surface-muted) 12%, transparent);
+  stroke: color-mix(in srgb, var(--text-secondary) 66%, var(--border-strong));
+  stroke-width: 1.45;
+  stroke-dasharray: 7 5;
+  opacity: 1;
+}
+.freeform-editor.is-architecture-mode .freeform-group-frame:not(.c4-software-system) > text {
+  fill: var(--text-secondary); font-size: 11.5px; font-weight: 680; opacity: 1;
+}
+.freeform-editor.is-architecture-mode .freeform-group-frame.c4-software-system > rect:first-of-type { opacity: .82; stroke-width: 1.35; }
+
+.freeform-editor.is-architecture-mode .freeform-arrow .freeform-arrow-line { stroke: var(--border-strong); stroke-width: 2.1; opacity: 1; }
+.freeform-editor.is-architecture-mode .freeform-arrow.emphasis-primary .freeform-arrow-line { stroke-width: 2.6; opacity: 1; }
+.freeform-editor.is-architecture-mode .freeform-arrow.emphasis-secondary { opacity: .95; }
+.freeform-editor.is-architecture-mode .freeform-arrow.emphasis-muted { opacity: .66; }
+.freeform-editor.is-architecture-mode .freeform-arrow.emphasis-muted .freeform-arrow-line { stroke-width: 1.7; }
+.freeform-editor.is-architecture-mode .freeform-arrow.is-group-bundle .freeform-arrow-line { opacity: .82; }
+.freeform-editor.is-architecture-mode .freeform-arrow.is-group-bundle.emphasis-muted .freeform-arrow-line { opacity: .62; }
+.freeform-editor.is-architecture-mode .freeform-arrow:not(.emphasis-muted):hover .freeform-arrow-line { stroke-width: 2.9; }

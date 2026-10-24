@@ -59,6 +59,10 @@ pnpm check:hosts
 
 ## 视觉回归
 
+### 架构图统一视觉规范（P0）
+
+架构画布中的参与者、技术服务、数据库与外部组件都应有一致的卡片底板、图标与标题水平基线；技术 Logo 只是内部内容，不能取消节点容器。架构模式的箭头采用固定大小、可辨认的箭头头部与更清晰的默认线宽，分区边界不再以极淡的虚线呈现。`CanvasEditor` 的 SVG/CSS 与 `canvasSceneToSvg` 导出遵守同一视觉原则。显式的节点 `fillColor`、`strokeColor`、`strokeWidth`、箭头颜色及方向必须保留。上述内容属于渲染升级，不更改节点、连线、文件格式和布局坐标；历史图文件无需迁移。
+
 ```sh
 pnpm visual:smoke       # 真实 Chrome 渲染全部 Mermaid 模板，捕获 lexer / 渲染兼容问题
 pnpm visual:benchmark   # 复杂样例的尺寸、文字越界、节点重叠与拆图建议
