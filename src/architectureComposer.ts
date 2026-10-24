@@ -374,6 +374,7 @@ function composeArchitectureGraphCandidate(
   intent: ArchitectureIntentGraph, peerOrder: 'semantic' | 'dependency' | 'main-path',
   relationIds?: readonly string[],
   alignedSpacing = false,
+  spatialOrder = false,
 ) {
   const ids = new Set<string>()
   for (const node of intent.nodes) {
@@ -443,7 +444,7 @@ function composeArchitectureGraphCandidate(
   const candidates = compositionCandidates.flatMap((composition) => densityCandidates.map((density) => {
     const result = beautifyArchitectureScene(scene, {
       theme: intent.theme, density, composition, peerOrder,
-      partitionOverrides, primaryPath: intent.primaryPath, alignedSpacing,
+      partitionOverrides, primaryPath: intent.primaryPath, alignedSpacing, spatialOrder,
     })
     const quality = assessCanvasVisualQuality(result.scene)
     const evaluation = evaluateArchitectureLayout(result.scene, quality, composition, density)
@@ -552,7 +553,7 @@ function mainPathRegionInversions(scene: CanvasScene, mainPath: readonly string[
  * cheap geometry reorder: every candidate runs the same full routing/refinement
  * and must preserve all original IDs and relationships.
  */
-export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
+function composeArchitectureGraphOriginal(intent: ArchitectureIntentGraph) {
   const baseline = composeArchitectureGraphCore(intent)
   const n = intent.nodes.length
   const m = intent.relations.length
@@ -723,4 +724,38 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
     inputOrderStrategy = variant.name
   }
   return { ...best, inputOrderStrategy, layoutOrderingStrategy: 'semantic' as const }
+}
+
+/** Compare an alternate collision-resolution order against the *fully*
+ * optimized result, never an intermediate geometry that later routing beats. */
+export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
+  const result = composeArchitectureGraphOriginal(intent)
+  const n = intent.nodes.length
+  // Dense graphs need global routing/port planning; collision ordering alone
+  // helps only sparse, interleaved regions and would waste extra CPU there.
+  if (n < 17 || n > 22 || intent.relations.length > n * 0.8
+    || result.routeDiagnostics.frameOverlapArea < 80_000) return result
+  const candidate = composeArchitectureGraphCandidate(intent, 'semantic', undefined, false, true)
+  const before = result.quality.metrics, after = candidate.quality.metrics
+  const eligible = candidate.routeDiagnostics.frameOverlapArea <= result.routeDiagnostics.frameOverlapArea * 0.65
+    && after.nodeOverlaps <= before.nodeOverlaps
+    && after.edgeNodeIntersections <= before.edgeNodeIntersections
+    && after.labelNodeIntersections <= before.labelNodeIntersections
+    && after.labelOverflows <= before.labelOverflows
+    && after.labelOverlaps <= before.labelOverlaps
+    && after.edgeCrossings <= before.edgeCrossings
+    && after.edgeOverlaps <= before.edgeOverlaps
+    && candidate.evaluation.structuralScore >= result.evaluation.structuralScore
+    && candidate.presentation.estimatedTitlePxAtFit >= result.presentation.estimatedTitlePxAtFit - 0.5
+  if (!eligible) return result
+  const order = new Map([
+    ...intent.nodes.map((node, index) => [node.id, index] as const),
+    ...intent.relations.map((_, index) => [`__relation-${index + 1}`, n + index] as const),
+  ])
+  return {
+    ...candidate,
+    scene: { ...candidate.scene, elements: candidate.scene.elements.slice().sort((a, b) =>
+      (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity)) },
+    inputOrderStrategy: 'original' as const, layoutOrderingStrategy: 'spatial-order' as const,
+  }
 }

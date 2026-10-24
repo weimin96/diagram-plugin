@@ -31,6 +31,8 @@ export interface ArchitectureBeautifyOptions {
   peerOrder?: 'semantic' | 'dependency' | 'main-path'
   /** Optional candidate geometry; legacy coordinates remain the default. */
   alignedSpacing?: boolean
+  /** Trial only: resolve global collisions in planned spatial order. */
+  spatialOrder?: boolean
   /** Verified semantic intent takes priority over label-based role inference. */
   partitionOverrides?: ReadonlyMap<string, ArchitecturePartition>
   /** An explicitly confirmed directed business path, not an inferred longest path. */
@@ -238,7 +240,7 @@ export function beautifyArchitectureScene(scene: CanvasScene, options: Architect
   if (relayout && repartition) next = layoutArchitectureTopology(
     next, partitionById, theme, resolvedDensity, composition,
     options.peerOrder === 'dependency', options.peerOrder === 'main-path' ? options.primaryPath : undefined,
-    options.alignedSpacing === true,
+    options.alignedSpacing === true, options.spatialOrder === true,
   )
   next = applyArchitectureTheme(next, theme, partitionById)
   next = applyArchitectureEmphasis(next, partitionById, options.primaryPath)
@@ -1447,6 +1449,7 @@ function layoutArchitectureTopology(
   dependencyOrder = false,
   mainPath?: readonly string[],
   alignedSpacing = false,
+  spatialOrder = false,
 ): CanvasScene {
   const metrics = architectureTopologyMetrics(theme, density, alignedSpacing)
   const boxes = scene.elements.filter((item): item is CanvasNode | CanvasNote => item.type !== 'arrow')
@@ -1566,6 +1569,7 @@ function layoutArchitectureTopology(
       compositionWidth + metrics.canvasMargin * 2,
       Math.max(metrics.canvasMargin, compositionY - metrics.rowGap) + metrics.canvasMargin,
       metrics,
+      spatialOrder,
     )
   }
 
@@ -1600,6 +1604,7 @@ function layoutArchitectureTopology(
     rowWidth + metrics.canvasMargin * 2,
     Math.max(metrics.canvasMargin + topHeight, nextRowY) + metrics.canvasMargin,
     metrics,
+    spatialOrder,
   )
 }
 
@@ -1662,15 +1667,21 @@ function applyArchitectureLayoutPositions(
   unlockedWidth: number,
   unlockedHeight: number,
   metrics: ReturnType<typeof architectureTopologyMetrics>,
+  spatialOrder = false,
 ): CanvasScene {
   const locked = boxes.filter((item) => item.locked)
   const lockedRight = Math.max(0, ...locked.map((item) => item.x + item.width + metrics.canvasMargin))
   const lockedBottom = Math.max(0, ...locked.map((item) => item.y + item.height + metrics.canvasMargin))
   const occupied = locked.map((item) => ({ x: item.x, y: item.y, width: item.width, height: item.height }))
-  const elements = scene.elements.map((item) => {
-    if (item.type === 'arrow' || item.locked) return item
+  const placements = new Map<string, CanvasNode | CanvasNote>()
+  const placementOrder = boxes.filter((item) => !item.locked && positionById.has(item.id))
+  if (spatialOrder) placementOrder.sort((a, b) => {
+    const left = positionById.get(a.id)!, right = positionById.get(b.id)!
+    return left.y - right.y || left.x - right.x || a.id.localeCompare(b.id, 'en')
+  })
+  for (const item of placementOrder) {
     const position = positionById.get(item.id)
-    if (!position) return item
+    if (!position) continue
     const placed = {
       ...item,
       x: position.x,
@@ -1687,8 +1698,9 @@ function applyArchitectureLayoutPositions(
       if (collisions.length) placed.y = Math.max(...collisions.map((box) => box.y + box.height + architectureNodeClearance))
     } while (collisions.length)
     occupied.push(placed)
-    return placed
-  })
+    placements.set(item.id, placed)
+  }
+  const elements = scene.elements.map((item) => placements.get(item.id) ?? item)
   return {
     ...scene,
     width: Math.max(960, unlockedWidth, lockedRight, ...occupied.map((item) => item.x + item.width + metrics.canvasMargin)),

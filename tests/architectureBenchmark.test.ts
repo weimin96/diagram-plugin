@@ -7,6 +7,44 @@ import { inferArchitectureComposition } from '../src/architectureDesign.js'
 import { architectureCases } from './fixtures/architecture/cases.js'
 import { architectureBenchmarkCases } from '../scripts/architecture-benchmark-cases.js'
 
+test('稀疏交错输入按目标空间顺序落位，减小分区重叠而不丢失关系或增加交叉', () => {
+  const partitions = [
+    { partition: 'external' as const, icon: 'user' as const, count: 2, prefix: 'ext' },
+    { partition: 'experience' as const, icon: 'web' as const, count: 2, prefix: 'exp' },
+    { partition: 'application' as const, icon: 'service' as const, count: 7, prefix: 'app' },
+    { partition: 'processing' as const, icon: 'queue' as const, count: 3, prefix: 'proc' },
+    { partition: 'data' as const, icon: 'database' as const, count: 4, prefix: 'data' },
+  ]
+  const groups = partitions.map(({ partition, icon, count, prefix }) =>
+    Array.from({ length: count }, (_, index) => ({
+      id: `${prefix}${index}`, text: `${partition} ${index}`, icon, partition,
+    })))
+  const nodes = groups.flatMap((_, index) => groups[index]).sort((a, b) => {
+    const first = Number(a.id.match(/\d+$/)?.[0] ?? 0)
+    const second = Number(b.id.match(/\d+$/)?.[0] ?? 0)
+    return first - second
+  })
+  const relations = [
+    { from: 'ext0', to: 'exp0' }, { from: 'exp0', to: 'app0' },
+    { from: 'app0', to: 'proc0' }, { from: 'proc0', to: 'data0' },
+  ]
+  const intent = { title: 'Interleaved functional regions', nodes, relations }
+  const original = JSON.stringify(intent)
+  const output = composeArchitectureGraph(intent)
+  assert.equal(output.layoutOrderingStrategy, 'spatial-order')
+  assert.ok(output.routeDiagnostics.frameOverlapArea <= 100_000)
+  assert.equal(output.quality.metrics.edgeCrossings, 0)
+  assert.equal(output.quality.metrics.edgeOverlaps, 0)
+  assert.equal(output.quality.metrics.edgeNodeIntersections, 0)
+  assert.ok(output.evaluation.structuralScore >= 82)
+  assert.deepEqual(output.scene.elements.filter((item) => item.type === 'node').map((item) => item.id),
+    nodes.map((node) => node.id))
+  assert.deepEqual(output.scene.elements.filter((item) => item.type === 'arrow').map((item) => [item.from, item.to]),
+    relations.map((edge) => [edge.from, edge.to]))
+  assert.equal(JSON.stringify(intent), original)
+  assert.deepEqual(composeArchitectureGraph(intent).scene, output.scene)
+})
+
 test('真实规模虚构拓扑基准不丢失语义关系或穿过节点', () => {
   const ids = new Set<string>()
   for (const example of architectureCases) {
