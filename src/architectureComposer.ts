@@ -729,7 +729,7 @@ function composeArchitectureGraphOriginal(intent: ArchitectureIntentGraph) {
 /** Compare an alternate collision-resolution order against the *fully*
  * optimized result, never an intermediate geometry that later routing beats. */
 export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
-  const result = composeArchitectureGraphOriginal(intent)
+  const result = improveCongestedPorts(composeArchitectureGraphOriginal(intent))
   const n = intent.nodes.length
   // Dense graphs need global routing/port planning; collision ordering alone
   // helps only sparse, interleaved regions and would waste extra CPU there.
@@ -758,4 +758,55 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
       (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity)) },
     inputOrderStrategy: 'original' as const, layoutOrderingStrategy: 'spatial-order' as const,
   }
+}
+
+/** When independent, non-bundled edges still overlap, try routing only those
+ * edges using their actual endpoints instead of their region center vectors.
+ * Preserve all coordinates, IDs and intentional buses; accept only a strict
+ * end-to-end quality improvement. Dense fan-outs never get another relayout. */
+function improveCongestedPorts(result: ReturnType<typeof composeArchitectureGraphOriginal>) {
+  const nodes = result.scene.elements.filter((item) => item.type === 'node').length
+  const arrows = result.scene.elements.filter((item) => item.type === 'arrow')
+  if (nodes < 16 || nodes > 24 || arrows.length > 32
+    || result.quality.metrics.edgeOverlaps < 3) return result
+  const byId = new Map(arrows.map((arrow) => [arrow.id, arrow]))
+  const affected = [...new Set(result.quality.issues
+    .filter((issue) => issue.code === 'edge-overlap')
+    .flatMap((issue) => issue.elementIds))]
+    .filter((id) => !byId.get(id)?.bundleKey).slice(0, 10)
+  let scene = result.scene
+  let quality = result.quality
+  let diagnostics = result.routeDiagnostics
+  let rerouted = 0
+  for (const id of affected) {
+    const candidate = routeArchitectureArrowIds(scene, [id], true)
+    const beforeArrow = scene.elements.find((item) => item.id === id)
+    const afterArrow = candidate.elements.find((item) => item.id === id)
+    if (beforeArrow?.type !== 'arrow' || afterArrow?.type !== 'arrow'
+      || beforeArrow.bundleKey !== afterArrow.bundleKey) continue
+    const proposed = assessCanvasVisualQuality(candidate)
+    const before = quality.metrics, after = proposed.metrics
+    if (after.edgeOverlaps >= before.edgeOverlaps
+      || after.edgeCrossings > before.edgeCrossings
+      || after.edgeNodeIntersections > before.edgeNodeIntersections
+      || after.nodeOverlaps > before.nodeOverlaps
+      || after.labelNodeIntersections > before.labelNodeIntersections
+      || after.labelOverlaps > before.labelOverlaps
+      || after.labelOverflows > before.labelOverflows) continue
+    const route = assessArchitectureRouteDiagnostics(candidate)
+    if (route.unrelatedFrameIntrusionLength > diagnostics.unrelatedFrameIntrusionLength
+      || route.totalRouteLength > diagnostics.totalRouteLength * 1.15) continue
+    scene = candidate
+    quality = proposed
+    diagnostics = route
+    rerouted += 1
+  }
+  if (!rerouted) return result
+  const evaluation = evaluateArchitectureLayout(scene, quality, result.evaluation.layout, result.evaluation.density)
+  if (evaluation.structuralScore < result.evaluation.structuralScore) return result
+  const presentation = assessArchitecturePresentation(scene)
+  const visualPlan = planArchitectureVisual(scene, result.semanticComposition, quality, presentation, diagnostics)
+  return { ...result, scene, quality, evaluation, presentation, routeDiagnostics: diagnostics,
+    visualPlan, reroutedEdges: result.reroutedEdges + rerouted,
+    candidates: result.candidates.map((candidate) => candidate === result.evaluation ? evaluation : candidate) }
 }

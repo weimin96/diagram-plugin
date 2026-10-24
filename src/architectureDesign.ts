@@ -389,12 +389,12 @@ export function routeArchitectureEdges(scene: CanvasScene): CanvasScene {
   return routeArchitectureEdgeSubset(scene)
 }
 
-export function routeArchitectureArrowIds(scene: CanvasScene, arrowIds: Iterable<string>): CanvasScene {
+export function routeArchitectureArrowIds(scene: CanvasScene, arrowIds: Iterable<string>, nodePorts = false): CanvasScene {
   const only = new Set(arrowIds)
   if (!only.size) return scene
   const arrowCount = scene.elements.filter((item) => item.type === 'arrow').length
   if (only.size > Math.max(48, arrowCount * 0.45)) return routeArchitectureEdgeSubset(scene)
-  return routeArchitectureEdgeSubset(scene, only)
+  return routeArchitectureEdgeSubset(scene, only, nodePorts)
 }
 
 export function routeArchitectureEdgesIncremental(scene: CanvasScene, changedNodeIds: Iterable<string>): CanvasScene {
@@ -428,7 +428,7 @@ export function routeArchitectureEdgesIncremental(scene: CanvasScene, changedNod
   return routeArchitectureEdgeSubset(scene, affected)
 }
 
-function routeArchitectureEdgeSubset(scene: CanvasScene, only?: Set<string>): CanvasScene {
+function routeArchitectureEdgeSubset(scene: CanvasScene, only?: Set<string>, nodePorts = false): CanvasScene {
   const boxes = new Map(scene.elements.filter((item): item is CanvasNode | CanvasNote => item.type !== 'arrow').map((item) => [item.id, item]))
   const arrows = scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow')
   const groupFrames = new Map(canvasGroupFrames(scene).map((frame) => [frame.id, frame]))
@@ -458,7 +458,7 @@ function routeArchitectureEdgeSubset(scene: CanvasScene, only?: Set<string>): Ca
   const remainingRouteOrder = only || !highDensityRouting ? routeOrder : routeOrder.filter((arrow) => !isIntraGroupArrow(arrow, boxes))
 
   for (const arrow of localRouteOrder) {
-    const result = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups)
+    const result = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts)
     if (result) routed.set(arrow.id, result)
   }
 
@@ -474,13 +474,13 @@ function routeArchitectureEdgeSubset(scene: CanvasScene, only?: Set<string>): Ca
     for (const [id, arrow] of bundled) routed.set(id, arrow)
     for (const arrow of arrows) {
       if (!crossGroupBundleIds.has(arrow.id) || routed.has(arrow.id)) continue
-      const fallback = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups)
+      const fallback = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts)
       if (fallback) routed.set(arrow.id, fallback)
     }
   }
 
   for (const arrow of remainingRouteOrder) {
-    const result = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups)
+    const result = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts)
     if (result) routed.set(arrow.id, result)
   }
 
@@ -489,7 +489,7 @@ function routeArchitectureEdgeSubset(scene: CanvasScene, only?: Set<string>): Ca
     for (const [id, arrow] of bundled) routed.set(id, arrow)
     for (const arrow of arrows) {
       if (!groupedFanoutIds.has(arrow.id) || routed.has(arrow.id)) continue
-      const fallback = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups)
+      const fallback = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts)
       if (fallback) routed.set(arrow.id, fallback)
     }
   }
@@ -514,6 +514,7 @@ function routeArchitectureArrow(
   fanin: Map<string, number>,
   groupFrames: Map<string, CanvasGroupFrame>,
   groups: Map<string, CanvasGroup>,
+  nodePorts = false,
 ): CanvasArrow | undefined {
   const from = boxes.get(arrow.from)
   const to = boxes.get(arrow.to)
@@ -533,8 +534,8 @@ function routeArchitectureArrow(
   const obstacles = [...nodeObstacles, ...groupObstacles]
   const fromFrame = from.groupId ? groupFrames.get(from.groupId) : undefined
   const toFrame = to.groupId ? groupFrames.get(to.groupId) : undefined
-  const routingDx = fromFrame && toFrame ? (toFrame.x + toFrame.width / 2) - (fromFrame.x + fromFrame.width / 2) : dx
-  const routingDy = fromFrame && toFrame ? (toFrame.y + toFrame.height / 2) - (fromFrame.y + fromFrame.height / 2) : dy
+  const routingDx = fromFrame && toFrame && !nodePorts ? (toFrame.x + toFrame.width / 2) - (fromFrame.x + fromFrame.width / 2) : dx
+  const routingDy = fromFrame && toFrame && !nodePorts ? (toFrame.y + toFrame.height / 2) - (fromFrame.y + fromFrame.height / 2) : dy
   const pairs = preferredAnchorPairs(routingDx, routingDy)
   let best: { score: number; fromAnchor: 'top' | 'right' | 'bottom' | 'left'; toAnchor: 'top' | 'right' | 'bottom' | 'left'; route: CanvasPoint[] } | undefined
   for (const [fromAnchor, toAnchor] of pairs) {

@@ -121,6 +121,30 @@ test('高扇出冲突只在无新增交叉时采用反向布线，且保留原�
   assert.deepEqual(composeArchitectureGraph(sample.intent).scene, result.scene)
 })
 
+test('高扇出局部端口复选只改善独立线路，不改变节点关系或重建共享主干', () => {
+  const fixtures = [
+    { id: 'business-platform-fanout', maxOverlaps: 2 },
+    { id: 'data-platform-fanout', maxOverlaps: 3 },
+    { id: 'deployment-fanout', maxOverlaps: 4 },
+  ]
+  for (const fixture of fixtures) {
+    const input = architectureBenchmarkCases('extended').find((item) => item.id === fixture.id)!.intent
+    const before = JSON.stringify(input)
+    const result = composeArchitectureGraph(input)
+    const arrows = result.scene.elements.filter((item) => item.type === 'arrow')
+    assert.ok(result.quality.metrics.edgeOverlaps <= fixture.maxOverlaps, fixture.id)
+    assert.equal(result.quality.metrics.edgeCrossings, 0, fixture.id)
+    assert.equal(result.quality.metrics.edgeNodeIntersections, 0, fixture.id)
+    assert.equal(result.quality.metrics.labelNodeIntersections, 0, fixture.id)
+    assert.deepEqual(arrows.map(({ from, to }) => [from, to]), input.relations.map(({ from, to }) => [from, to]))
+    assert.deepEqual(arrows.map(({ id }) => id), input.relations.map((_, index) => `__relation-${index + 1}`))
+    assert.deepEqual(result.quality.metrics.edgeOverlaps >= 2,
+      result.visualPlan.review.concerns.includes('overlapping-relationships'))
+    assert.deepEqual(composeArchitectureGraph(input).scene, result.scene, fixture.id)
+    assert.equal(JSON.stringify(input), before)
+  }
+})
+
 test('小规模 AI 图表对任意节点及关系输入顺序进行安全择优，不改关系 ID 和方向', () => {
   const samples = architectureBenchmarkCases('extended')
   const cases = [
