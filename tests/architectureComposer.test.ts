@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { composeArchitectureGraph, type ArchitectureIntentGraph } from '../src/architectureComposer.js'
-import { parseCanvasScene, serializeCanvasScene } from '../src/canvas.js'
+import { parseCanvasScene, serializeCanvasScene, type CanvasArrow } from '../src/canvas.js'
 import { DiagramStore } from '../src/store.js'
 
 const input: ArchitectureIntentGraph = {
@@ -48,6 +48,35 @@ test('fixed density limits candidates and keeps deterministic layout', () => {
   const result = composeArchitectureGraph({ ...input, density: 'compact' })
   assert.ok(result.candidates.every((candidate) => candidate.density === 'compact'))
   assert.equal(result.summary.resolvedDensity, 'compact')
+})
+
+test('confirmed primary path and functional regions survive automatic layout and Canvas round trip', () => {
+  const intent: ArchitectureIntentGraph = {
+    ...input,
+    primaryPath: ['person', 'web', 'api', 'db'],
+    nodes: input.nodes.map((node) => node.id === 'api'
+      ? { ...node, partition: 'processing', sourcePaths: ['src/api.ts'] }
+      : node),
+  }
+  const generated = composeArchitectureGraph(intent)
+  const saved = parseCanvasScene(serializeCanvasScene(generated.scene))
+  const api = saved.elements.find((element) => element.id === 'api')
+  assert.ok(api?.type === 'node')
+  assert.equal(api.groupId, 'arch-processing')
+  assert.deepEqual(api.sourcePaths, ['src/api.ts'])
+  assert.deepEqual(generated.visualPlan.primaryNodeIds, intent.primaryPath)
+  const mainEdges = saved.elements.filter((edge): edge is CanvasArrow => edge.type === 'arrow' && edge.emphasis === 'primary')
+  assert.deepEqual(mainEdges.map((edge) => [edge.from, edge.to]), [
+    ['person', 'web'], ['web', 'api'], ['api', 'db'],
+  ])
+  assert.deepEqual(composeArchitectureGraph(intent).scene, generated.scene)
+})
+
+test('rejects unsupported or invented primary path before writing', () => {
+  assert.throws(() => composeArchitectureGraph({ ...input, primaryPath: ['person', 'api'] }), /缺少实际有向关系/)
+  assert.throws(() => composeArchitectureGraph({ ...input, primaryPath: ['api', 'web'] }), /缺少实际有向关系/)
+  assert.throws(() => composeArchitectureGraph({ ...input, primaryPath: ['person', 'web', 'person'] }), /不重复/)
+  assert.throws(() => composeArchitectureGraph({ ...input, primaryPath: ['person', 'missing'] }), /已存在节点/)
 })
 
 test('多区域候选局部重排减少交叉且不改动节点与语义关系', () => {

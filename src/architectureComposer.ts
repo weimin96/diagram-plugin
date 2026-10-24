@@ -1,4 +1,4 @@
-import { beautifyArchitectureScene, inferArchitectureComposition, routeArchitectureArrowIds, routeArchitectureEdges, type ArchitectureComposition, type ArchitectureTheme } from './architectureDesign.js'
+import { beautifyArchitectureScene, inferArchitectureComposition, routeArchitectureArrowIds, routeArchitectureEdges, type ArchitectureComposition, type ArchitecturePartition, type ArchitectureTheme } from './architectureDesign.js'
 import { assessCanvasVisualQuality, type CanvasVisualQualityAssessment } from './canvasQuality.js'
 import type { DiagramVisualStyle } from './diagramVisualStyles.js'
 import { canvasArrowBoxRoute, canvasSharedSourceStem, type CanvasArchitectureDensity, type CanvasArchitectureScenario, type CanvasIcon, type CanvasNode, type CanvasScene, type CanvasStencil } from './canvas.js'
@@ -14,6 +14,8 @@ export interface ArchitectureIntentGraph {
   style?: DiagramVisualStyle
   /** A stated user scenario, never inferred from pixel geometry. */
   visualScenario?: CanvasArchitectureScenario
+  /** Ordered, verified directed relationships; unknown path means automatic inference. */
+  primaryPath?: string[]
   nodes: Array<{
     id: string
     text: string
@@ -21,6 +23,9 @@ export interface ArchitectureIntentGraph {
     stencil?: CanvasStencil
     subtitle?: string
     description?: string
+    sourcePaths?: string[]
+    /** Verified functional region, not a guessed position or arbitrary visual group. */
+    partition?: ArchitecturePartition
   }>
   relations: Array<{
     from: string
@@ -366,6 +371,18 @@ function composeArchitectureGraphCandidate(
       throw new Error(`架构关系引用不存在的节点：${relation.from} → ${relation.to}`)
     }
   }
+  if (intent.primaryPath !== undefined) {
+    const path = intent.primaryPath
+    if (path.length < 2 || new Set(path).size !== path.length || path.some((id) => !ids.has(id))) {
+      throw new Error('架构主链必须由至少两个不重复的已存在节点组成')
+    }
+    for (let index = 1; index < path.length; index += 1) {
+      if (!intent.relations.some((edge) => edge.from === path[index - 1] && edge.to === path[index])) {
+        throw new Error(`架构主链缺少实际有向关系：${path[index - 1]} → ${path[index]}`)
+      }
+    }
+  }
+  const partitionOverrides = new Map(intent.nodes.flatMap((node) => node.partition ? [[node.id, node.partition] as const] : []))
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas', version: 1, title: intent.title,
     width: 1600, height: 1000, workbench: 'architecture',
@@ -374,7 +391,7 @@ function composeArchitectureGraphCandidate(
       cloud: 'nord', editorial: 'graphite', sketch: 'warm',
     } satisfies Record<ArchitectureTheme, DiagramVisualStyle>)[intent.theme ?? 'enterprise'],
     elements: [
-      ...intent.nodes.map((node) => ({
+      ...intent.nodes.map(({ partition: _partition, ...node }) => ({
         ...node, type: 'node' as const, x: 0, y: 0, width: 204, height: 84,
       })),
       ...intent.relations.map((relation, index) => ({
@@ -393,7 +410,7 @@ function composeArchitectureGraphCandidate(
       ...(intent.visualScenario ? { scenario: intent.visualScenario } : {}),
     },
   }
-  const inferred = inferArchitectureComposition(scene)
+  const inferred = inferArchitectureComposition(scene, partitionOverrides)
   const autoDensity = intent.nodes.length >= 46 ? 'dense'
     : intent.nodes.length >= 22 || (intent.nodes.length >= 10 && ['event-driven', 'data-platform', 'agent-runtime', 'cloud-native'].includes(inferred))
       ? 'compact' : 'comfortable'
@@ -410,7 +427,10 @@ function composeArchitectureGraphCandidate(
         ? [inferred, 'layered']
         : [inferred]
   const candidates = compositionCandidates.flatMap((composition) => densityCandidates.map((density) => {
-    const result = beautifyArchitectureScene(scene, { theme: intent.theme, density, composition, peerOrder })
+    const result = beautifyArchitectureScene(scene, {
+      theme: intent.theme, density, composition, peerOrder,
+      partitionOverrides, primaryPath: intent.primaryPath,
+    })
     const quality = assessCanvasVisualQuality(result.scene)
     const evaluation = evaluateArchitectureLayout(result.scene, quality, composition, density)
     // Respect the inferred topology when structural metrics do not justify a different layout.

@@ -11,6 +11,7 @@ export function architectureDesignSkill(theme: ArchitectureTheme = 'enterprise')
     '先选择构图原型，再放节点：端到端调用优先 backbone/linear，单源多依赖优先 fan-out，多源进入一个核心能力优先 convergence，中心平台连接多系统优先 hub-spoke，跨职责链路优先 layered/swimlane。不要默认把所有组件排成等权卡片矩阵。',
     '用户已明确要求企业系统、微服务、数据平台、AI Agent 或部署拓扑，且当前走语义自动生成流程时，传入对应 visualScenario；没有证据时省略，不得因 Kafka/Redis/对象存储等单项技术就臆测整套架构类型。visualScenario 仅表示语义表达场景，不是强制布局。参考图忠实重绘继续使用自由画布。',
     '先确定读者需要的单张视图：系统边界与入口、最多一条可追踪的主路径、必要的下游依赖。细节过多时使用总览与区域下钻，不需要为了汇报好看伪造关键组件或删除源关系。',
+    '调用语义生成接口时，若真实依赖已证明入口到结果的完整路径，可传 primaryPath；按代码依据填写节点 sourcePaths 和可确认的 partition。它们是语义证据而非任意调整布局的提示，无法确认时必须省略。',
     'diagram.beautifyArchitecture 会根据真实节点角色与关系自动选择 layered、hub-spoke、event-driven、data-platform、agent-runtime、cloud-native 等架构骨架；不要为了迎合某个固定版式提前伪造分区或节点位置。只有用户已经手工锁定位置时才把 authored geometry 当作硬约束。',
     '把架构图当作视觉论证：首先让读者看见“系统边界 → 主业务路径 → 关键依赖/结果”，外围配置、管理面和低频依赖降到第二层级；留白用于区分职责和系统边界。',
     '先表达系统边界和职责层次，再表达细节；不要把所有节点平铺成一层。',

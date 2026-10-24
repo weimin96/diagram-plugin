@@ -869,7 +869,7 @@ server.registerTool('diagram.create', {
 
 server.registerTool('diagram.composeArchitecture', {
   title: 'Compose system architecture from semantic graph',
-  description: 'Preferred one-call NEW professional architecture generation: supply verified semantic nodes and relationships, never pixel coordinates. Deterministically chooses an architecture composition and creates a Canvas with semantic groups, layout, routing and structural quality results. No invented dependencies. Use diagram.create + diagram.update instead for faithful reference-image tracing or preserving manually specified geometry.',
+  description: 'Preferred one-call NEW professional architecture generation: supply verified semantic nodes and relationships, optional functional partitions and an evidence-backed primaryPath, never pixel coordinates. Deterministically creates an editable Canvas with quality diagnostics. No invented dependencies. Use diagram.create + diagram.update for faithful reference-image tracing.',
   inputSchema: z.object({
     workspacePath: z.string().optional(),
     title: z.string().trim().min(1).max(120),
@@ -877,6 +877,8 @@ server.registerTool('diagram.composeArchitecture', {
     density: z.enum(['auto', 'comfortable', 'compact', 'dense']).default('auto'),
     visualScenario: z.enum(['enterprise-system', 'microservices', 'data-platform', 'ai-agent', 'deployment'])
       .optional().describe('Choose only when explicitly stated by the user or confirmed by the project. Independent of the layout algorithm.'),
+    primaryPath: z.array(z.string().min(1)).min(2).max(30).optional()
+      .describe('Verified directed node chain from entry to outcome, in reading order; every adjacent pair MUST have an actual relation. Omit when unknown. Never invent edges to satisfy this.'),
     style: z.enum(diagramVisualStyles.map((style) => style.id) as [string, ...string[]]).optional().describe('Optional one unified visual theme. Defaults to a restrained, low-saturation professional preset rather than bright card walls.'),
     nodes: z.array(z.object({
       id: z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/).describe('Stable unique node ID, not a coordinate.'),
@@ -885,6 +887,10 @@ server.registerTool('diagram.composeArchitecture', {
       stencil: z.enum(CANVAS_STENCIL_IDS).optional().describe('Only if confirmed by actual project code or user input.'),
       subtitle: z.string().max(80).optional(),
       description: z.string().max(500).optional(),
+      sourcePaths: z.array(z.string().min(1).max(500)).max(12).optional()
+        .describe('Real workspace source paths already inspected; never fabricated.'),
+      partition: z.enum(['external', 'experience', 'application', 'processing', 'data']).optional()
+        .describe('Functional region confirmed by source or user. Omit unknown instead of guessing.'),
     })).min(2).max(80),
     relations: z.array(z.object({
       from: z.string().min(1),
@@ -894,8 +900,8 @@ server.registerTool('diagram.composeArchitecture', {
     })).min(1).max(160).describe('Real dependencies between nodes. Do not invent edges merely to make a picture connected.'),
   }),
   annotations: write,
-}, async ({ workspacePath, title, theme, density, visualScenario, style, nodes, relations }, extra) => {
-  const composed = composeArchitectureGraph({ title, theme, density, visualScenario, style: style as typeof diagramVisualStyles[number]['id'] | undefined, nodes, relations })
+}, async ({ workspacePath, title, theme, density, visualScenario, primaryPath, style, nodes, relations }, extra) => {
+  const composed = composeArchitectureGraph({ title, theme, density, visualScenario, primaryPath, style: style as typeof diagramVisualStyles[number]['id'] | undefined, nodes, relations })
   const store = await resolveStore(workspacePath, toolThreadId(extra._meta))
   const diagram = await store.createComposedArchitecture(title, serializeCanvasScene(composed.scene))
   markThreadDiagram(extra._meta, diagram.path, undefined, undefined, 'create', diagram.modifiedAt)

@@ -19,6 +19,7 @@ import { anchorPoint, canvasArrowRoutePoints, canvasGroupFrames } from './canvas
 
 export type ArchitectureTheme = CanvasArchitectureTheme
 export type ArchitectureComposition = 'layered' | 'hub-spoke' | 'event-driven' | 'data-platform' | 'agent-runtime' | 'cloud-native'
+export type ArchitecturePartition = 'external' | 'experience' | 'application' | 'processing' | 'data'
 
 export interface ArchitectureBeautifyOptions {
   theme?: ArchitectureTheme
@@ -28,6 +29,10 @@ export interface ArchitectureBeautifyOptions {
   composition?: ArchitectureComposition
   /** Experimental initial peer ordering from actual inter-region dependencies. */
   peerOrder?: 'semantic' | 'dependency'
+  /** Verified semantic intent takes priority over label-based role inference. */
+  partitionOverrides?: ReadonlyMap<string, ArchitecturePartition>
+  /** An explicitly confirmed directed business path, not an inferred longest path. */
+  primaryPath?: readonly string[]
   repartition?: boolean
   relayout?: boolean
   reroute?: boolean
@@ -48,8 +53,6 @@ export interface ArchitectureBeautifyResult {
     resolvedDensity: Exclude<CanvasArchitectureDensity, 'auto'>
   }
 }
-
-type ArchitecturePartition = 'external' | 'experience' | 'application' | 'processing' | 'data'
 
 const partitionOrder: ArchitecturePartition[] = ['external', 'experience', 'application', 'processing', 'data']
 
@@ -106,11 +109,11 @@ const themeTones: Record<ArchitectureTheme, Record<ArchitecturePartition, Canvas
   },
 }
 
-export function inferArchitectureComposition(scene: CanvasScene): ArchitectureComposition {
+export function inferArchitectureComposition(scene: CanvasScene, overrides?: ReadonlyMap<string, ArchitecturePartition>): ArchitectureComposition {
   const boxes = scene.elements
     .filter((item): item is CanvasNode | CanvasNote => item.type !== 'arrow')
     .map((item) => enrichArchitectureBox(item))
-  const partitions = new Map(boxes.map((item) => [item.id, classifyArchitectureBox(item)]))
+  const partitions = new Map(boxes.map((item) => [item.id, overrides?.get(item.id) ?? classifyArchitectureBox(item)]))
   const arrows = scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow')
   return detectArchitectureComposition(boxes, arrows, partitions)
 }
@@ -172,7 +175,7 @@ export function beautifyArchitectureScene(scene: CanvasScene, options: Architect
   const originalBoxes = scene.elements.filter((item): item is CanvasNode | CanvasNote => item.type !== 'arrow')
   const originalById = new Map(originalBoxes.map((item) => [item.id, item]))
   const semanticBoxes = originalBoxes.map((item) => enrichArchitectureBox(item))
-  const partitionById = new Map(semanticBoxes.map((item) => [item.id, classifyArchitectureBox(item)]))
+  const partitionById = new Map(semanticBoxes.map((item) => [item.id, options.partitionOverrides?.get(item.id) ?? classifyArchitectureBox(item)]))
   const activePartitions = partitionOrder.filter((partition) => semanticBoxes.some((item) => partitionById.get(item.id) === partition))
   const composition = options.composition ?? detectArchitectureComposition(
     semanticBoxes,
@@ -230,7 +233,7 @@ export function beautifyArchitectureScene(scene: CanvasScene, options: Architect
 
   if (relayout && repartition) next = layoutArchitectureTopology(next, partitionById, theme, resolvedDensity, composition, options.peerOrder === 'dependency')
   next = applyArchitectureTheme(next, theme, partitionById)
-  next = applyArchitectureEmphasis(next, partitionById)
+  next = applyArchitectureEmphasis(next, partitionById, options.primaryPath)
   if (reroute) next = routeArchitectureEdges(next)
 
   // Keep locked boxes exactly where the author placed them, even when the rest
@@ -295,6 +298,7 @@ export function applyArchitectureTheme(
 export function applyArchitectureEmphasis(
   scene: CanvasScene,
   knownPartitions?: Map<string, ArchitecturePartition>,
+  explicitPath?: readonly string[],
 ): CanvasScene {
   const boxes = scene.elements.filter((item): item is CanvasNode | CanvasNote => item.type !== 'arrow')
   const arrows = scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow')
@@ -334,9 +338,10 @@ export function applyArchitectureEmphasis(
     }
   }
 
-  const primaryNodes = new Set(bestPath?.nodeIds ?? [])
-  const primaryArrows = new Set(bestPath?.arrowIds ?? [])
-  if (primaryNodes.size < Math.min(3, boxes.length)) {
+  const primaryNodes = new Set(explicitPath ?? bestPath?.nodeIds ?? [])
+  const primaryArrows = new Set(explicitPath ? arrows.filter((arrow) => explicitPath.some((id, index) =>
+    index < explicitPath.length - 1 && arrow.from === id && arrow.to === explicitPath[index + 1])).map((arrow) => arrow.id) : bestPath?.arrowIds ?? [])
+  if (!explicitPath && primaryNodes.size < Math.min(3, boxes.length)) {
     boxes
       .slice()
       .sort((a, b) => weight(b) - weight(a))

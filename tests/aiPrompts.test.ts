@@ -23,6 +23,9 @@ test('keeps Canvas workbench intent explicit for architecture and flowchart boar
   })
   assert.match(architecture, /diagram\.composeArchitecture/)
   assert.match(architecture, /diagram\.designGuide/)
+  assert.match(architecture, /primaryPath/)
+  assert.match(architecture, /sourcePaths/)
+  assert.match(architecture, /partition/)
   assert.doesNotMatch(architecture, /diagram\.update/)
 
   const flowchart = buildGenerationPrompt('/workspace', {
