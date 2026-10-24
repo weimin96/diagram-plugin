@@ -626,6 +626,41 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
       return { ...candidate, inputOrderStrategy: 'original' as const, layoutOrderingStrategy: 'dependency' as const }
     }
   }
+  // Routing is order-dependent for equal-priority independent edges. For a
+  // bounded, visibly conflicted fan-out, compare one reverse-order route pass.
+  // Restore the original node/edge ordering and IDs; this is not a graph edit.
+  const sourceCounts = new Map<string, number>()
+  for (const edge of intent.relations) sourceCounts.set(edge.from, (sourceCounts.get(edge.from) ?? 0) + 1)
+  if (n >= 14 && n <= 24 && m <= 32
+    && Math.max(0, ...sourceCounts.values()) >= 5
+    && baseline.quality.metrics.edgeOverlaps >= 5
+    && baseline.quality.metrics.edgeNodeIntersections === 0) {
+    const reversed = composeArchitectureGraphCore({ ...intent, relations: intent.relations.slice().reverse() },
+      intent.relations.map((_, index) => `__relation-${index + 1}`).reverse())
+    const before = baseline.quality.metrics
+    const after = reversed.quality.metrics
+    if (after.nodeOverlaps <= before.nodeOverlaps
+      && after.edgeNodeIntersections <= before.edgeNodeIntersections
+      && after.labelNodeIntersections <= before.labelNodeIntersections
+      && after.edgeCrossings <= before.edgeCrossings
+      && after.edgeOverlaps <= before.edgeOverlaps - 2
+      && reversed.evaluation.structuralScore >= baseline.evaluation.structuralScore + 3
+      && reversed.presentation.estimatedTitlePxAtFit >= baseline.presentation.estimatedTitlePxAtFit - 0.5
+      && reversed.routeDiagnostics.frameOverlaps <= baseline.routeDiagnostics.frameOverlaps + 1
+      && reversed.routeDiagnostics.unrelatedFrameIntrusionLength <= baseline.routeDiagnostics.unrelatedFrameIntrusionLength + 100) {
+      const orderedIds = new Map([
+        ...intent.nodes.map((node, index) => [node.id, index] as const),
+        ...intent.relations.map((_, index) => [`__relation-${index + 1}`, n + index] as const),
+      ])
+      return {
+        ...reversed,
+        scene: { ...reversed.scene, elements: reversed.scene.elements.slice().sort((a, b) =>
+          (orderedIds.get(a.id) ?? Infinity) - (orderedIds.get(b.id) ?? Infinity)) },
+        inputOrderStrategy: 'relation-reverse' as const,
+        layoutOrderingStrategy: 'semantic' as const,
+      }
+    }
+  }
   // Do not double high-fanout search latency or spend more CPU on mild local
   // imperfections for which an order alternative rarely helps.
   if (n < 7 || n > 16 || m > 24

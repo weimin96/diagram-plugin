@@ -61,6 +61,7 @@ export const ARCHITECTURE_VISUAL_REFERENCES: readonly ArchitectureVisualReferenc
 export type ArchitectureVisualConcernCode =
   | 'weak-main-path' | 'dense-detail' | 'tiny-overview-text'
   | 'wide-canvas' | 'cross-boundary-intrusion' | 'frame-overlap'
+  | 'overlapping-relationships'
 
 export interface ArchitectureVisualRepairTarget {
   concern: ArchitectureVisualConcernCode
@@ -132,6 +133,7 @@ export function planArchitectureVisual(
   if (scene.width / Math.max(1, scene.height) > 2.3) concerns.push('wide-canvas')
   if (geometry.unrelatedFrameIntrusionLength > 0) concerns.push('cross-boundary-intrusion')
   if (geometry.frameOverlaps > 0) concerns.push('frame-overlap')
+  if (quality.metrics.edgeOverlaps >= 2) concerns.push('overlapping-relationships')
   const repairTargets: ArchitectureVisualRepairTarget[] = []
   const existingArrows = new Set(relations.map((edge) => edge.id))
   const existingGroups = new Set((scene.groups ?? []).map((group) => group.id))
@@ -142,6 +144,24 @@ export function planArchitectureVisual(
       elementIds: [intrusion.edgeId, intrusion.frameId],
       action: `检查跨区线路经过无关分区 ${intrusion.length}px；应与关联线路联合检查，不能单独绕线造成新增交叉`,
     })
+  }
+  // Expose actual conflicting arrows for a bounded, source-preserving review.
+  // Independent edges must not be disguised as a shared bundle to silence a warning.
+  const overlaps = quality.issues.filter((issue) => issue.code === 'edge-overlap'
+    && issue.elementIds.length === 2 && issue.elementIds.every((id) => existingArrows.has(id)))
+  const overlapDegree = new Map<string, number>()
+  overlaps.forEach((issue) => issue.elementIds.forEach((id) =>
+    overlapDegree.set(id, (overlapDegree.get(id) ?? 0) + 1)))
+  overlaps.sort((a, b) => b.elementIds.reduce((sum, id) => sum + (overlapDegree.get(id) ?? 0), 0)
+    - a.elementIds.reduce((sum, id) => sum + (overlapDegree.get(id) ?? 0), 0))
+  if (quality.metrics.edgeOverlaps >= 2) {
+    for (const issue of overlaps.slice(0, 2)) {
+      repairTargets.push({
+        concern: 'overlapping-relationships',
+        elementIds: issue.elementIds,
+        action: '复核这两条真实依赖的正交走廊与分支端口；仅在没有新增交叉、穿节点或语义变化时局部重布线，不得伪造共享主干',
+      })
+    }
   }
   if (concerns.includes('weak-main-path')) repairTargets.push({
     concern: 'weak-main-path', elementIds: primaryNodeIds.slice(0, 5),
@@ -156,6 +176,17 @@ export function planArchitectureVisual(
     concern: 'frame-overlap', elementIds: [],
     action: '检查无关同级分区边界的交叠及分区内节点；先调整分区构图再评估线路',
   })
+  // The five-target budget must not hide an unreadable wide diagram behind
+  // several local corridor conflicts. Preserve both diagnosis dimensions.
+  const reviewPriority: Partial<Record<ArchitectureVisualConcernCode, number>> = {
+    'tiny-overview-text': 0,
+    'wide-canvas': 1,
+    'weak-main-path': 2,
+    'cross-boundary-intrusion': 3,
+    'overlapping-relationships': 4,
+    'frame-overlap': 5,
+  }
+  repairTargets.sort((a, b) => (reviewPriority[a.concern] ?? 10) - (reviewPriority[b.concern] ?? 10))
   return {
     scenario, reference, recommendedView,
     nodeCount: nodes.length, relationCount: relations.length,

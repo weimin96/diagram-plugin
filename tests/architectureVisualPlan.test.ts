@@ -41,9 +41,24 @@ test('复杂宽图默认总览但完整节点与关系仍在原始场景，详�
   const before = serializeCanvasScene(result.scene)
   const projected = canvasArchitectureProjection(result.scene)
   assert.ok(projected.scene.elements.length <= result.scene.elements.length)
+  assert.ok(result.visualPlan.review.repairTargets.some((target) => target.concern === 'tiny-overview-text'),
+    '高扇出宽图必须保留真实的适配字号风险，不能被局部线路问题挤出报告')
   const detail = { ...result.scene, architecture: { ...result.scene.architecture!, view: 'detail' as const } }
   assert.equal(canvasArchitectureProjection(detail).scene.elements.length, result.scene.elements.length)
   assert.equal(serializeCanvasScene(result.scene), before, 'projection does not mutate persisted graph')
+})
+
+test('高扇出重叠给出真实关系 ID 的定向修复目标，而不是虚构共享主干', () => {
+  const sample = architectureBenchmarkCases('extended').find((item) => item.id === 'microservices-fanout')!
+  const output = composeArchitectureGraph(sample.intent)
+  const targets = output.visualPlan.review.repairTargets.filter((item) => item.concern === 'overlapping-relationships')
+  const arrowIds = new Set(output.scene.elements.filter((item) => item.type === 'arrow').map((item) => item.id))
+  assert.equal(output.visualPlan.review.concerns.includes('overlapping-relationships'), true)
+  assert.ok(targets.length >= 1 && targets.length <= 2)
+  assert.ok(targets.every((item) => item.elementIds.length === 2
+    && item.elementIds.every((id) => arrowIds.has(id))
+    && item.action.includes('不得伪造共享主干')))
+  assert.ok(output.visualPlan.review.repairTargets.length <= 5)
 })
 
 test('轻量架构保留详情，视觉审查与保存的结构模型互不干扰', () => {

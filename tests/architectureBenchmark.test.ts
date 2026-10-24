@@ -66,6 +66,23 @@ test('P24 不为零交叉高扇出图追加联合布局搜索', () => {
   }
 })
 
+test('高扇出冲突只在无新增交叉时采用反向布线，且保留原始关系 ID 和顺序', () => {
+  const sample = architectureBenchmarkCases('extended').find((item) => item.id === 'microservices-fanout')!
+  const input = JSON.stringify(sample.intent)
+  const result = composeArchitectureGraph(sample.intent)
+  assert.equal(result.inputOrderStrategy, 'relation-reverse')
+  assert.ok(result.evaluation.structuralScore >= 72)
+  assert.ok(result.quality.metrics.edgeOverlaps <= 6)
+  assert.equal(result.quality.metrics.edgeCrossings, 0)
+  assert.equal(result.quality.metrics.edgeNodeIntersections, 0)
+  assert.deepEqual(result.scene.elements.filter((item) => item.type === 'arrow').map((item) => [item.from, item.to]),
+    sample.intent.relations.map((item) => [item.from, item.to]))
+  assert.deepEqual(result.scene.elements.filter((item) => item.type === 'arrow').map((item) => item.id),
+    sample.intent.relations.map((_, index) => `__relation-${index + 1}`))
+  assert.equal(JSON.stringify(sample.intent), input)
+  assert.deepEqual(composeArchitectureGraph(sample.intent).scene, result.scene)
+})
+
 test('小规模 AI 图表对任意节点及关系输入顺序进行安全择优，不改关系 ID 和方向', () => {
   const samples = architectureBenchmarkCases('extended')
   const cases = [
@@ -177,7 +194,7 @@ test('同源多段折线识别最长共同前缀，不把分叉后的线路当�
   assert.equal(canvasSharedSourceStem(left, [{ x: 100, y: 100 }, { x: 100, y: 220 }, { x: 170, y: 220 }]), undefined)
 })
 
-test('高扇出共线路段渲染为五条真实主干，不放过非同源重叠', () => {
+test('高扇出保留五条真实主干，并在零交叉下减少非同源重叠', () => {
   const example = architectureBenchmarkCases('extended').find((item) => item.id === 'microservices-fanout')!
   const result = composeArchitectureGraph(example.intent)
   const bundleArrows = result.scene.elements.filter((item) => item.type === 'arrow' && item.bundleKey?.startsWith('from:'))
@@ -186,7 +203,8 @@ test('高扇出共线路段渲染为五条真实主干，不放过非同源重�
   assert.equal(trunks.filter((item) => item.id.startsWith('from:')).length, 5)
   assert.ok(trunks.some((item) => item.path.split('L').length >= 3), '保留多段共享主干')
   assert.equal(result.quality.metrics.edgeCrossings, 0)
-  assert.equal(result.quality.metrics.edgeOverlaps, 10)
+  assert.ok(result.quality.metrics.edgeOverlaps <= 6)
+  assert.ok(result.evaluation.structuralScore >= 72)
   assert.equal(result.quality.metrics.edgeNodeIntersections, 0)
   assert.deepEqual(result.scene.elements.filter((item) => item.type === 'arrow')
     .map(({ from, to }) => [from, to]), example.intent.relations.map(({ from, to }) => [from, to]))
