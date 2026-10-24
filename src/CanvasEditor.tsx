@@ -7,7 +7,7 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSPr
 import { Hand, Link2, MousePointer2, Shapes, Type, type IconNode } from 'lucide'
 import { applyArchitectureTheme as applyArchitectureThemeToScene, beautifyArchitectureScene, routeArchitectureArrowIds, routeArchitectureEdges, routeArchitectureEdgesIncremental, type ArchitectureTheme } from './architectureDesign.js'
 import { architecturePartitionFlow } from './architecturePartitionFlow.js'
-import { recommendArchitectureReadingViewport } from './architecturePresentationQuality.js'
+import { recommendArchitectureInitialReadingViewport, recommendArchitectureReadingViewport } from './architecturePresentationQuality.js'
 import { ARCHITECTURE_NODE_TEMPLATES, architectureNodeTemplate, type ArchitectureNodeTemplate, type ArchitectureNodeTemplateProvider } from './architectureNodeTemplates.js'
 import { anchorPoint, canvasArchitectureCardTemplate, canvasArchitectureHeader, canvasArchitectureProjection, canvasArchitectureRelationLabelVisible, canvasArchitectureScopeProjection, canvasArrowBoxRoute, canvasArrowLabelLayouts, canvasArrowPath, canvasArrowRoutePath, canvasArrowRoutePoints, canvasBundleTrunks, canvasCollapsedConnections, canvasCollapsedOwners, canvasGroupFrames, canvasPresentationGroupFrames, canvasIconLabel, canvasIconPaths, canvasIconRefLabel, canvasIconRefMarkup, canvasSemanticLodProjection, resolveCanvasSemanticLod, canvasStencilLabel, canvasStencilVisual, c4Label, parseCanvasScene, serializeCanvasScene, type CanvasAnchor, type CanvasArchitectureDensity, type CanvasArchitectureScope, type CanvasArchitectureView, type CanvasArrow, type CanvasC4Type, type CanvasElement, type CanvasGroup, type CanvasGroupFrame, type CanvasIcon, type CanvasIconRef, type CanvasLineStyle, type CanvasNode, type CanvasNote, type CanvasPoint, type CanvasRouting, type CanvasScene, type CanvasSemanticLodLevel, type CanvasShape, type CanvasStencil, type CanvasTone } from './canvas.js'
 import { CANVAS_ICON_CATALOG, type CanvasIconSource } from './iconRegistry.js'
@@ -444,6 +444,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   const editorRef = useRef<HTMLDivElement>(null)
   const surfaceRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
+  const initialReadabilityApplied = useRef(false)
   const textInputRef = useRef<HTMLInputElement>(null)
   const drag = useRef<DragState | null>(null)
   const moveStartedWithInspector = useRef(false)
@@ -506,6 +507,19 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
     observer.observe(surface)
     return () => observer.disconnect()
   }, [])
+
+  // On first mounting an unreadable overview, open near a real visible main
+  // path node at legible scale. Subsequent canvas edits never auto-pan.
+  useLayoutEffect(() => {
+    if (!active || initialReadabilityApplied.current || !parsed.scene || !svgRef.current) return
+    const bounds = svgRef.current.getBoundingClientRect()
+    if (bounds.width <= 0 || bounds.height <= 0) return
+    initialReadabilityApplied.current = true
+    const visible = canvasArchitectureProjection(parsed.scene).scene
+    const recommended = recommendArchitectureInitialReadingViewport(
+      parsed.scene, visible, bounds.width, bounds.height)
+    if (recommended) setViewport(recommended)
+  }, [active, parsed.scene])
 
   useEffect(() => {
     if (source !== sourceRef.current) {

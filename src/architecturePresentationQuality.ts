@@ -1,4 +1,4 @@
-import type { CanvasNode, CanvasScene } from './canvas.js'
+import { canvasCollapsedOwners, type CanvasNode, type CanvasScene } from './canvas.js'
 
 /** Diagnostics for fit-to-width viewing; independent of geometry scores. */
 export interface ArchitecturePresentationQuality {
@@ -41,7 +41,8 @@ export function recommendArchitectureReadingViewport(
 ): { x: number; y: number; zoom: number } {
   if (!scene.architecture || viewportWidth <= 0 || viewportHeight <= 0
     || scene.width <= 0 || scene.height <= 0) return { x: 0, y: 0, zoom: currentZoom }
-  const nodes = scene.elements.filter((item): item is CanvasNode => item.type === 'node')
+  const collapsed = canvasCollapsedOwners(scene)
+  const nodes = scene.elements.filter((item): item is CanvasNode => item.type === 'node' && !collapsed.has(item.id))
   const primary = nodes.filter((item) => item.emphasis === 'primary')
   const relevant = primary.length ? primary : nodes
   const degrees = new Map<string, number>()
@@ -64,6 +65,22 @@ export function recommendArchitectureReadingViewport(
     y: clamp(centerY - visibleHeight / 2, Math.max(0, scene.height - visibleHeight)),
     zoom,
   }
+}
+
+/** One-time, transient initial camera for *generated* unreadable panoramas.
+ * Do not reset the user's viewport when they edit a node or manually select
+ * detail view; the original graph and its coordinates stay unchanged. */
+export function recommendArchitectureInitialReadingViewport(
+  scene: CanvasScene,
+  visibleScene: CanvasScene,
+  viewportWidth: number,
+  viewportHeight: number,
+): { x: number; y: number; zoom: number } | null {
+  if (!scene.architecture || scene.architecture.view !== 'overview'
+    || scene.elements.filter((item) => item.type === 'node').length < 17
+    || assessArchitecturePresentation(scene).estimatedTitlePxAtFit >= 11
+    || viewportWidth <= 0 || viewportHeight <= 0) return null
+  return recommendArchitectureReadingViewport(visibleScene, viewportWidth, viewportHeight, 1)
 }
 
 /** Boost generated titles only when they still fit their cards. Never upscale existing files implicitly. */

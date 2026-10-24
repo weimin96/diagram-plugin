@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { CanvasScene } from '../src/canvas.js'
-import { assessArchitecturePresentation, recommendArchitectureReadableZoom, recommendArchitectureReadingViewport, recommendArchitectureTitleScale } from '../src/architecturePresentationQuality.js'
+import { assessArchitecturePresentation, recommendArchitectureInitialReadingViewport, recommendArchitectureReadableZoom, recommendArchitectureReadingViewport, recommendArchitectureTitleScale } from '../src/architecturePresentationQuality.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { canvasArchitectureProjection, canvasSceneToSvg, parseCanvasScene, serializeCanvasScene } from '../src/canvas.js'
 import { architectureCases } from './fixtures/architecture/cases.js'
@@ -114,4 +114,36 @@ test('总览只在当前可见节点中选择聚焦对象，不追踪被隐藏�
   assert.ok(Math.abs(centerX - 880) < 1)
   const full = canvasArchitectureProjection({ ...scene, architecture: { ...scene.architecture!, view: 'detail' } })
   assert.equal(full.scene.elements.length, scene.elements.length)
+})
+
+test('过宽架构总览初次打开自动聚焦可读区域，其他画布和详细视图保持默认镜头', () => {
+  const wide = twoNodes(2400, Array.from({ length: 19 }, (_, index) => 100 + index * 60))
+  const overview = { ...wide, architecture: { ...wide.architecture!, view: 'overview' as const } }
+  const original = JSON.stringify(overview)
+  const recommendation = recommendArchitectureInitialReadingViewport(overview, overview, 900, 600)
+  assert.ok(recommendation && recommendation.zoom > 1)
+  const initialFitScale = Math.min(900 / wide.width, 600 / wide.height)
+  assert.ok(12.5 * recommendation.zoom * initialFitScale >= 11.5)
+  assert.deepEqual(recommendArchitectureInitialReadingViewport(overview, overview, 900, 600), recommendation)
+  assert.equal(recommendArchitectureInitialReadingViewport(wide, wide, 900, 600), null)
+  assert.equal(recommendArchitectureInitialReadingViewport({ ...overview, architecture: undefined }, overview, 900, 600), null)
+  assert.equal(recommendArchitectureInitialReadingViewport(overview, overview, 0, 600), null)
+  assert.equal(recommendArchitectureInitialReadingViewport({ ...overview, width: 960 }, overview, 900, 600), null)
+  assert.equal(JSON.stringify(overview), original)
+})
+
+test('聚焦镜头不选择被折叠边界隐藏的主链节点', () => {
+  const scene: CanvasScene = {
+    ...twoNodes(2200, []),
+    groups: [{ id: 'applications', label: '应用', kind: 'boundary', collapsed: true }],
+    elements: [
+      { id: 'hidden', type: 'node', text: '隐藏的主链', x: 1800, y: 90, width: 160, height: 72,
+        groupId: 'applications', emphasis: 'primary' },
+      { id: 'visible', type: 'node', text: '可见入口', x: 120, y: 180, width: 160, height: 72,
+        emphasis: 'secondary' },
+    ],
+  }
+  const view = recommendArchitectureReadingViewport(scene, 900, 620)
+  const centerX = view.x + scene.width / view.zoom / 2
+  assert.ok(centerX < scene.width / 2, 'collapsed hidden main-path nodes must not drive camera focus')
 })
