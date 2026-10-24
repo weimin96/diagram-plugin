@@ -19,6 +19,7 @@ export type MermaidDiagramType =
   | 'treemap'
   | 'ishikawa'
 export type DiagramType = MermaidDiagramType | 'canvas'
+export type DiagramCanvasWorkbench = 'architecture' | 'flowchart' | 'freeform'
 export type DiagramSurface = 'workspace' | 'thread'
 export type DiagramCategory = 'canvas' | 'core' | 'analysis' | 'data' | 'special'
 
@@ -33,6 +34,7 @@ export interface DiagramSummary {
   name: string
   type: DiagramType | 'unknown'
   modifiedAt: string
+  canvasWorkbench?: DiagramCanvasWorkbench
 }
 
 export interface DiagramDocument extends DiagramSummary {

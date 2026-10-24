@@ -6,6 +6,26 @@ import test from 'node:test'
 import { parseCanvasScene } from '../src/canvas.js'
 import { DiagramStore } from '../src/store.js'
 
+test('图表列表按实际工作台标注系统架构、流程画布及自由画布', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'diagram-plugin-workbench-label-'))
+  try {
+    const store = await DiagramStore.open(root)
+    for (const [title, workbench] of [['系统架构', 'architecture'], ['流程画布', 'flowchart'], ['通用画布', 'freeform']] as const) {
+      const created = await store.create('canvas', title, workbench)
+      assert.equal(created.canvasWorkbench, workbench)
+    }
+    const diagrams = await store.list()
+    assert.deepEqual(Object.fromEntries(diagrams.map(({ name, canvasWorkbench }) => [name, canvasWorkbench])), {
+      系统架构: 'architecture', 流程画布: 'flowchart', 通用画布: 'freeform',
+    })
+    const architecture = diagrams.find((diagram) => diagram.name === '系统架构')!
+    const file = JSON.parse((await store.get(architecture.path)).source)
+    delete file.workbench
+    await store.update(architecture.path, JSON.stringify(file))
+    assert.equal((await store.list()).find((diagram) => diagram.path === architecture.path)?.canvasWorkbench, 'architecture')
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
 test('恢复删除的草稿保留源码，拒绝覆盖重建文件和越界目录', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'diagram-draft-recovery-'))
   try {

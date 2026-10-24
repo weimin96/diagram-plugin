@@ -256,7 +256,8 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
   imageSource?: string
 }) {
   const originalItem = item
-  const skin = canvasVisualSkin(originalItem.type === 'note' ? undefined : visualStyle, darkTheme, originalItem.tone, originalItem.emphasis === 'primary')
+  // Architecture nodes use semantic outlines rather than a wall of solid primary cards.
+  const skin = canvasVisualSkin(originalItem.type === 'note' ? undefined : visualStyle, darkTheme, originalItem.tone, originalItem.emphasis === 'primary' && !architecture)
   const displayItem = canvasStyledBox(originalItem, skin)
   const displayText = displayItem.text
   const imagePath = displayItem.type === 'note' ? displayItem.imagePath : undefined
@@ -428,7 +429,6 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   const [traceDepth, setTraceDepth] = useState(2)
   const editorRef = useRef<HTMLDivElement>(null)
   const surfaceRef = useRef<HTMLDivElement>(null)
-  const initialViewportSet = useRef(false)
   const svgRef = useRef<SVGSVGElement>(null)
   const textInputRef = useRef<HTMLInputElement>(null)
   const drag = useRef<DragState | null>(null)
@@ -486,25 +486,12 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
       if (width <= 0) return
       setCompactToolbar(width < 560)
       if (width >= 560) setMoreToolsOpen(false)
-      if (initialViewportSet.current || !parsed.scene) return
-      initialViewportSet.current = true
-      if (width > 620 || focusKey) return
-      const live = parsed.scene
-      const target = live.elements.find((item) => item.type === 'node' && item.emphasis === 'primary')
-        ?? live.elements.find((item) => item.type !== 'arrow')
-      if (!target || target.type === 'arrow') return
-      const zoom = clamp(live.width / width, 1, MAX_ZOOM)
-      setViewport({
-        x: target.x + target.width / 2 - live.width / zoom / 2,
-        y: target.y + target.height / 2 - live.height / zoom / 2,
-        zoom,
-      })
     }
     updateSize(surface.getBoundingClientRect().width)
     const observer = new ResizeObserver(([entry]) => updateSize(entry.contentRect.width))
     observer.observe(surface)
     return () => observer.disconnect()
-  }, [Boolean(parsed.scene), focusKey])
+  }, [])
 
   useEffect(() => {
     if (source !== sourceRef.current) {
@@ -3390,7 +3377,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
           ) : null}
           {visibleRenderBoxes.map((item) => {
             const originalItem = item
-            const skin = canvasVisualSkin(originalItem.type === 'note' ? undefined : scene.style, darkTheme, originalItem.tone, originalItem.emphasis === 'primary')
+            const skin = canvasVisualSkin(originalItem.type === 'note' ? undefined : scene.style, darkTheme, originalItem.tone, originalItem.emphasis === 'primary' && !scene.architecture)
             const displayItem = canvasStyledBox(originalItem, skin)
             const displayX = displayItem.x
             const displayY = displayItem.y

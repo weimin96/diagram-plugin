@@ -14,7 +14,7 @@ import {
 import { createCodexHost } from './hosts/codex.js'
 import { createDeepSeekHost } from './hosts/deepseek.js'
 import type { HostContext } from './hosts/types.js'
-import { ChevronDownIcon, MoreHorizontalIcon, XIcon } from 'lucide-react'
+import { ChevronDownIcon, FolderOpenIcon, MoreHorizontalIcon, RefreshCwIcon, XIcon } from 'lucide-react'
 import { AiPanel } from './AiPanel.js'
 import { buildGenerationPrompt, buildModificationPrompt, buildSubgraphModificationPrompt, type DiagramGenerationRequest } from './aiPrompts.js'
 import { CanvasEditor, type CanvasPlaybackRequest, type CanvasSelection } from './CanvasEditor.js'
@@ -230,6 +230,8 @@ void main().catch(renderFatalError)
 async function main() {
   await host.connect()
   applyHostContext(host.getHostContext())
+  const freshThreadOpen = hostSurface === 'thread'
+    && (host.getHostContext() as HostContext & { diagramOpenMode?: string }).diagramOpenMode === 'fresh'
 
   if (!initialWorkspace) {
     const result = await host.callServerTool({ name: hostSurface === 'thread' ? 'diagram.thread' : 'diagram.workspace', arguments: {} }) as ServerToolResult
@@ -240,6 +242,7 @@ async function main() {
   }
 
   if (initialWorkspace && !initialWorkspace.surface) initialWorkspace = { ...initialWorkspace, surface: hostSurface }
+  if (initialWorkspace && freshThreadOpen) initialWorkspace = { ...initialWorkspace, activeDiagramPath: undefined }
 
   createRoot(rootElement).render(
     <RuntimeErrorBoundary>
@@ -341,7 +344,7 @@ function WorkspacePicker({ current, onOpen }: { current: WorkspaceSnapshot; onOp
 
 function DiagramWorkspace({ snapshot, onSnapshot, onSwitch }: {
   snapshot: WorkspaceSnapshot
-  onSnapshot: (snapshot: WorkspaceSnapshot) => void
+  onSnapshot: React.Dispatch<React.SetStateAction<WorkspaceSnapshot>>
   onSwitch: () => void
 }) {
   const workspacePath = snapshot.workspacePath!
@@ -379,6 +382,8 @@ function DiagramWorkspace({ snapshot, onSnapshot, onSwitch }: {
   const [threadTabs, setThreadTabs] = useState<string[]>(() => isThread ? (snapshot.threadDiagramPaths ?? []) : [])
   const [threadDiagramMenuOpen, setThreadDiagramMenuOpen] = useState(false)
   const [threadDiagramQuery, setThreadDiagramQuery] = useState('')
+  const [threadDiagramListLoading, setThreadDiagramListLoading] = useState(false)
+  const [threadDiagramListError, setThreadDiagramListError] = useState<string | null>(null)
   const [canvasSelection, setCanvasSelection] = useState<CanvasSelection | null>(null)
   const [canvasFocus, setCanvasFocus] = useState<{ ids: string[]; key: string; trace?: DiagramThreadStateResult['trace'] } | null>(null)
   const [canvasPlayback, setCanvasPlayback] = useState<CanvasPlaybackRequest | null>(null)
@@ -413,10 +418,17 @@ function DiagramWorkspace({ snapshot, onSnapshot, onSwitch }: {
   const saveInFlight = useRef(false)
   const patchHistoryRequestSeq = useRef(0)
   const threadStateInitialized = useRef(false)
+  const skipRestoredThreadSelection = useRef(isThread
+    && (host.getHostContext() as HostContext & { diagramOpenMode?: string }).diagramOpenMode === 'fresh')
   const backgroundFailures = useRef({ thread: 0, revision: 0 })
   useEffect(() => () => { selectRequestSeq.current += 1 }, [])
   const externalDeleted = Boolean(selected && selected.path === deletedDraftPath)
   const dirty = Boolean(selected && (source !== selected.source || externalDeleted))
+  useEffect(() => {
+    if (isThread && rootElement.dataset.diagramHost === 'deepseek') {
+      window.parent.postMessage({ type: 'diagram.unsaved', unsaved: dirty }, '*')
+    }
+  }, [dirty, isThread])
   const selectedTypeLabel = useMemo(() => selected ? diagramDocumentLabel(selected) : '', [selected])
   const visibleDiagrams = useMemo(() => {
     const query = diagramQuery.trim().toLocaleLowerCase()
@@ -424,24 +436,26 @@ function DiagramWorkspace({ snapshot, onSnapshot, onSwitch }: {
     return snapshot.diagrams.filter((diagram) => (
       diagram.name.toLocaleLowerCase().includes(query)
       || diagram.path.toLocaleLowerCase().includes(query)
-      || diagramLabel(diagram.type).toLocaleLowerCase().includes(query)
+      || diagramSummaryLabel(diagram).toLocaleLowerCase().includes(query)
     ))
   }, [diagramQuery, snapshot.diagrams])
   const threadMenuGroups = useMemo(() => {
     const byPath = new Map(snapshot.diagrams.map((diagram) => [diagram.path, diagram]))
+    const recentFirst = (diagrams: DiagramSummary[]) => [...diagrams].sort((left, right) =>
+      right.modifiedAt.localeCompare(left.modifiedAt) || left.name.localeCompare(right.name))
     const current = threadTabs.flatMap((path) => {
       const diagram = byPath.get(path)
       return diagram ? [diagram] : []
     })
     const currentPaths = new Set(current.map((diagram) => diagram.path))
-    const project = snapshot.diagrams.filter((diagram) => !currentPaths.has(diagram.path))
+    const project = recentFirst(snapshot.diagrams.filter((diagram) => !currentPaths.has(diagram.path)))
     const query = threadDiagramQuery.trim().toLocaleLowerCase()
     const matches = (diagram: DiagramSummary) => !query
       || diagram.name.toLocaleLowerCase().includes(query)
       || diagram.path.toLocaleLowerCase().includes(query)
-      || diagramLabel(diagram.type).toLocaleLowerCase().includes(query)
+      || diagramSummaryLabel(diagram).toLocaleLowerCase().includes(query)
     return {
-      current: current.filter(matches),
+      current: recentFirst(current).filter(matches),
       project: project.filter(matches),
       currentTotal: current.length,
       projectTotal: project.length,
@@ -478,6 +492,7 @@ function DiagramWorkspace({ snapshot, onSnapshot, onSwitch }: {
     setThreadTabs(isThread ? (snapshot.threadDiagramPaths ?? []).filter((path) => availablePaths.has(path)) : [])
     setThreadDiagramMenuOpen(false)
     setThreadDiagramQuery('')
+    setThreadDiagramListError(null)
     setCanvasSelection(null)
     setCanvasFocus(null)
     setCanvasPlayback(null)
@@ -589,6 +604,10 @@ function DiagramWorkspace({ snapshot, onSnapshot, onSwitch }: {
             }
           }
           lastThreadStateAt.current = state.updatedAt
+          if (skipRestoredThreadSelection.current) {
+            skipRestoredThreadSelection.current = false
+            return
+          }
           if (!followConversation) return
           const nextPath = state.activeDiagramPath
           if (!nextPath) {
@@ -1466,6 +1485,27 @@ function DiagramWorkspace({ snapshot, onSnapshot, onSwitch }: {
     }
   }
 
+  async function refreshThreadDiagramList() {
+    if (threadDiagramListLoading) return
+    setThreadDiagramListLoading(true)
+    setThreadDiagramListError(null)
+    try {
+      const result = await callTool<DiagramListResult>('diagram.list', { workspacePath })
+      onSnapshot((current) => current.workspacePath === workspacePath
+        ? { ...current, diagrams: result.diagrams }
+        : current)
+    } catch (cause) {
+      setThreadDiagramListError(errorMessage(cause))
+    } finally {
+      setThreadDiagramListLoading(false)
+    }
+  }
+
+  function openThreadDiagramList() {
+    setThreadDiagramMenuOpen(true)
+    void refreshThreadDiagramList()
+  }
+
   const searchSourceFiles = useCallback(async (query: string): Promise<string[]> => {
     const result = await callTool<SourceFilesResult>('diagram.sources', { workspacePath, query, limit: 40 })
     return result.files
@@ -1921,7 +1961,7 @@ function DiagramWorkspace({ snapshot, onSnapshot, onSwitch }: {
               onClick={() => void selectDiagram(diagram.path)}
             >
               <span className="diagram-list-name">{diagram.name}</span>
-              <span className="diagram-list-meta">{diagramLabel(diagram.type)} · {shortPath(diagram.path)}</span>
+              <span className="diagram-list-meta">{diagramSummaryLabel(diagram)} · {shortPath(diagram.path)}</span>
               {loadingPath === diagram.path ? <span className="loading-line" /> : null}
             </button>
           ))}
@@ -1941,38 +1981,60 @@ function DiagramWorkspace({ snapshot, onSnapshot, onSwitch }: {
               <Popover
                 open={threadDiagramMenuOpen}
                 onOpenChange={(open) => {
-                  setThreadDiagramMenuOpen(open)
-                  if (!open) setThreadDiagramQuery('')
+                  if (open) openThreadDiagramList()
+                  else {
+                    setThreadDiagramMenuOpen(false)
+                    setThreadDiagramQuery('')
+                    setThreadDiagramListError(null)
+                  }
                 }}
               >
                 <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm" className="w-full justify-between" aria-label="选择图表">
-                    <span>图表</span>
+                  <Button variant="ghost" size="sm" className="w-full justify-between gap-1" aria-label="打开图表">
+                    <FolderOpenIcon className="size-4 shrink-0" />
+                    <span>打开图表</span>
                     <ChevronDownIcon data-icon="inline-end" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent align="start" className="w-[min(420px,calc(100vw-28px))] p-0">
                   <div className="flex h-9 items-center justify-between border-b px-3">
-                    <strong className="text-sm font-medium">选择图表</strong>
-                    <span className="text-xs text-muted-foreground">{threadMenuGroups.currentTotal} 当前对话 · {threadMenuGroups.projectTotal} 其他</span>
+                    <strong className="text-sm font-medium">打开已有图表</strong>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">{snapshot.diagrams.length} 个图表</span>
+                      <Button
+                        size="icon-xs"
+                        variant="ghost"
+                        type="button"
+                        aria-label="刷新图表列表"
+                        title="刷新图表列表"
+                        disabled={threadDiagramListLoading}
+                        onClick={() => void refreshThreadDiagramList()}
+                      >
+                        <RefreshCwIcon className={threadDiagramListLoading ? 'animate-spin' : ''} />
+                      </Button>
+                    </div>
                   </div>
-                  {snapshot.diagrams.length > 6 ? (
-                    <div className="border-b p-2">
-                      <Input
-                        value={threadDiagramQuery}
-                        onChange={(event) => setThreadDiagramQuery(event.target.value)}
-                        onKeyDown={(event) => event.stopPropagation()}
-                        placeholder="搜索名称、类型或路径"
-                        aria-label="搜索图表"
-                        className="h-8"
-                      />
+                  <div className="border-b p-2">
+                    <Input
+                      value={threadDiagramQuery}
+                      onChange={(event) => setThreadDiagramQuery(event.target.value)}
+                      onKeyDown={(event) => event.stopPropagation()}
+                      placeholder="搜索图表名称、类型或路径"
+                      aria-label="搜索图表"
+                      className="thread-diagram-search h-8"
+                    />
+                  </div>
+                  {threadDiagramListError ? (
+                    <div role="alert" className="px-3 py-2 text-xs text-destructive">
+                      加载失败：{threadDiagramListError}
+                      <Button type="button" variant="link" size="sm" onClick={() => void refreshThreadDiagramList()}>重试</Button>
                     </div>
                   ) : null}
                   <ScrollArea className="h-[min(340px,48vh)]">
                     <div className="flex flex-col gap-1 p-1">
                       {([
                         { key: 'current', label: '当前对话', items: threadMenuGroups.current },
-                        { key: 'project', label: '项目中的其他图表', items: threadMenuGroups.project },
+                        { key: 'project', label: '当前项目 · 最近修改', items: threadMenuGroups.project },
                       ] as const).map((section) => section.items.length ? (
                         <section className="flex flex-col gap-1" key={section.key} aria-label={section.label}>
                           <div className="flex h-7 items-center justify-between px-2 text-xs text-muted-foreground">
@@ -1995,14 +2057,14 @@ function DiagramWorkspace({ snapshot, onSnapshot, onSwitch }: {
                                 <strong className="block truncate font-medium">{diagram.name}</strong>
                                 <small className="block truncate text-xs text-muted-foreground">{shortPath(diagram.path)}</small>
                               </span>
-                              <Badge variant="outline">{selected?.path === diagram.path ? selectedTypeLabel : diagramLabel(diagram.type)}</Badge>
+                              <Badge variant="outline">{selected?.path === diagram.path ? selectedTypeLabel : diagramSummaryLabel(diagram)}</Badge>
                             </Button>
                           ))}
                         </section>
                       ) : null)}
                       {threadMenuGroups.current.length === 0 && threadMenuGroups.project.length === 0 ? (
                         <div className="px-3 py-8 text-center text-sm text-muted-foreground">
-                          {threadDiagramQuery.trim() ? '没有匹配的图表' : '当前项目还没有图表'}
+                          {threadDiagramListLoading ? '正在读取已保存的图表…' : threadDiagramQuery.trim() ? '没有匹配的图表' : '当前项目还没有已保存的图表'}
                         </div>
                       ) : null}
                     </div>
@@ -2034,7 +2096,6 @@ function DiagramWorkspace({ snapshot, onSnapshot, onSwitch }: {
                 title={followConversation ? '正在跟随当前对话中的图表' : '已暂停跟随当前对话'}
                 onClick={() => setFollowConversation((value) => !value)}
               >
-                <span className="thread-link-status" />
                 跟随
               </button>
               {selected ? (
@@ -2044,6 +2105,7 @@ function DiagramWorkspace({ snapshot, onSnapshot, onSwitch }: {
                 <DropdownMenuTrigger asChild><Button ref={threadMoreButton} variant="ghost" size="icon-sm" aria-label="更多图表操作"><MoreHorizontalIcon /></Button></DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48" onCloseAutoFocus={(event) => { if (aiOpen) event.preventDefault() }}>
                   <DropdownMenuGroup>
+                    <DropdownMenuItem onSelect={openThreadDiagramList}>打开图表</DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setCreating(true)}>新建图表</DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => openAiPanel('generate')}>从代码生成</DropdownMenuItem>
                     {selected ? <DropdownMenuItem disabled={dirty || aiSending} onSelect={() => openAiPanel('modify')}>修改当前图</DropdownMenuItem> : null}
@@ -2280,11 +2342,12 @@ function DiagramWorkspace({ snapshot, onSnapshot, onSwitch }: {
           <div className="main-empty">
             <div className="empty-graphic"><span /><span /><span /></div>
             <h2>{isThread ? '未打开图表' : '选择或创建一个图表'}</h2>
-            <p>{isThread ? '从上方选择已有图表，或新建一个画板。' : '结构化图使用 Mermaid；自由布局的架构草图和说明使用 Canvas 文档。'}</p>
+            <p>{isThread ? '打开当前项目中已保存的图表，或者新建画板。' : '结构化图使用 Mermaid；自由布局的架构草图和说明使用 Canvas 文档。'}</p>
             <div className="empty-actions">
               {isThread ? (
                 <>
-                  <button className="primary-button" type="button" onClick={() => setCreating(true)}>新建图表</button>
+                  <button className="primary-button" type="button" onClick={openThreadDiagramList}><FolderOpenIcon size={16} />打开已有图表</button>
+                  <button type="button" onClick={() => setCreating(true)}>新建图表</button>
                   <button type="button" onClick={() => openAiPanel('generate')}>生成图表</button>
                 </>
               ) : (
@@ -2982,8 +3045,15 @@ function diagramLabel(type: DiagramSummary['type']): string {
   return diagramTypes.find((item) => item.type === type)?.label ?? '图表'
 }
 
-function diagramDocumentLabel(diagram: DiagramDocument): string {
+function diagramSummaryLabel(diagram: DiagramSummary): string {
   if (diagram.type !== 'canvas') return diagramLabel(diagram.type)
+  if (diagram.canvasWorkbench === 'architecture') return '系统架构'
+  if (diagram.canvasWorkbench === 'flowchart') return '流程画布'
+  return diagram.canvasWorkbench === 'freeform' ? '自由画布' : '画布'
+}
+
+function diagramDocumentLabel(diagram: DiagramDocument): string {
+  if (diagram.type !== 'canvas' || diagram.canvasWorkbench) return diagramSummaryLabel(diagram)
   try {
     const workbench = parseCanvasScene(diagram.source).workbench
     if (workbench === 'architecture') return '系统架构'

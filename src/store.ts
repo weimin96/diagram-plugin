@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { createCanvasSource, type CanvasWorkbenchMode } from './canvas.js'
 import { createTemplate, detectDiagramType } from './templates.js'
-import type { DiagramDocument, DiagramRevision, DiagramSummary, DiagramType, MermaidDiagramType } from './types.js'
+import type { DiagramCanvasWorkbench, DiagramDocument, DiagramRevision, DiagramSummary, DiagramType, MermaidDiagramType } from './types.js'
 
 const allowedExtensions = new Set(['.mmd', '.mermaid'])
 const allowedExportExtensions = new Set(['.svg', '.png'])
@@ -298,11 +298,24 @@ export class DiagramStore {
       name: path.basename(relativePath).slice(0, -extension.length),
       type: extension === '.diagram.json' ? 'canvas' : detectDiagramType(source),
       modifiedAt: modifiedAt.toISOString(),
+      ...(extension === '.diagram.json' ? { canvasWorkbench: readCanvasWorkbench(source) } : {}),
     }
   }
 
   private document(relativePath: string, source: string, modifiedAt: Date): DiagramDocument {
     return { ...this.summary(relativePath, source, modifiedAt), source }
+  }
+}
+
+function readCanvasWorkbench(source: string): DiagramCanvasWorkbench | undefined {
+  try {
+    const scene = JSON.parse(source) as { workbench?: unknown; architecture?: unknown }
+    if (!scene || typeof scene !== 'object') return undefined
+    if (scene.architecture && typeof scene.architecture === 'object') return 'architecture'
+    if (scene.workbench === 'architecture' || scene.workbench === 'flowchart') return scene.workbench
+    return 'freeform'
+  } catch {
+    return undefined
   }
 }
 

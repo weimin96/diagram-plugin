@@ -130,7 +130,7 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 
 .diagram-shell { height: 100%; display: grid; grid-template-columns: 242px minmax(0, 1fr); background: var(--app-bg); position: relative; }
 .diagram-shell.sidebar-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
-.diagram-shell.thread-companion { grid-template-columns: minmax(0, 1fr); }
+.diagram-shell.thread-companion { grid-template-columns: minmax(0, 1fr); container: diagram-panel / inline-size; }
 .thread-companion .diagram-sidebar, .thread-companion .sidebar-expand-button { display: none; }
 .diagram-sidebar { min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border); background: var(--surface-panel); }
 .sidebar-collapsed .diagram-sidebar { overflow: hidden; border-right: 0; visibility: hidden; }
@@ -202,9 +202,8 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .thread-companion-head { min-height: 40px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 4px 8px; border-bottom: 1px solid var(--border); background: var(--surface-panel); }
 .thread-follow-toggle { height: 28px; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; padding: 0 5px; border: 0; border-radius: 4px; background: transparent; color: var(--text-secondary); font-size: 12px; }
 .thread-follow-toggle:hover { background: color-mix(in srgb, var(--text-primary) 7%, var(--surface-panel)); color: var(--text-primary); }
-.thread-link-status { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: var(--color-text-success, #16803a); }
-.thread-follow-toggle:not(.is-active) .thread-link-status { background: var(--text-tertiary); box-shadow: none; }
-.thread-diagram-menu { min-width: 0; width: 68px; }
+.thread-follow-toggle.is-active { color: var(--text-primary); background: var(--surface-raised); }
+.thread-diagram-menu { min-width: 0; width: 112px; }
 .thread-diagram-tabs { min-width: 0; display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
 .thread-diagram-tabs::-webkit-scrollbar { display: none; }
 .thread-diagram-tab { height: 30px; min-width: 0; max-width: 100%; flex: 0 0 auto; display: flex; align-items: center; overflow: hidden; border: 0; border-radius: 4px; background: transparent; }
@@ -783,6 +782,10 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 :root[data-theme='dark'] .freeform-icon-ref path[data-icon-ref='simple:kafka'],
 :root[data-theme='dark'] .freeform-icon-grid path[data-icon-ref='simple:kafka'] { fill: #d4d4d8 !important; }
 .freeform-editor.is-architecture-mode .freeform-box.is-architecture-mark > rect:first-of-type { fill: transparent; stroke: transparent; filter: none; }
+.freeform-editor.is-architecture-mode .freeform-box:not(.is-architecture-mark) > rect:first-of-type { filter: none; }
+.freeform-editor.is-architecture-mode .freeform-box.emphasis-primary:not(.is-architecture-mark) > rect:first-of-type { stroke-width: 2; }
+.freeform-editor.is-architecture-mode .freeform-box.emphasis-secondary:not(.is-architecture-mark) > rect:first-of-type { stroke-width: 1.25; }
+.freeform-editor.is-architecture-mode .freeform-group-frame:not(.c4-software-system) > rect:first-of-type { stroke-width: 1.05; }
 .freeform-editor.is-architecture-mode .freeform-box.is-architecture-mark:hover > rect:first-of-type { fill: color-mix(in srgb, var(--surface-raised) 36%, transparent); stroke: color-mix(in srgb, var(--accent) 34%, transparent); stroke-width: 1; }
 .freeform-editor.is-architecture-mode .freeform-box.is-architecture-mark.is-selected > rect:first-of-type { fill: color-mix(in srgb, var(--accent) 5%, transparent); stroke: var(--accent); stroke-width: 2; }
 .freeform-editor.is-architecture-mode .freeform-box.is-architecture-mark .freeform-node-title { font-size: 13px; font-weight: 660; }
@@ -955,7 +958,8 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .main-empty { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28px; text-align: center; }
 .main-empty h2 { margin: 18px 0 5px; font-size: 18px; }
 .main-empty p { max-width: 460px; margin: 0 0 18px; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
-.empty-actions { display: flex; align-items: center; gap: 8px; }
+.empty-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; }
+.empty-actions > .primary-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .empty-actions > button:not(.primary-button) { height: 36px; padding: 0 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-panel); color: var(--text-secondary); font-size: 13px; }
 .empty-actions > button:not(.primary-button):hover:not(:disabled) { border-color: var(--border-strong); background: var(--surface-hover); color: var(--text-primary); }
 .empty-graphic { width: 130px; height: 80px; position: relative; }
@@ -1169,8 +1173,8 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
   .thread-companion .diagram-main { min-height: 0; }
   .thread-companion .ai-panel { position: absolute; }
   .thread-companion-head { padding: 6px; }
-  .thread-follow-toggle { width: 32px; padding: 0; justify-content: center; font-size: 0; }
-  .thread-diagram-menu { min-width: 0; width: 58px; }
+  .thread-follow-toggle { width: auto; padding-inline: 6px; }
+  .thread-diagram-menu { min-width: 0; width: 108px; }
   .new-diagram-browser { grid-template-columns: minmax(0, 1fr) minmax(180px, 34%); gap: 8px; }
   .new-diagram-preview-content,
   .new-diagram-preview-empty { min-height: 210px; }
@@ -1196,7 +1200,7 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
   from { stroke: var(--accent); stroke-width: 2.5; }
 }
 
-.thread-document-actions { display: flex; align-items: center; gap: 2px; white-space: nowrap; }
+.thread-document-actions { min-width: 0; display: flex; align-items: center; gap: 2px; white-space: nowrap; }
 .thread-document-actions .save-state { padding-left: 5px; color: var(--text-secondary); font-size: 12px; }
 .thread-document-actions > button[aria-pressed='true']:not(.thread-follow-toggle) { background: var(--surface-raised); }
 .freeform-tools { min-width: 0; display: flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: none; }
@@ -1235,5 +1239,32 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 
 .thread-document-actions [data-slot='button'] { height: 28px; font-size: 12px; padding-inline: 6px; }
 .thread-diagram-menu [data-slot='button'] { font-size: 12px; padding-inline: 6px; }
+.thread-diagram-search { border-color: var(--border); background: var(--surface-panel); box-shadow: none; transition: border-color 140ms ease, box-shadow 140ms ease; }
+.thread-diagram-search:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--text-secondary) 48%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+@container diagram-panel (max-width: 720px) {
+  .thread-companion-head { grid-template-columns: auto minmax(0, 1fr); row-gap: 3px; }
+  .thread-document-actions { grid-column: 1 / -1; justify-content: flex-end; padding-top: 3px; border-top: 1px solid var(--border); }
+  .thread-diagram-tab-main span { max-width: 120px; }
+}
+
+@container diagram-panel (max-width: 420px) {
+  .thread-companion-head { gap: 3px; padding-inline: 5px; }
+  .thread-diagram-menu { width: 108px; }
+  .thread-document-actions { gap: 0; }
+  .thread-document-actions .save-state { font-size: 11px; }
+  .thread-diagram-tab-main span { max-width: 88px; }
+}
+
+@container (max-width: 700px) {
+  .freeform-floating-toolbar { right: 8px; width: auto; gap: 2px; }
+  .freeform-tools { overflow-x: auto; }
+  .freeform-tool-history { margin-left: 0; }
+  .freeform-floating-toolbar button { padding-inline: 5px; }
+}
 
 .freeform-source-error { color: var(--danger); font-size: 12px; line-height: 1.5; }

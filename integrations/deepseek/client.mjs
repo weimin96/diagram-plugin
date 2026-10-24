@@ -53,11 +53,38 @@ function hostContext(ctx, element) {
 }
 
 export function apply(ctx) {
+  const panelOpenState = new Map()
+  const unsavedSessions = new Set()
+
+  function openPanel(sessionId, mode) {
+    // Reopening must not silently discard unsaved edits in a keepMounted tab.
+    if (unsavedSessions.has(sessionId)) {
+      ctx.sidebarRight.openTab('diagram')
+      return
+    }
+    const next = { revision: (panelOpenState.get(sessionId)?.revision ?? 0) + 1, mode }
+    panelOpenState.set(sessionId, next)
+    window.dispatchEvent(new CustomEvent('diagram/panel-open', { detail: sessionId }))
+    ctx.sidebarRight.openTab('diagram')
+  }
+
   function DiagramBody({ sessionId, useSessions }) {
     const cwd = useSessions((sessions) => sessions.byId[sessionId]?.cwd)
     const frame = useRef(null)
     const [html, setHtml] = useState('')
     const [error, setError] = useState('')
+    const [openState, setOpenState] = useState(() => panelOpenState.get(sessionId) ?? { revision: 0, mode: 'fresh' })
+    useEffect(() => {
+      setOpenState(panelOpenState.get(sessionId) ?? { revision: 0, mode: 'fresh' })
+      const onPanelOpen = (event) => {
+        if (event.detail === sessionId) setOpenState(panelOpenState.get(sessionId))
+      }
+      window.addEventListener('diagram/panel-open', onPanelOpen)
+      return () => {
+        window.removeEventListener('diagram/panel-open', onPanelOpen)
+        unsavedSessions.delete(sessionId)
+      }
+    }, [sessionId])
     useEffect(() => {
       setHtml('')
       setError('')
@@ -71,7 +98,13 @@ export function apply(ctx) {
         })
       })
       const receive = (event) => {
-        if (event.source !== frame.current?.contentWindow || event.data?.type !== 'diagram.ready' || port) return
+        if (event.source !== frame.current?.contentWindow) return
+        if (event.data?.type === 'diagram.unsaved') {
+          if (event.data.unsaved) unsavedSessions.add(sessionId)
+          else unsavedSessions.delete(sessionId)
+          return
+        }
+        if (event.data?.type !== 'diagram.ready' || port) return
         const channel = new MessageChannel()
         port = channel.port1
         port.onmessage = async ({ data }) => {
@@ -95,7 +128,10 @@ export function apply(ctx) {
             port?.postMessage({ id: data.id, error: cause instanceof Error ? cause.message : String(cause) })
           }
         }
-        frame.current.contentWindow.postMessage({ type: 'diagram.connect', context: hostContext(ctx, frame.current) }, '*', [channel.port2])
+        frame.current.contentWindow.postMessage({
+          type: 'diagram.connect',
+          context: { ...hostContext(ctx, frame.current), diagramOpenMode: openState.mode },
+        }, '*', [channel.port2])
       }
       window.addEventListener('message', receive)
       void (async () => {
@@ -107,7 +143,7 @@ export function apply(ctx) {
         }
       })()
       return () => { controller.abort(); cancelAnimationFrame(themeFrame); unsubscribeTheme(); port?.close(); window.removeEventListener('message', receive) }
-    }, [sessionId, cwd])
+    }, [sessionId, cwd, openState])
     if (error) return React.createElement('div', { role: 'alert' }, error)
     if (!html) return React.createElement('div', null, '正在连接 Diagram…')
     return React.createElement('iframe', {
@@ -120,16 +156,14 @@ export function apply(ctx) {
     const [error, setError] = useState('')
     useEffect(() => {
       const controller = new AbortController()
-      let previous = 0
+      let previous
       let timer
       async function poll() {
         try {
           if (ctx.sidebarRight.mounted.getSnapshot() === sessionId) {
             const status = await callHost(sessionId, 'status', {}, controller.signal)
-            if (status.openRequest > previous) {
-              ctx.sidebarRight.openTab('diagram')
-              previous = status.openRequest
-            }
+            if (previous !== undefined && status.openRequest > previous) openPanel(sessionId, 'restore')
+            previous = status.openRequest
             setError('')
           }
         } catch (cause) {
@@ -143,7 +177,11 @@ export function apply(ctx) {
     }, [sessionId])
     return React.createElement('button', {
       type: 'button', title: error || '打开 Diagram',
-      onClick: () => { try { ctx.sidebarRight.openTab('diagram') } catch (cause) { setError(String(cause)) } },
+      onClick: () => {
+        try {
+          openPanel(sessionId, 'fresh')
+        } catch (cause) { setError(String(cause)) }
+      },
       style: { background: 'transparent', border: 0, color: 'inherit', cursor: 'pointer', padding: '4px 8px' },
     }, error ? 'Diagram 连接失败' : 'Diagram')
   }
