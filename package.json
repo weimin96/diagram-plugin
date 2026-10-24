@@ -17,6 +17,7 @@
     "benchmark:architecture": "node --import tsx scripts/benchmark-architecture.ts",
     "benchmark:architecture:design": "node --import tsx scripts/benchmark-architecture-design.ts",
     "benchmark:architecture:engines": "node --import tsx scripts/benchmark-architecture-engines.ts",
+    "benchmark:architecture:d2": "node --import tsx scripts/benchmark-architecture-d2.ts",
     "perf:canvas": "node scripts/benchmark-canvas.mjs",
     "visual:regression": "node scripts/visual-regression.mjs",
     "visual:regression:update": "node scripts/visual-regression.mjs --update",

@@ -63,6 +63,14 @@ pnpm check:hosts
 
 架构画布中的参与者、技术服务、数据库与外部组件都应有一致的卡片底板、图标与标题水平基线；技术 Logo 只是内部内容，不能取消节点容器。架构模式的箭头采用固定大小、可辨认的箭头头部与更清晰的默认线宽，分区边界不再以极淡的虚线呈现。`CanvasEditor` 的 SVG/CSS 与 `canvasSceneToSvg` 导出遵守同一视觉原则。显式的节点 `fillColor`、`strokeColor`、`strokeWidth`、箭头颜色及方向必须保留。上述内容属于渲染升级，不更改节点、连线、文件格式和布局坐标；历史图文件无需迁移。
 
+### 布局引擎视觉对照（P1，独立实验）
+
+`pnpm benchmark:architecture:engines --case=microservices` 继续用于现有 Canvas 布局与三种 ELK 实验候选的几何质量对照。**不直接开启 ELK 正式路由。**
+
+`pnpm benchmark:architecture:d2` 将同一架构图中的真实节点、功能容器和有向关系转换为 D2 测试输入，输出 `test-results/architecture-d2-review/` 下的 `.d2`、当前引擎 SVG 和对照画廊。安装 D2 0.9.0+，使用 `d2 layout` 确认 TALA 已内置，再运行 `pnpm benchmark:architecture:d2 --render` 实际生成 TALA、D2 ELK、Dagre 的独立 SVG。也支持 `--case=...` 和 `D2_BIN=/path/to/d2`。
+
+**重要限制：**D2 使用自己的文字度量、节点尺寸、主题与 SVG 渲染，所以这一步只能看空间布局、容器和关系是否更自然，不是同一 Canvas 像素风格的公平 A/B，也不把不同计时范围直接比较。当前尚无经过验证的 TALA → 可编辑 Canvas 坐标与折点转换器；TALA 未完成真正的可编辑 Canvas 集成及正式引擎验收之前，不允许切换默认生成路由。
+
 ```sh
 pnpm visual:smoke       # 真实 Chrome 渲染全部 Mermaid 模板，捕获 lexer / 渲染兼容问题
 pnpm visual:benchmark   # 复杂样例的尺寸、文字越界、节点重叠与拆图建议
