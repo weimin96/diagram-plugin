@@ -1,7 +1,7 @@
 import { beautifyArchitectureScene, inferArchitectureComposition, routeArchitectureArrowIds, routeArchitectureEdges, type ArchitectureComposition, type ArchitecturePartition, type ArchitectureTheme } from './architectureDesign.js'
 import { assessCanvasVisualQuality, type CanvasVisualQualityAssessment } from './canvasQuality.js'
 import type { DiagramVisualStyle } from './diagramVisualStyles.js'
-import { canvasArrowBoxRoute, canvasSharedSourceStem, type CanvasArchitectureDensity, type CanvasArchitectureScenario, type CanvasIcon, type CanvasNode, type CanvasScene, type CanvasStencil } from './canvas.js'
+import { canvasArrowBoxRoute, canvasSharedSourceStem, type CanvasArchitectureDensity, type CanvasArchitectureScenario, type CanvasArrow, type CanvasIcon, type CanvasNode, type CanvasScene, type CanvasStencil } from './canvas.js'
 import { assessArchitecturePresentation, recommendArchitectureTitleScale } from './architecturePresentationQuality.js'
 import { assessArchitectureRouteDiagnostics } from './architectureRouteDiagnostics.js'
 import { planArchitectureVisual } from './architectureVisualPlan.js'
@@ -801,6 +801,42 @@ function improveCongestedPorts(result: ReturnType<typeof composeArchitectureGrap
     diagnostics = route
     rerouted += 1
   }
+  // A genuine shared source trunk can still collide after its fork. Preserve
+  // the common stem and both port normals, changing only the branch corridor.
+  // This is a bounded local search; unrelated and group-bus edges are excluded.
+  if (quality.metrics.edgeOverlaps >= 4) {
+    const bundled = [...new Set(quality.issues.filter((issue) => issue.code === 'edge-overlap')
+      .flatMap((issue) => issue.elementIds))]
+      .filter((id) => {
+        const arrow = scene.elements.find((item) => item.id === id)
+        return arrow?.type === 'arrow' && arrow.bundleKey?.startsWith('from:')
+      }).slice(0, 5)
+    for (const id of bundled) {
+      let best: { scene: CanvasScene; quality: CanvasVisualQualityAssessment;
+        diagnostics: ReturnType<typeof assessArchitectureRouteDiagnostics> } | undefined
+      for (const candidate of nudgeSharedSourceBranch(scene, id)) {
+        const proposed = assessCanvasVisualQuality(candidate)
+        const before = quality.metrics, after = proposed.metrics
+        if (after.edgeOverlaps >= (best?.quality.metrics.edgeOverlaps ?? before.edgeOverlaps)
+          || after.edgeCrossings > before.edgeCrossings
+          || after.edgeNodeIntersections > before.edgeNodeIntersections
+          || after.nodeOverlaps > before.nodeOverlaps
+          || after.labelNodeIntersections > before.labelNodeIntersections
+          || after.labelOverlaps > before.labelOverlaps
+          || after.labelOverflows > before.labelOverflows) continue
+        const route = assessArchitectureRouteDiagnostics(candidate)
+        if (route.unrelatedFrameIntrusionLength > diagnostics.unrelatedFrameIntrusionLength
+          || route.totalRouteLength > diagnostics.totalRouteLength * 1.15) continue
+        best = { scene: candidate, quality: proposed, diagnostics: route }
+      }
+      if (best) {
+        scene = best.scene
+        quality = best.quality
+        diagnostics = best.diagnostics
+        rerouted += 1
+      }
+    }
+  }
   if (!rerouted) return result
   const evaluation = evaluateArchitectureLayout(scene, quality, result.evaluation.layout, result.evaluation.density)
   if (evaluation.structuralScore < result.evaluation.structuralScore) return result
@@ -809,4 +845,43 @@ function improveCongestedPorts(result: ReturnType<typeof composeArchitectureGrap
   return { ...result, scene, quality, evaluation, presentation, routeDiagnostics: diagnostics,
     visualPlan, reroutedEdges: result.reroutedEdges + rerouted,
     candidates: result.candidates.map((candidate) => candidate === result.evaluation ? evaluation : candidate) }
+}
+
+/** Move a vertical fan-out branch sideways after its real shared source stem.
+ * Keep both endpoint normals, IDs and bundle membership unchanged. */
+function nudgeSharedSourceBranch(scene: CanvasScene, id: string): CanvasScene[] {
+  const arrow = scene.elements.find((item) => item.id === id)
+  if (arrow?.type !== 'arrow' || !arrow.bundleKey?.startsWith('from:')
+    || arrow.fromAnchor !== 'bottom' || arrow.toAnchor !== 'top') return []
+  const boxes = new Map(scene.elements.filter((item): item is CanvasNode => item.type === 'node')
+    .map((item) => [item.id, item]))
+  const source = boxes.get(arrow.from), target = boxes.get(arrow.to)
+  if (!source || !target) return []
+  const original = canvasArrowBoxRoute(source, target, arrow)
+  const start = original[0], end = original.at(-1)!
+  if (end.y - start.y < 100 || Math.abs(end.x - start.x) > source.width / 2) return []
+  const siblings = scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow' && item.id !== id
+    && item.from === arrow.from && item.bundleKey === arrow.bundleKey)
+    .flatMap((item) => {
+      const to = boxes.get(item.to)
+      return to ? [canvasArrowBoxRoute(source, to, item)] : []
+    })
+  if (!siblings.length) return []
+  const candidates: CanvasScene[] = []
+  for (const side of [12, -12, 24, -24]) {
+    const x = start.x + side
+    for (const first of [48, 64, 72]) {
+      const firstY = start.y + first
+      for (const last of [32, 44]) {
+        const lastY = end.y - last
+        if (firstY + 12 > lastY || x < 0 || x > scene.width) continue
+        const route = [start, { x: start.x, y: firstY }, { x, y: firstY },
+          { x, y: lastY }, { x: end.x, y: lastY }, end]
+        if (siblings.some((sibling) => !canvasSharedSourceStem(sibling, route))) continue
+        candidates.push({ ...scene, elements: scene.elements.map((item) => item.id === id
+          ? { ...arrow, points: route.slice(1, -1) } : item) })
+      }
+    }
+  }
+  return candidates
 }

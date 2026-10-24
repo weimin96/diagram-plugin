@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { assessCanvasVisualQuality } from '../src/canvasQuality.js'
-import { canvasBundleTrunks, canvasSharedSourceStem } from '../src/canvas.js'
+import { canvasArrowBoxRoute, canvasBundleTrunks, canvasSharedSourceStem } from '../src/canvas.js'
+import type { CanvasArrow } from '../src/canvas.js'
 import { inferArchitectureComposition } from '../src/architectureDesign.js'
 import { architectureCases } from './fixtures/architecture/cases.js'
 import { architectureBenchmarkCases } from '../scripts/architecture-benchmark-cases.js'
@@ -110,9 +111,18 @@ test('高扇出冲突只在无新增交叉时采用反向布线，且保留原�
   const result = composeArchitectureGraph(sample.intent)
   assert.equal(result.inputOrderStrategy, 'relation-reverse')
   assert.ok(result.evaluation.structuralScore >= 72)
-  assert.ok(result.quality.metrics.edgeOverlaps <= 6)
+  assert.ok(result.quality.metrics.edgeOverlaps <= 5)
+  assert.ok(result.evaluation.structuralScore >= 75)
   assert.equal(result.quality.metrics.edgeCrossings, 0)
   assert.equal(result.quality.metrics.edgeNodeIntersections, 0)
+  const members = new Map(result.scene.elements.filter((item) => item.type === 'node')
+    .map((item) => [item.id, item]))
+  const paired = result.scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow'
+    && item.from === 'orders' && (item.to === 'payment' || item.to === 'synthetic_leaf_2'))
+  assert.equal(paired.length, 2)
+  assert.ok(paired.every((item) => item.bundleKey === paired[0].bundleKey))
+  const [first, second] = paired.map((item) => canvasArrowBoxRoute(members.get(item.from)!, members.get(item.to)!, item))
+  assert.ok(canvasSharedSourceStem(first, second), 'rerouting a branch must preserve its actual shared source trunk')
   assert.deepEqual(result.scene.elements.filter((item) => item.type === 'arrow').map((item) => [item.from, item.to]),
     sample.intent.relations.map((item) => [item.from, item.to]))
   assert.deepEqual(result.scene.elements.filter((item) => item.type === 'arrow').map((item) => item.id),
