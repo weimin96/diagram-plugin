@@ -729,7 +729,7 @@ function composeArchitectureGraphOriginal(intent: ArchitectureIntentGraph) {
 /** Compare an alternate collision-resolution order against the *fully*
  * optimized result, never an intermediate geometry that later routing beats. */
 export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
-  const result = improveCongestedPorts(composeArchitectureGraphOriginal(intent))
+  const result = packSparseArchitectureRegions(improveCongestedPorts(composeArchitectureGraphOriginal(intent)), intent.primaryPath)
   const n = intent.nodes.length
   // Dense graphs need global routing/port planning; collision ordering alone
   // helps only sparse, interleaved regions and would waste extra CPU there.
@@ -757,6 +757,84 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
     scene: { ...candidate.scene, elements: candidate.scene.elements.slice().sort((a, b) =>
       (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity)) },
     inputOrderStrategy: 'original' as const, layoutOrderingStrategy: 'spatial-order' as const,
+  }
+}
+
+/** Pack real node rectangles into non-overlapping functional regions before
+ * routing. Sparse layered graphs can tolerate this topology adjustment, while
+ * dense fan-outs keep their existing jointly refined graph unchanged. */
+function packSparseArchitectureRegions(result: ReturnType<typeof composeArchitectureGraphOriginal>, primaryPath?: readonly string[]) {
+  const scene = result.scene
+  const nodes = scene.elements.filter((item): item is CanvasNode => item.type === 'node')
+  const arrows = scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow')
+  if (result.summary.composition !== 'layered' || primaryPath?.length || nodes.length < 17 || nodes.length > 22
+    || arrows.length > nodes.length * 0.6 || arrows.some((item) => item.bundleKey)
+    || nodes.some((item) => item.locked)
+    || result.routeDiagnostics.frameOverlapArea < 50_000) return result
+  const rows: ArchitecturePartition[][] = [
+    ['external', 'experience', 'application'], ['processing'], ['data'],
+  ]
+  const positions = new Map<string, { x: number; y: number }>()
+  const clusters = new Map<ArchitecturePartition, { nodes: CanvasNode[]; columns: number;
+    stepX: number; stepY: number; width: number; height: number }>()
+  for (const partition of rows.flat()) {
+    const items = nodes.filter((node) => node.groupId === `arch-${partition}`)
+      .sort((a, b) => a.y - b.y || a.x - b.x || a.id.localeCompare(b.id, 'en'))
+    if (!items.length) continue
+    const columns = Math.min(partition === 'external' ? 1 : partition === 'experience' ? 2
+      : partition === 'data' || partition === 'application' ? 2 : 3, items.length)
+    const stepX = Math.max(...items.map((node) => node.width)) + 24
+    const stepY = Math.max(...items.map((node) => node.height)) + 24
+    clusters.set(partition, { nodes: items, columns, stepX, stepY,
+      width: columns * stepX + 24, height: Math.ceil(items.length / columns) * stepY + 54 })
+  }
+  if (clusters.size < 3 || clusters.size !== (scene.groups ?? []).length
+    || clusters.size !== new Set(nodes.map((node) => node.groupId)).size) return result
+  const rowWidths = rows.map((row) => row.reduce((sum, partition) =>
+    sum + (clusters.get(partition)?.width ?? 0), 0)
+    + Math.max(0, row.filter((partition) => clusters.has(partition)).length - 1) * 52)
+  const maxWidth = Math.max(...rowWidths)
+  let y = 60
+  rows.forEach((row, index) => {
+    const active = row.filter((partition) => clusters.has(partition))
+    if (!active.length) return
+    let x = 60 + Math.floor((maxWidth - rowWidths[index]) / 2)
+    const rowHeight = Math.max(...active.map((partition) => clusters.get(partition)!.height))
+    for (const partition of active) {
+      const cluster = clusters.get(partition)!
+      cluster.nodes.forEach((node, number) => positions.set(node.id, {
+        x: x + 24 + number % cluster.columns * cluster.stepX,
+        y: y + 54 + Math.floor(number / cluster.columns) * cluster.stepY,
+      }))
+      x += cluster.width + 52
+    }
+    y += rowHeight + 54
+  })
+  if (positions.size !== nodes.length) return result
+  const packed: CanvasScene = {
+    ...scene,
+    width: Math.max(960, maxWidth + 120), height: Math.max(620, y),
+    elements: scene.elements.map((item) => item.type === 'node' ? { ...item, ...positions.get(item.id)! } : item),
+  }
+  const routed = routeArchitectureEdges(packed)
+  const quality = assessCanvasVisualQuality(routed)
+  const evaluation = evaluateArchitectureLayout(routed, quality, result.evaluation.layout, result.evaluation.density)
+  const diagnostics = assessArchitectureRouteDiagnostics(routed)
+  const presentation = assessArchitecturePresentation(routed)
+  const before = result.quality.metrics, after = quality.metrics
+  if (diagnostics.frameOverlapArea > result.routeDiagnostics.frameOverlapArea * 0.2
+    || after.nodeOverlaps > before.nodeOverlaps || after.edgeCrossings > before.edgeCrossings
+    || after.edgeOverlaps > before.edgeOverlaps || after.edgeNodeIntersections > before.edgeNodeIntersections
+    || after.labelNodeIntersections > before.labelNodeIntersections
+    || after.labelOverflows > before.labelOverflows || after.labelOverlaps > before.labelOverlaps
+    || diagnostics.unrelatedFrameIntrusionLength > result.routeDiagnostics.unrelatedFrameIntrusionLength
+    || diagnostics.totalRouteLength > result.routeDiagnostics.totalRouteLength * 1.25
+    || presentation.estimatedTitlePxAtFit < result.presentation.estimatedTitlePxAtFit
+    || evaluation.structuralScore < result.evaluation.structuralScore) return result
+  return {
+    ...result, scene: routed, quality, evaluation, routeDiagnostics: diagnostics, presentation,
+    visualPlan: planArchitectureVisual(routed, result.semanticComposition, quality, presentation, diagnostics),
+    layoutOrderingStrategy: 'partition-packed' as const,
   }
 }
 
