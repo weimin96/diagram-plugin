@@ -503,7 +503,8 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
       : `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="${item.cornerRadius ?? shapeRadius(item.shape, item.height)}" fill="${escapeXml(fillColor)}" stroke="${escapeXml(strokeColor)}" stroke-width="${strokeWidth}"${architectureCard ? dash : ''}/>`
     return wrapRotation(`<g opacity="${opacity}"${skin ? ` style="filter:${skin.shadow};font-family:${skin.font}"` : ''}>${shapeMarkup}${accent}${cardBand}${icon}${stencil}${c4}${texts}${subtitle}</g>`)
   }).join('')
-  const groups = groupFrames.filter((group) => !isInsideCollapsedAncestor(group.id, scene.groups ?? [])).map((group) => {
+  const groups = canvasPresentationGroupFrames(scene, groupFrames)
+    .filter((group) => !isInsideCollapsedAncestor(group.id, scene.groups ?? [])).map((group) => {
     const palette = architectureMode
       ? canvasArchitectureTonePalette(group.tone, { panel, text, border, note }, 'node')
       : canvasTonePalette(group.tone, { panel, text, border, note }, 'node')
@@ -1211,6 +1212,25 @@ export function canvasGroupFrames(scene: CanvasScene): CanvasGroupFrame[] {
       height: group.collapsed ? 58 : maxY - minY,
       memberIds: extent.memberIds,
     }]
+  })
+}
+
+/**
+ * Presentation-only outlines for generated architecture regions.
+ * The layout router, spatial checks, overview collapsing and editing bounds
+ * continue to use canvasGroupFrames: changing those obstacles would silently
+ * change topology/routing candidate selection.
+ */
+export function canvasPresentationGroupFrames(
+  scene: CanvasScene,
+  frames: readonly CanvasGroupFrame[] = canvasGroupFrames(scene),
+): CanvasGroupFrame[] {
+  if (!scene.architecture) return [...frames]
+  return frames.map((frame) => {
+    const generatedRegion = /^arch-(external|experience|application|processing|data)$/.test(frame.id)
+      && frame.kind === 'boundary' && !frame.c4Type && !frame.collapsed
+    if (!generatedRegion || frame.height < 92) return frame
+    return { ...frame, y: frame.y + 16, height: frame.height - 36 }
   })
 }
 
