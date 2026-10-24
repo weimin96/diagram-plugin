@@ -1,4 +1,4 @@
-import { beautifyArchitectureScene, inferArchitectureComposition, routeArchitectureArrowIds, type ArchitectureComposition, type ArchitectureTheme } from './architectureDesign.js'
+import { beautifyArchitectureScene, inferArchitectureComposition, routeArchitectureArrowIds, routeArchitectureEdges, type ArchitectureComposition, type ArchitectureTheme } from './architectureDesign.js'
 import { assessCanvasVisualQuality, type CanvasVisualQualityAssessment } from './canvasQuality.js'
 import type { DiagramVisualStyle } from './diagramVisualStyles.js'
 import { canvasArrowBoxRoute, type CanvasArchitectureDensity, type CanvasIcon, type CanvasNode, type CanvasScene, type CanvasStencil } from './canvas.js'
@@ -160,6 +160,80 @@ function refineArchitectureRoutes(
   return { scene, quality, evaluation, reroutedEdges }
 }
 
+/** Swap nearby peers within a single auto-generated partition, never the user's authored geometry. */
+function refineArchitectureNodeOrder(
+  initial: ReturnType<typeof refineArchitectureRoutes>,
+  composition: ArchitectureComposition,
+  density: Exclude<CanvasArchitectureDensity, 'auto'>,
+) {
+  let best = initial
+  let reorderedPairs = 0
+  // Quadratic local search is only useful for modest topology sizes.
+  if (initial.scene.elements.filter((item) => item.type === 'node').length > 30) {
+    return { ...initial, reorderedPairs }
+  }
+  // Limit graph search to two passes of at most twelve swaps. A swap changes
+  // only the positions of two unlocked nodes within the same semantic group.
+  for (let pass = 0; pass < 2; pass += 1) {
+    const conflicts = best.quality.issues.filter(({ code }) =>
+      code === 'edge-crossing' || code === 'edge-overlap' || code === 'excessive-edge-detour')
+    if (!conflicts.length) break
+    const scene = best.scene
+    const nodes = scene.elements.filter((item): item is CanvasNode => item.type === 'node')
+    const byId = new Map(nodes.map((node) => [node.id, node]))
+    const edges = new Map(scene.elements.filter((item) => item.type === 'arrow').map((item) => [item.id, item]))
+    const focused = [...new Set(conflicts.flatMap(({ elementIds }) => elementIds)
+      .flatMap((id) => {
+        const edge = edges.get(id)
+        return edge ? [edge.from, edge.to] : []
+      }))].slice(0, 6)
+    const candidates: Array<[string, string]> = []
+    const seen = new Set<string>()
+    for (const id of focused) {
+      const node = byId.get(id)
+      if (!node?.groupId?.startsWith('arch-') || node.locked) continue
+      const peers = nodes.filter((peer) =>
+        peer.id !== node.id && peer.groupId === node.groupId && !peer.locked
+        && peer.width === node.width && peer.height === node.height)
+        .sort((a, b) => Math.abs(a.x - node.x) + Math.abs(a.y - node.y)
+          - Math.abs(b.x - node.x) - Math.abs(b.y - node.y)
+          || a.id.localeCompare(b.id))
+        .slice(0, 2)
+      for (const peer of peers) {
+        const key = [node.id, peer.id].sort().join(':')
+        if (seen.has(key)) continue
+        seen.add(key)
+        candidates.push([node.id, peer.id])
+        if (candidates.length >= 12) break
+      }
+      if (candidates.length >= 12) break
+    }
+    let improved: typeof best | undefined
+    for (const [firstId, secondId] of candidates) {
+      const first = byId.get(firstId)!, second = byId.get(secondId)!
+      const swapped: CanvasScene = {
+        ...scene,
+        elements: scene.elements.map((element) => {
+          if (element.id === firstId) return { ...element, x: second.x, y: second.y }
+          if (element.id === secondId) return { ...element, x: first.x, y: first.y }
+          return element
+        }),
+      }
+      const routed = routeArchitectureEdges(swapped)
+      const quality = assessCanvasVisualQuality(routed)
+      if (quality.metrics.nodeOverlaps || quality.metrics.edgeNodeIntersections
+        || quality.metrics.labelNodeIntersections) continue
+      const evaluation = evaluateArchitectureLayout(routed, quality, composition, density)
+      if (evaluation.structuralScore <= (improved?.evaluation.structuralScore ?? best.evaluation.structuralScore)) continue
+      improved = { scene: routed, quality, evaluation, reroutedEdges: best.reroutedEdges }
+    }
+    if (!improved) break
+    best = improved
+    reorderedPairs += 1
+  }
+  return { ...best, reorderedPairs }
+}
+
 export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
   const ids = new Set<string>()
   for (const node of intent.nodes) {
@@ -243,11 +317,14 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
     || a.quality.issues.length - b.quality.issues.length
     || a.summary.composition.localeCompare(b.summary.composition))
   const { selectionScore: _selectionScore, ...selected } = refined[0]
+  const ordered = refineArchitectureNodeOrder(selected, selected.summary.composition, selected.summary.resolvedDensity)
   const refinedByLayout = new Map(refined.map((candidate) =>
     [`${candidate.summary.composition}:${candidate.summary.resolvedDensity}`, candidate.evaluation]))
   return {
-    ...selected,
+    ...selected, ...ordered,
     candidates: candidates.map(({ evaluation, summary }) =>
-      refinedByLayout.get(`${summary.composition}:${summary.resolvedDensity}`) ?? evaluation),
+      summary.composition === selected.summary.composition && summary.resolvedDensity === selected.summary.resolvedDensity
+        ? ordered.evaluation
+        : refinedByLayout.get(`${summary.composition}:${summary.resolvedDensity}`) ?? evaluation),
   }
 }

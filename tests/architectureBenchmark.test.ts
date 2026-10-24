@@ -42,3 +42,17 @@ test('部署拓扑候选选择在不退化业务平台的条件下降低交叉',
   assert.ok(output.candidates.some((candidate) => candidate.layout === 'hub-spoke'))
   assert.equal(output.evaluation.issueCount, output.quality.issues.length)
 })
+
+test('依赖感知的同分区位置交换减少 Agent 和部署拓扑的连线冲突', () => {
+  for (const id of ['agent-runtime', 'deployment']) {
+    const example = architectureCases.find((item) => item.id === id)!
+    const output = composeArchitectureGraph(example.intent)
+    assert.equal(output.quality.metrics.edgeCrossings, 0, id)
+    assert.equal(output.quality.metrics.edgeOverlaps, 0, id)
+    assert.equal(output.quality.metrics.edgeNodeIntersections, 0, id)
+    assert.ok(output.reorderedPairs >= 1 && output.reorderedPairs <= 2, id)
+    assert.deepEqual(output.scene.elements.filter((item) => item.type === 'arrow')
+      .map(({ from, to }) => [from, to]),
+    example.intent.relations.map(({ from, to }) => [from, to]), id)
+  }
+})
