@@ -162,6 +162,8 @@ Canvas 文档类型与 Mermaid 样式指令保留向后兼容：读取时同时�
 
 正式布局保持原有结构评分优先。最多三个经过布线修复的布局候选中，仅在结构选择分差不超过 1 分时，才用 1200px 适配标题字号、无关分区侵入线长与分区相交面积辅助择优；不能为了视觉指标牺牲明显更好的结构。该惩罚值不是审美评分，生成后的实际视觉表现仍需截图审查。
 
+专业视觉审查使用 `pnpm benchmark:architecture:design --screenshots`。它在本机 Chrome/Chromium 中渲染导出的真实 Canvas SVG，输出 `test-results/architecture-design-review/index.html`、PNG、可编辑 JSON、`review.md` 和几何统计。未安装浏览器时省略 `--screenshots` 仍能生成 SVG 画廊；不能声称截图验收已完成。截图、结构评分和人工视觉评审相互独立，不能仅凭截图存在即判定视觉通过。
+
 ### 专业构图质量基准（新增）
 
 运行 `pnpm benchmark:architecture:design` 会基于企业系统、微服务和数据平台三个虚构参考拓扑生成 SVG、完整可编辑 Canvas JSON、`manifest.json` 和不预勾选的 `review.md`。报告包括专业阅读路径、设计重点与反例、系统生成的几何指标，以及需要人工实际观察的字体、主次、留白与可读性检查。**不把启发式结构评分当作人工视觉审美评分，不伪造专业案例或人工打分。**

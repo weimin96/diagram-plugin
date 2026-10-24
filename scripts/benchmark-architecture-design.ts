@@ -1,6 +1,10 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import { performance } from 'node:perf_hooks'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import { pathToFileURL } from 'node:url'
 import { architectureCases } from '../tests/fixtures/architecture/cases.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { canvasSceneToSvg, serializeCanvasScene } from '../src/canvas.js'
@@ -15,17 +19,23 @@ const humanChecklist = [
   'Canvas 可编辑，SVG 在目标尺寸下清晰可读',
 ]
 const ids = ['business-platform', 'microservices', 'data-platform']
+const captureScreenshots = process.argv.includes('--screenshots')
 const output = path.resolve(process.argv.find((arg) => arg.startsWith('--out='))?.slice(6)
   ?? 'test-results/architecture-design-review')
 await mkdir(output, { recursive: true })
+const chrome = captureScreenshots ? await findChrome() : undefined
+if (captureScreenshots && !chrome) throw new Error('截图验收需要本地 Chrome/Chromium，当前未找到浏览器。')
 const cases = []
 for (const id of ids) {
   const sample = architectureCases.find((item) => item.id === id)!
   const started = performance.now()
   const result = composeArchitectureGraph(sample.intent)
+  const elapsedMs = Math.round(performance.now() - started)
   const file = `${id}.svg`
   await writeFile(path.join(output, file), canvasSceneToSvg(result.scene))
   await writeFile(path.join(output, `${id}.diagram.json`), serializeCanvasScene(result.scene))
+  const screenshot = captureScreenshots ? `${id}.png` : undefined
+  if (screenshot && chrome) await captureDiagramScreenshot(chrome, output, file, screenshot)
   cases.push({
     id,
     label: result.visualPlan.reference.label,
@@ -40,15 +50,22 @@ for (const id of ids) {
     readyForVisualReview: result.visualPlan.review.readyForVisualReview,
     presentation: result.presentation,
     quality: result.quality.metrics,
-    elapsedMs: Math.round(performance.now() - started),
+    elapsedMs,
     svg: file,
+    ...(screenshot ? { screenshot } : {}),
   })
 }
 await writeFile(path.join(output, 'manifest.json'), JSON.stringify({
   version: 1, source: 'fictional-reference', rubric: humanChecklist,
-  note: 'Human visual quality is not automatically scored. All checkboxes are intentionally empty.',
+  note: 'Browser screenshot capture is visual evidence, not an automatic aesthetic judgment. All human checkboxes are intentionally empty.',
   cases,
 }, null, 2) + '\n')
+await writeFile(path.join(output, 'index.html'), `<!doctype html><html lang="zh-CN"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>架构图视觉审查</title>
+<style>body{margin:0;background:#f4f6f8;color:#1d2732;font:14px/1.6 system-ui,sans-serif}main{max-width:1300px;margin:auto;padding:32px}h1{font-size:25px;margin:0 0 6px}p{color:#536474}section{background:white;border:1px solid #dce2e8;border-radius:12px;margin:24px 0;padding:22px}h2{font-size:19px;margin:0 0 5px}.preview{width:100%;height:auto;display:block}.metadata{font-size:12px;color:#536474;margin:10px 0}.questions{margin:12px 0 0;padding-left:20px}a{color:#135a9c}</style>
+<main><h1>架构图视觉验收</h1><p>以下是虚构系统的真实 Canvas SVG 导出${captureScreenshots ? '及 Chrome 截图' : ''}。截图不代表已经完成视觉审美评价，人工检查保持未勾选。</p>
+${cases.map((item) => `<section><h2>${item.label}</h2><div class="metadata">${item.readingPattern} · 交叉 ${item.quality.edgeCrossings} · 关系线重叠 ${item.quality.edgeOverlaps} · 适配字号 ${item.presentation.estimatedTitlePxAtFit}px</div><img class="preview" src="${item.screenshot ?? item.svg}" alt="${item.label}"><p><a href="${item.svg}">SVG</a> · <a href="${item.id}.diagram.json">可编辑 Canvas JSON</a></p><strong>人工观察</strong><ul class="questions">${humanChecklist.map((question) => `<li>□ ${question}</li>`).join('')}</ul></section>`).join('')}
+</main></html>\n`)
 const markdown = ['# 专业架构图视觉验收',
   '这三类案例均为虚构系统。结构检测自动完成，以下视觉评价必须由人实际查看后勾选。',
   ...cases.flatMap((item) => [
@@ -75,7 +92,35 @@ console.table(cases.map((item) => ({
   fitFont: item.presentation.estimatedTitlePxAtFit, ms: item.elapsedMs,
 })))
 console.log(`Review report: ${path.join(output, 'review.md')}`)
+console.log(`Visual gallery: ${path.join(output, 'index.html')}`)
 if (cases.some((item) => !item.readyForVisualReview)) {
   console.error('Hard geometry errors remain. Human visual sign-off is blocked.')
   process.exitCode = 1
+}
+
+async function findChrome(): Promise<string | undefined> {
+  const candidates = [process.env.CHROME_PATH, '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium', '/usr/bin/google-chrome', '/usr/bin/chromium'].filter((value): value is string => Boolean(value))
+  for (const candidate of candidates) {
+    try { await access(candidate); return candidate } catch { /* Try the next installed browser. */ }
+  }
+  return undefined
+}
+
+async function captureDiagramScreenshot(chromePath: string, directory: string, svg: string, png: string): Promise<void> {
+  const browserProfile = await mkdtemp(path.join(os.tmpdir(), 'diagram-visual-review-'))
+  const htmlPath = path.join(directory, `${path.basename(svg, '.svg')}.capture.html`)
+  const html = `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><style>
+  *{box-sizing:border-box}body{margin:0;background:#eef2f6;padding:24px}main{height:900px;display:flex;align-items:center;justify-content:center;background:white;border:1px solid #dce3eb;border-radius:8px}img{display:block;width:100%;height:100%;object-fit:contain}
+  </style><main><img src="./${svg}"></main></html>`
+  await writeFile(htmlPath, html)
+  try {
+    await promisify(execFile)(chromePath, ['--headless=new', '--disable-gpu', '--no-first-run',
+      `--user-data-dir=${browserProfile}`, '--hide-scrollbars', '--window-size=1280,960', '--virtual-time-budget=1500',
+      `--screenshot=${path.join(directory, png)}`, pathToFileURL(htmlPath).href], { timeout: 30000, maxBuffer: 2_000_000 })
+    await access(path.join(directory, png))
+  } finally {
+    await rm(htmlPath, { force: true })
+    await rm(browserProfile, { recursive: true, force: true })
+  }
 }
