@@ -56,3 +56,14 @@ test('依赖感知的同分区位置交换减少 Agent 和部署拓扑的连线�
     example.intent.relations.map(({ from, to }) => [from, to]), id)
   }
 })
+
+test('扩大正交走廊搜索后数据平台连线重叠有上界且不破坏架构', () => {
+  const example = architectureCases.find((item) => item.id === 'data-platform')!
+  const result = composeArchitectureGraph(example.intent)
+  assert.ok(result.quality.metrics.edgeOverlaps <= 2)
+  assert.ok(result.quality.metrics.edgeCrossings <= 1)
+  assert.equal(result.quality.metrics.edgeNodeIntersections, 0)
+  assert.equal(result.quality.metrics.nodeOverlaps, 0)
+  assert.deepEqual(result.scene.elements.filter((item) => item.type === 'arrow')
+    .map(({ from, to }) => [from, to]), example.intent.relations.map(({ from, to }) => [from, to]))
+})

@@ -91,7 +91,7 @@ function nudgeArchitectureCorridors(scene: CanvasScene, arrowId: string): Canvas
   const candidates: CanvasScene[] = []
   // For a segment to slide, the segments immediately before and after must
   // be perpendicular; endpoints stay anchored to their original nodes.
-  for (let index = 1; index < route.length - 2 && candidates.length < 8; index += 1) {
+  for (let index = 1; index < route.length - 2 && candidates.length < 16; index += 1) {
     const a = route[index], b = route[index + 1]
     const vertical = a.x === b.x && a.y !== b.y
     const horizontal = a.y === b.y && a.x !== b.x
@@ -99,7 +99,7 @@ function nudgeArchitectureCorridors(scene: CanvasScene, arrowId: string): Canvas
     const previous = route[index - 1], next = route[index + 2]
     if (vertical && (previous.y !== a.y || next.y !== b.y)) continue
     if (horizontal && (previous.x !== a.x || next.x !== b.x)) continue
-    for (const offset of [-32, -20, 20, 32]) {
+    for (const offset of [-48, -32, -20, -12, 12, 20, 32, 48]) {
       const displaced = route.map((point) => ({ ...point }))
       if (vertical) {
         displaced[index].x += offset
@@ -114,7 +114,7 @@ function nudgeArchitectureCorridors(scene: CanvasScene, arrowId: string): Canvas
         ...scene,
         elements: scene.elements.map((item) => item.id === arrowId ? revised : item),
       })
-      if (candidates.length >= 8) break
+      if (candidates.length >= 16) break
     }
   }
   return candidates
@@ -132,10 +132,10 @@ function refineArchitectureRoutes(
   let reroutedEdges = 0
   const issueCodes = new Set(['edge-crossing', 'edge-overlap', 'edge-through-node', 'excessive-edge-detour'])
   // Bounded local search: not an extra AI pass and no repeated full-scene relayout.
-  for (let round = 0; round < 3; round += 1) {
+  for (let round = 0; round < 4; round += 1) {
     const affectedIds = [...new Set(quality.issues
       .filter((issue) => issueCodes.has(issue.code))
-      .flatMap((issue) => issue.elementIds))].filter((id) => scene.elements.some((item) => item.type === 'arrow' && item.id === id)).slice(0, 8)
+      .flatMap((issue) => issue.elementIds))].filter((id) => scene.elements.some((item) => item.type === 'arrow' && item.id === id)).slice(0, 10)
     if (!affectedIds.length) break
     let best: { scene: CanvasScene; quality: CanvasVisualQualityAssessment; evaluation: ArchitectureLayoutAssessment } | undefined
     for (const id of affectedIds) {
