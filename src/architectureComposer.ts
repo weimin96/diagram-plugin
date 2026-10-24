@@ -2,6 +2,7 @@ import { beautifyArchitectureScene, inferArchitectureComposition, routeArchitect
 import { assessCanvasVisualQuality, type CanvasVisualQualityAssessment } from './canvasQuality.js'
 import type { DiagramVisualStyle } from './diagramVisualStyles.js'
 import { canvasArrowBoxRoute, type CanvasArchitectureDensity, type CanvasIcon, type CanvasNode, type CanvasScene, type CanvasStencil } from './canvas.js'
+import { assessArchitecturePresentation } from './architecturePresentationQuality.js'
 
 /** Intent is the authoritative input; pixel coordinates are exclusively assigned by the layout engine. */
 export interface ArchitectureIntentGraph {
@@ -322,6 +323,7 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
     [`${candidate.summary.composition}:${candidate.summary.resolvedDensity}`, candidate.evaluation]))
   return {
     ...selected, ...ordered,
+    presentation: assessArchitecturePresentation(ordered.scene),
     candidates: candidates.map(({ evaluation, summary }) =>
       summary.composition === selected.summary.composition && summary.resolvedDensity === selected.summary.resolvedDensity
         ? ordered.evaluation

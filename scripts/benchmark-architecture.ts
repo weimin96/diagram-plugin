@@ -31,6 +31,7 @@ for (const example of architectureCases) {
     composition: composed.summary.composition,
     density: composed.evaluation.density,
     structuralScore: composed.evaluation.structuralScore,
+    presentation: composed.presentation,
     reroutedEdges: composed.reroutedEdges,
     aspectRatio: composed.evaluation.aspectRatio,
     metrics: composed.quality.metrics,
@@ -59,9 +60,10 @@ ${results.map((result) => `<section><header><div><h2>${escapeHtml(result.title)}
 <span>${result.composition}</span><span>${result.density}</span>
 <span>${result.nodes} 节点 / ${result.relations} 关系</span>
 <span>${result.structuralScore} / 90</span>
+<span>适配字号约 ${result.presentation.estimatedTitlePxAtFit}px</span>
 <span>交叉 ${result.metrics.edgeCrossings} · 重叠 ${result.metrics.edgeOverlaps} · 穿节点 ${result.metrics.edgeNodeIntersections}</span>
 </div></header><img src="./${result.id}.svg" loading="lazy" alt="${escapeHtml(result.title)}">
-${result.issues.length ? `<p class="issues">${result.issues.map(({ code }) => escapeHtml(code)).join(' · ')}</p>` : ''}</section>`).join('\n')}
+${result.issues.length || result.presentation.warnings.length ? `<p class="issues">${[...result.issues.map(({ code }) => code), ...result.presentation.warnings].map(escapeHtml).join(' · ')}</p>` : ''}</section>`).join('\n')}
 </main></body></html>`)
 
 console.table(results.map(({ id, nodes, relations, structuralScore, metrics, reroutedEdges, elapsedMs }) => ({

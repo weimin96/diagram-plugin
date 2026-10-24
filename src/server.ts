@@ -904,6 +904,7 @@ server.registerTool('diagram.composeArchitecture', {
       architectureDesign: composed.summary,
       quality: composed.quality,
       architectureEvaluation: { selected: composed.evaluation, candidates: composed.candidates, reroutedEdges: composed.reroutedEdges, reorderedPairs: composed.reorderedPairs, note: 'Structural/layout heuristic only, not a visual aesthetic score.' },
+      presentationQuality: composed.presentation,
     },
   }
 })
