@@ -875,6 +875,8 @@ server.registerTool('diagram.composeArchitecture', {
     title: z.string().trim().min(1).max(120),
     theme: z.enum(['enterprise', 'technical', 'presentation', 'cloud', 'editorial', 'sketch']).default('enterprise'),
     density: z.enum(['auto', 'comfortable', 'compact', 'dense']).default('auto'),
+    visualScenario: z.enum(['enterprise-system', 'microservices', 'data-platform', 'ai-agent', 'deployment'])
+      .optional().describe('Choose only when explicitly stated by the user or confirmed by the project. Independent of the layout algorithm.'),
     style: z.enum(diagramVisualStyles.map((style) => style.id) as [string, ...string[]]).optional().describe('Optional one unified visual theme. Defaults to a restrained, low-saturation professional preset rather than bright card walls.'),
     nodes: z.array(z.object({
       id: z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/).describe('Stable unique node ID, not a coordinate.'),
@@ -892,8 +894,8 @@ server.registerTool('diagram.composeArchitecture', {
     })).min(1).max(160).describe('Real dependencies between nodes. Do not invent edges merely to make a picture connected.'),
   }),
   annotations: write,
-}, async ({ workspacePath, title, theme, density, style, nodes, relations }, extra) => {
-  const composed = composeArchitectureGraph({ title, theme, density, style: style as typeof diagramVisualStyles[number]['id'] | undefined, nodes, relations })
+}, async ({ workspacePath, title, theme, density, visualScenario, style, nodes, relations }, extra) => {
+  const composed = composeArchitectureGraph({ title, theme, density, visualScenario, style: style as typeof diagramVisualStyles[number]['id'] | undefined, nodes, relations })
   const store = await resolveStore(workspacePath, toolThreadId(extra._meta))
   const diagram = await store.createComposedArchitecture(title, serializeCanvasScene(composed.scene))
   markThreadDiagram(extra._meta, diagram.path, undefined, undefined, 'create', diagram.modifiedAt)
@@ -905,6 +907,7 @@ server.registerTool('diagram.composeArchitecture', {
       quality: composed.quality,
       architectureEvaluation: { semanticComposition: composed.semanticComposition, selected: composed.evaluation, routeDiagnostics: composed.routeDiagnostics, candidates: composed.candidates, reroutedEdges: composed.reroutedEdges, reorderedPairs: composed.reorderedPairs, note: 'Structural/layout heuristic only, not a visual aesthetic score. The selected layout can differ from the semantic composition when geometry improves.' },
       presentationQuality: composed.presentation,
+      visualPlan: composed.visualPlan,
     },
   }
 })

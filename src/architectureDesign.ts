@@ -133,6 +133,16 @@ function detectArchitectureComposition(
   const processing = boxes.filter((item) => partitions.get(item.id) === 'processing')
   const data = boxes.filter((item) => partitions.get(item.id) === 'data')
   const sources = boxes.filter((item) => partitions.get(item.id) === 'external' || partitions.get(item.id) === 'experience')
+  // A queue, scheduler and three storage products are common in ordinary
+  // business platforms too. A data-pipeline diagram needs real evidence of
+  // distinct transformation stages, not merely broad infrastructure counts.
+  const transformations = processing.filter((item) =>
+    /(流式|批处理|清洗|转换|etl|stream|batch|flink|spark|transform|pipeline)/i.test(item.text))
+  const transformationWorkers = new Set(boxes.filter((item) => item.icon === 'worker').map((item) => item.id))
+  const hasSequentialWorkerPipeline = transformationWorkers.size >= 2
+    && arrows.some((edge) => transformationWorkers.has(edge.from) && transformationWorkers.has(edge.to))
+    && arrows.some((edge) => (partitions.get(edge.from) === 'external' || partitions.get(edge.from) === 'experience')
+      && transformationWorkers.has(edge.to))
 
   if (ai.length && mcp.length && Math.max(...ai.map((item) => degree.get(item.id) ?? 0), 0) >= 3) return 'agent-runtime'
   if (cloudInfra.length >= 2 && boxes.filter((item) => partitions.get(item.id) === 'application').length >= 2) return 'cloud-native'
@@ -140,7 +150,7 @@ function detectArchitectureComposition(
   // into an event-only diagram. Prefer its data-platform semantics when the
   // independent processing and storage tiers are both present.
   if (processing.length >= 2 && data.length >= 3 && sources.length >= 1
-    && (!queues.length || workers.length >= 2)) return 'data-platform'
+    && (transformations.length >= 2 || hasSequentialWorkerPipeline)) return 'data-platform'
   if (queues.length && workers.length && queues.some((item) => (degree.get(item.id) ?? 0) >= 2)) return 'event-driven'
 
   const degrees = boxes.map((item) => degree.get(item.id) ?? 0)
@@ -212,6 +222,7 @@ export function beautifyArchitectureScene(scene: CanvasScene, options: Architect
       ...(theme === 'presentation' ? { presentation: true } : {}),
       view,
       density,
+      ...(scene.architecture?.scenario ? { scenario: scene.architecture.scenario } : {}),
     },
   }
 

@@ -29,6 +29,7 @@ export type CanvasAnchor = 'auto' | 'top' | 'right' | 'bottom' | 'left'
 export type CanvasArchitectureTheme = 'enterprise' | 'technical' | 'presentation' | 'cloud' | 'editorial' | 'sketch'
 export type CanvasArchitectureView = 'overview' | 'detail'
 export type CanvasArchitectureDensity = 'auto' | 'comfortable' | 'compact' | 'dense'
+export type CanvasArchitectureScenario = 'enterprise-system' | 'microservices' | 'data-platform' | 'ai-agent' | 'deployment'
 export type CanvasWorkbenchMode = 'freeform' | 'architecture' | 'flowchart'
 export type CanvasArchitectureCardKind = 'actor' | 'entry' | 'compute' | 'messaging' | 'data' | 'external' | 'generic'
 export type CanvasArchitectureScopeKind = 'group' | 'lane' | 'node'
@@ -83,6 +84,8 @@ export interface CanvasScene {
     density?: CanvasArchitectureDensity
     /** Optional font boost for generated architecture diagrams; legacy files remain unchanged. */
     titleScale?: number
+    /** Explicit author intent; distinct from the geometry engine's layout choice. */
+    scenario?: CanvasArchitectureScenario
   }
 }
 
@@ -1657,6 +1660,7 @@ function normalizeArchitectureAppearance(value: unknown): CanvasScene['architect
   const themes: CanvasArchitectureTheme[] = ['enterprise', 'technical', 'presentation', 'cloud', 'editorial', 'sketch']
   const views: CanvasArchitectureView[] = ['overview', 'detail']
   const densities: CanvasArchitectureDensity[] = ['auto', 'comfortable', 'compact', 'dense']
+  const scenarios: CanvasArchitectureScenario[] = ['enterprise-system', 'microservices', 'data-platform', 'ai-agent', 'deployment']
   if (typeof item.theme !== 'string' || !themes.includes(item.theme as CanvasArchitectureTheme)) return undefined
   return {
     theme: item.theme as CanvasArchitectureTheme,
@@ -1664,6 +1668,8 @@ function normalizeArchitectureAppearance(value: unknown): CanvasScene['architect
     ...(typeof item.view === 'string' && views.includes(item.view as CanvasArchitectureView) ? { view: item.view as CanvasArchitectureView } : {}),
     ...(typeof item.density === 'string' && densities.includes(item.density as CanvasArchitectureDensity) ? { density: item.density as CanvasArchitectureDensity } : {}),
     ...(typeof item.titleScale === 'number' && Number.isFinite(item.titleScale) && item.titleScale >= 1 && item.titleScale <= 1.35 ? { titleScale: item.titleScale } : {}),
+    ...(typeof item.scenario === 'string' && scenarios.includes(item.scenario as CanvasArchitectureScenario)
+      ? { scenario: item.scenario as CanvasArchitectureScenario } : {}),
   }
 }
 

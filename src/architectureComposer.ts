@@ -1,9 +1,10 @@
 import { beautifyArchitectureScene, inferArchitectureComposition, routeArchitectureArrowIds, routeArchitectureEdges, type ArchitectureComposition, type ArchitectureTheme } from './architectureDesign.js'
 import { assessCanvasVisualQuality, type CanvasVisualQualityAssessment } from './canvasQuality.js'
 import type { DiagramVisualStyle } from './diagramVisualStyles.js'
-import { canvasArrowBoxRoute, canvasSharedSourceStem, type CanvasArchitectureDensity, type CanvasIcon, type CanvasNode, type CanvasScene, type CanvasStencil } from './canvas.js'
+import { canvasArrowBoxRoute, canvasSharedSourceStem, type CanvasArchitectureDensity, type CanvasArchitectureScenario, type CanvasIcon, type CanvasNode, type CanvasScene, type CanvasStencil } from './canvas.js'
 import { assessArchitecturePresentation, recommendArchitectureTitleScale } from './architecturePresentationQuality.js'
 import { assessArchitectureRouteDiagnostics } from './architectureRouteDiagnostics.js'
+import { planArchitectureVisual } from './architectureVisualPlan.js'
 
 /** Intent is the authoritative input; pixel coordinates are exclusively assigned by the layout engine. */
 export interface ArchitectureIntentGraph {
@@ -11,6 +12,8 @@ export interface ArchitectureIntentGraph {
   theme?: ArchitectureTheme
   density?: CanvasArchitectureDensity
   style?: DiagramVisualStyle
+  /** A stated user scenario, never inferred from pixel geometry. */
+  visualScenario?: CanvasArchitectureScenario
   nodes: Array<{
     id: string
     text: string
@@ -382,7 +385,10 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
         ...(relation.asynchronous ? { lineStyle: 'dashed' as const } : {}),
       })),
     ],
-    architecture: { theme: intent.theme ?? 'enterprise', view: 'detail', density: intent.density ?? 'auto' },
+    architecture: {
+      theme: intent.theme ?? 'enterprise', view: 'detail', density: intent.density ?? 'auto',
+      ...(intent.visualScenario ? { scenario: intent.visualScenario } : {}),
+    },
   }
   const inferred = inferArchitectureComposition(scene)
   const autoDensity = intent.nodes.length >= 46 ? 'dense'
@@ -447,13 +453,20 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
     : repaired.scene)
   const finalQuality = assessCanvasVisualQuality(finalScene)
   const finalEvaluation = evaluateArchitectureLayout(finalScene, finalQuality, selected.summary.composition, selected.summary.resolvedDensity)
+  const presentation = assessArchitecturePresentation(finalScene)
+  const routeDiagnostics = assessArchitectureRouteDiagnostics(finalScene)
+  const visualPlan = planArchitectureVisual(finalScene, inferred, finalQuality, presentation, routeDiagnostics)
+  // Prefer the existing non-destructive overview projection for genuinely
+  // crowded diagrams. Detail stays fully available, no edges are deleted.
+  const publishedScene = visualPlan.recommendedView === 'overview'
+    ? { ...finalScene, architecture: { ...finalScene.architecture!, view: 'overview' as const } }
+    : finalScene
   const refinedByLayout = new Map(refined.map((candidate) =>
     [`${candidate.summary.composition}:${candidate.summary.resolvedDensity}`, candidate.evaluation]))
   return {
-    ...selected, ...repaired, scene: finalScene, quality: finalQuality, evaluation: finalEvaluation,
+    ...selected, ...repaired, scene: publishedScene, quality: finalQuality, evaluation: finalEvaluation,
     semanticComposition: inferred,
-    presentation: assessArchitecturePresentation(finalScene),
-    routeDiagnostics: assessArchitectureRouteDiagnostics(finalScene),
+    presentation, routeDiagnostics, visualPlan,
     candidates: candidates.map(({ evaluation, summary }) =>
       summary.composition === selected.summary.composition && summary.resolvedDensity === selected.summary.resolvedDensity
         ? finalEvaluation
