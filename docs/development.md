@@ -156,6 +156,12 @@ Canvas 文档类型与 Mermaid 样式指令保留向后兼容：读取时同时�
 
 ## 架构图布局实验（仅开发环境）
 
+### 专业构图质量基准（新增）
+
+运行 `pnpm benchmark:architecture:design` 会基于企业系统、微服务和数据平台三个虚构参考拓扑生成 SVG、完整可编辑 Canvas JSON、`manifest.json` 和不预勾选的 `review.md`。报告包括专业阅读路径、设计重点与反例、系统生成的几何指标，以及需要人工实际观察的字体、主次、留白与可读性检查。**不把启发式结构评分当作人工视觉审美评分，不伪造专业案例或人工打分。**
+
+`diagram.composeArchitecture` 可使用可选的 `visualScenario` 明确用户给出的场景，原有 `theme` 与布局引擎继续独立工作。生成后 `visualPlan` 返回场景参考、已存在的主链节点/关系、分区依赖顺序及视觉审查风险。对信息密集或缩放后不可读的图，新建时默认进入非破坏性的 `overview`，用户可在编辑器切回详情；节点、关系及其来源均保留在完整 Canvas JSON 中，历史画布不批量改写。业务系统不会再仅因为存在 Kafka、Worker 和三个存储就误判为数据平台；数据平台需观察到多个明确的批流/清洗处理阶段，用户明确提供的类型优先作为视觉场景。
+
 目前的正式生成逻辑仍使用 `architectureComposer` + 内置正交路由。ELK Layered 是隔离的开发试验，没有加入 `src/server.ts`，不会自动影响现有用户图表。
 
 - 快速基准：`pnpm benchmark:architecture`，5 个参考架构，会在生成节点重叠/穿节点时失败；已加入 npm 发布门禁。

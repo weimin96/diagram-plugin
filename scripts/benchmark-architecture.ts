@@ -42,6 +42,7 @@ for (const example of architectureBenchmarkCases(suite)) {
     density: composed.evaluation.density,
     structuralScore: composed.evaluation.structuralScore,
     presentation: composed.presentation,
+    visualPlan: composed.visualPlan,
     partitionFlow: {
       stages: partitionFlow.steps.map((step) => step.id),
       crossPartitionRelations: partitionFlow.crossPartitionRelations,
@@ -74,6 +75,7 @@ img{display:block;width:100%;height:auto;background:#f8fafc;border:1px solid #e4
 ${results.map((result) => `<section><header><div><h2>${escapeHtml(result.title)}</h2>
 <small>${escapeHtml(result.description)}</small></div><div class="stats">
 <span>${result.composition}</span><span>${result.density}</span>
+<span>${escapeHtml(result.visualPlan.reference.label)} · ${result.visualPlan.recommendedView === 'overview' ? '先看总览' : '直接查看详情'}</span>
 <span>${result.nodes} 节点 / ${result.relations} 关系</span>
 <span>${result.structuralScore} / 90</span>
 <span>适配字号约 ${result.presentation.estimatedTitlePxAtFit}px</span>
