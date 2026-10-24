@@ -26,6 +26,7 @@ for (const example of architectureBenchmarkCases(suite)) {
   const started = performance.now()
   const composed = composeArchitectureGraph(example.intent)
   const partitionFlow = architecturePartitionFlow(composed.scene)
+  const routeDiagnostics = composed.routeDiagnostics
   const elapsedMs = Math.round(performance.now() - started)
   const svg = canvasSceneToSvg(composed.scene)
   await writeFile(path.join(output, `${example.id}.diagram.json`), serializeCanvasScene(composed.scene))
@@ -46,6 +47,7 @@ for (const example of architectureBenchmarkCases(suite)) {
       crossPartitionRelations: partitionFlow.crossPartitionRelations,
       internalRelations: partitionFlow.internalRelations,
     },
+    routeDiagnostics,
     reroutedEdges: composed.reroutedEdges,
     aspectRatio: composed.evaluation.aspectRatio,
     metrics: composed.quality.metrics,
@@ -77,6 +79,7 @@ ${results.map((result) => `<section><header><div><h2>${escapeHtml(result.title)}
 <span>适配字号约 ${result.presentation.estimatedTitlePxAtFit}px</span>
 <span>交叉 ${result.metrics.edgeCrossings} · 重叠 ${result.metrics.edgeOverlaps} · 穿节点 ${result.metrics.edgeNodeIntersections}</span>
 <span>跨分区 ${result.partitionFlow.crossPartitionRelations}</span>
+<span>跨区线长 ${result.routeDiagnostics.crossPartitionRouteLength}px · 逆向 ${result.routeDiagnostics.backwardCrossPartitionRelations} · 分区冲突 ${result.routeDiagnostics.frameOverlaps}</span>
 </div></header><img src="./${result.id}.svg" loading="lazy" alt="${escapeHtml(result.title)}">
 ${result.issues.length || result.presentation.warnings.length ? `<p class="issues">${[...result.issues.map(({ code }) => code), ...result.presentation.warnings].map(escapeHtml).join(' · ')}</p>` : ''}</section>`).join('\n')}
 </main></body></html>`)

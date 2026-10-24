@@ -90,6 +90,8 @@ test('架构语义图通过真实 MCP 一次生成、保存和质量评估', asy
       .includes(created.structuredContent.architectureEvaluation.semanticComposition))
     assert.ok(created.structuredContent.architectureEvaluation.selected.structuralScore <= 90)
     assert.ok(created.structuredContent.presentationQuality.estimatedTitlePxAtFit > 0)
+    assert.ok(created.structuredContent.architectureEvaluation.routeDiagnostics.crossPartitionRouteLength >= 0)
+    assert.ok(Array.isArray(created.structuredContent.architectureEvaluation.routeDiagnostics.worstFrameIntrusions))
     assert.ok(created.structuredContent.architectureEvaluation.reroutedEdges >= 0)
     assert.equal((await readFile(path.join(root, created.structuredContent.diagram.path), 'utf8')).includes('arch-application'), true)
     assert.ok(JSON.stringify(await call(client, root, 'architecture-session', 'diagram.threadState')).includes(created.structuredContent.diagram.path))

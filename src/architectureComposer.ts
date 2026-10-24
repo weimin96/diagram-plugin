@@ -3,6 +3,7 @@ import { assessCanvasVisualQuality, type CanvasVisualQualityAssessment } from '.
 import type { DiagramVisualStyle } from './diagramVisualStyles.js'
 import { canvasArrowBoxRoute, canvasSharedSourceStem, type CanvasArchitectureDensity, type CanvasIcon, type CanvasNode, type CanvasScene, type CanvasStencil } from './canvas.js'
 import { assessArchitecturePresentation, recommendArchitectureTitleScale } from './architecturePresentationQuality.js'
+import { assessArchitectureRouteDiagnostics } from './architectureRouteDiagnostics.js'
 
 /** Intent is the authoritative input; pixel coordinates are exclusively assigned by the layout engine. */
 export interface ArchitectureIntentGraph {
@@ -452,6 +453,7 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
     ...selected, ...repaired, scene: finalScene, quality: finalQuality, evaluation: finalEvaluation,
     semanticComposition: inferred,
     presentation: assessArchitecturePresentation(finalScene),
+    routeDiagnostics: assessArchitectureRouteDiagnostics(finalScene),
     candidates: candidates.map(({ evaluation, summary }) =>
       summary.composition === selected.summary.composition && summary.resolvedDensity === selected.summary.resolvedDensity
         ? finalEvaluation

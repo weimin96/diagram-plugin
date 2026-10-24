@@ -3,8 +3,10 @@ import path from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { assessCanvasVisualQuality } from '../src/canvasQuality.js'
-import { canvasArrowBoxRoute, canvasGroupFrames, canvasSceneToSvg, serializeCanvasScene, type CanvasScene } from '../src/canvas.js'
+import { canvasSceneToSvg, serializeCanvasScene } from '../src/canvas.js'
 import { assessArchitecturePresentation } from '../src/architecturePresentationQuality.js'
+import { assessArchitectureRouteDiagnostics } from '../src/architectureRouteDiagnostics.js'
+import type { CanvasScene } from '../src/canvas.js'
 import { architectureBenchmarkCases } from './architecture-benchmark-cases.js'
 import { layoutWithElk, type ElkBenchmarkVariant } from './elk-architecture-candidate.js'
 
@@ -22,32 +24,15 @@ await mkdir(output, { recursive: true })
 type Result = { case: string; engine: string; ms: number; nodes: number; edges: number;
   crossings: number; overlaps: number; throughNodes: number; labelCollisions: number;
   width: number; height: number; aspectRatio: number; groupOverlaps: number; totalRouteLength: number;
+  crossPartitionRouteLength: number; unrelatedFrameIntrusionLength: number
   fitFont: number; warnings: string[]; error?: string }
 const results: Result[] = []
 function additionalGeometry(scene: CanvasScene) {
-  const frames = canvasGroupFrames(scene).filter((frame) => frame.id.startsWith('arch-'))
-  let groupOverlaps = 0
-  for (let i = 0; i < frames.length; i += 1) {
-    for (let j = i + 1; j < frames.length; j += 1) {
-      const a = frames[i], b = frames[j]
-      const overlapX = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)
-      const overlapY = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y)
-      // Nested groups are intentional; intersecting sibling groups are not.
-      if (!a.memberIds.some((id) => b.memberIds.includes(id)) && overlapX > 5 && overlapY > 5) groupOverlaps += 1
-    }
-  }
-  const boxes = new Map(scene.elements.filter((item) => item.type === 'node').map((item) => [item.id, item]))
-  let totalRouteLength = 0
-  for (const edge of scene.elements) {
-    if (edge.type !== 'arrow') continue
-    const from = boxes.get(edge.from), to = boxes.get(edge.to)
-    if (!from || !to) continue
-    const points = canvasArrowBoxRoute(from, to, edge)
-    totalRouteLength += points.slice(1).reduce((sum, p, i) =>
-      sum + Math.abs(p.x - points[i].x) + Math.abs(p.y - points[i].y), 0)
-  }
+  const measured = assessArchitectureRouteDiagnostics(scene)
   return { width: scene.width, height: scene.height, aspectRatio: Math.round(scene.width / scene.height * 100) / 100,
-    groupOverlaps, totalRouteLength: Math.round(totalRouteLength) }
+    groupOverlaps: measured.frameOverlaps, totalRouteLength: measured.totalRouteLength,
+    crossPartitionRouteLength: measured.crossPartitionRouteLength,
+    unrelatedFrameIntrusionLength: measured.unrelatedFrameIntrusionLength }
 }
 const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (char) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!
@@ -70,6 +55,7 @@ for (const entry of entries) {
         edges: entry.intent.relations.length, ms: Math.round(performance.now() - start),
         crossings: -1, overlaps: -1, throughNodes: -1, labelCollisions: -1, fitFont: 0,
         width: 0, height: 0, aspectRatio: 0, groupOverlaps: -1, totalRouteLength: -1,
+        crossPartitionRouteLength: -1, unrelatedFrameIntrusionLength: -1,
         warnings: [], error: String(error),
       })
     }
@@ -106,7 +92,7 @@ await writeFile(path.join(output, 'index.html'), `<!doctype html><html lang="zh-
 <body><h1>ELK / 当前布局 A/B</h1><small>同一语义数据、同一 Canvas 渲染和质量检测；ELK 仅实验，不会自动替换正式引擎</small>
 ${groups.map(({ entry, results }) => `<section class="case"><h2>${escapeHtml(entry.id)}</h2><small>${escapeHtml(entry.description)}</small><div class="grid">
 ${results.map((r) => `<div class="panel"><b>${escapeHtml(r.engine)}</b>${r.error ? `<p>${escapeHtml(r.error)}</p>` : `<img loading="lazy" src="./${escapeHtml(r.case)}--${escapeHtml(r.engine)}.svg">`}
-<p>${r.ms}ms · 交叉 ${r.crossings} · 重叠 ${r.overlaps} · 穿节点 ${r.throughNodes} · 分区冲突 ${r.groupOverlaps} · 画布 ${r.width}×${r.height} · 线路总长 ${r.totalRouteLength} · 字体 ${r.fitFont}px</p></div>`).join('')}</div></section>`).join('')}
+<p>${r.ms}ms · 交叉 ${r.crossings} · 重叠 ${r.overlaps} · 穿节点 ${r.throughNodes} · 分区冲突 ${r.groupOverlaps} · 画布 ${r.width}×${r.height} · 跨区线长 ${r.crossPartitionRouteLength}px · 无关分区穿越 ${r.unrelatedFrameIntrusionLength}px · 字体 ${r.fitFont}px</p></div>`).join('')}</div></section>`).join('')}
 </body></html>`)
 console.table(results.map(({ case: id, engine, ms, crossings, overlaps, throughNodes, groupOverlaps, aspectRatio, error }) =>
   ({ id, engine, ms, crossings, overlaps, throughNodes, groupOverlaps, aspectRatio, error: error?.slice(0, 60) ?? '' })))
