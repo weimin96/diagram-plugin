@@ -107,7 +107,9 @@ test('P24 不为零交叉高扇出图追加联合布局搜索', () => {
   for (const id of ['microservices-fanout', 'data-platform-fanout']) {
     const input = architectureBenchmarkCases('extended').find((item) => item.id === id)!.intent
     const output = composeArchitectureGraph(input)
-    assert.equal(output.layoutOrderingStrategy, 'semantic', id)
+    assert.notEqual(output.layoutOrderingStrategy, 'dependency',
+      `zero-crossing ${id} must not trigger global dependency relayout`)
+    assert.equal(output.quality.metrics.edgeCrossings, 0, id)
     assert.equal(output.quality.metrics.edgeNodeIntersections, 0, id)
   }
 })
@@ -117,11 +119,18 @@ test('高扇出冲突只在无新增交叉时采用反向布线，且保留原�
   const input = JSON.stringify(sample.intent)
   const result = composeArchitectureGraph(sample.intent)
   assert.equal(result.inputOrderStrategy, 'relation-reverse')
-  assert.ok(result.evaluation.structuralScore >= 72)
+  assert.equal(result.layoutOrderingStrategy, 'group-grid-compaction')
+  assert.ok(result.routeDiagnostics.frameOverlapArea <= 250_000,
+    'the occupied region must shrink by at least 20% without ungrouping its members')
+  assert.ok(result.evaluation.structuralScore >= 74)
+  assert.ok(result.candidates.some((candidate) => candidate.structuralScore === result.evaluation.structuralScore),
+    'the candidate score shown to clients must agree with the accepted geometry')
   assert.ok(result.quality.metrics.edgeOverlaps <= 5)
-  assert.ok(result.evaluation.structuralScore >= 75)
+  assert.ok(result.presentation.estimatedTitlePxAtFit >= 12)
   assert.equal(result.quality.metrics.edgeCrossings, 0)
   assert.equal(result.quality.metrics.edgeNodeIntersections, 0)
+  assert.equal(result.quality.metrics.nodeOverlaps, 0)
+  assert.equal(result.quality.metrics.labelNodeIntersections, 0)
   const members = new Map(result.scene.elements.filter((item) => item.type === 'node')
     .map((item) => [item.id, item]))
   const paired = result.scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow'

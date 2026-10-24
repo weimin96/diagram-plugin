@@ -1,4 +1,4 @@
-import { beautifyArchitectureScene, inferArchitectureComposition, routeArchitectureArrowIds, routeArchitectureEdges, type ArchitectureComposition, type ArchitecturePartition, type ArchitectureTheme } from './architectureDesign.js'
+import { beautifyArchitectureScene, inferArchitectureComposition, routeArchitectureArrowIds, routeArchitectureEdges, routeArchitectureEdgesIncremental, type ArchitectureComposition, type ArchitecturePartition, type ArchitectureTheme } from './architectureDesign.js'
 import { assessCanvasVisualQuality, type CanvasVisualQualityAssessment } from './canvasQuality.js'
 import type { DiagramVisualStyle } from './diagramVisualStyles.js'
 import { canvasArrowBoxRoute, canvasSharedSourceStem, type CanvasArchitectureDensity, type CanvasArchitectureScenario, type CanvasArrow, type CanvasIcon, type CanvasNode, type CanvasScene, type CanvasStencil } from './canvas.js'
@@ -729,7 +729,10 @@ function composeArchitectureGraphOriginal(intent: ArchitectureIntentGraph) {
 /** Compare an alternate collision-resolution order against the *fully*
  * optimized result, never an intermediate geometry that later routing beats. */
 export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
-  const result = packSparseArchitectureRegions(improveCongestedPorts(composeArchitectureGraphOriginal(intent)), intent.primaryPath)
+  const result = compactConflictedGroupMembers(
+    packSparseArchitectureRegions(improveCongestedPorts(composeArchitectureGraphOriginal(intent)), intent.primaryPath),
+    intent.primaryPath,
+  )
   const n = intent.nodes.length
   // Dense graphs need global routing/port planning; collision ordering alone
   // helps only sparse, interleaved regions and would waste extra CPU there.
@@ -758,6 +761,106 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
       (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity)) },
     inputOrderStrategy: 'original' as const, layoutOrderingStrategy: 'spatial-order' as const,
   }
+}
+
+/** Bounded local grid reconciliation for large overlapping region frames.
+ * Moving one outlier and rerouting nearby edges often recovers the space that
+ * the original collision resolver accidentally gave to another partition.
+ * Never trade away a zero-crossing graph to make its outlines look cleaner. */
+function compactConflictedGroupMembers(result: ReturnType<typeof packSparseArchitectureRegions>, primaryPath?: readonly string[]) {
+  const scene = result.scene
+  const nodes = scene.elements.filter((item): item is CanvasNode => item.type === 'node')
+  const arrows = scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow')
+  if (primaryPath?.length || nodes.length < 17 || nodes.length > 24 || arrows.length > 32
+    || result.routeDiagnostics.frameOverlapArea < 100_000
+    || result.quality.metrics.edgeCrossings > 0 || result.quality.metrics.edgeNodeIntersections > 0
+    || nodes.some((node) => node.locked)) return result
+  const byId = new Map(nodes.map((node) => [node.id, node]))
+  const intruders = [...new Set(result.routeDiagnostics.worstFrameOverlaps.slice(0, 3)
+    .flatMap((frame) => frame.intrudingNodeIds))].slice(0, 8)
+  const candidatePositions: Array<{ id: string; x: number; y: number; frameArea: number }> = []
+  for (const id of intruders) {
+    const original = byId.get(id)
+    if (!original?.groupId?.startsWith('arch-')) continue
+    const peers = nodes.filter((node) => node.groupId === original.groupId && node.id !== id)
+    if (!peers.length) continue
+    const xSlots = [...new Set(peers.map((node) => node.x))]
+    const ySlots = [...new Set(peers.map((node) => node.y))]
+    const options: typeof candidatePositions = []
+    for (const x of xSlots) for (const y of ySlots) {
+      if (x === original.x && y === original.y) continue
+      // Existing compact grids frequently use an 18px physical clearance.
+      const blocked = nodes.some((node) => node.id !== id
+        && x < node.x + node.width + 12 && x + original.width + 12 > node.x
+        && y < node.y + node.height + 12 && y + original.height + 12 > node.y)
+      if (blocked) continue
+      const moved: CanvasScene = { ...scene, elements: scene.elements.map((item) =>
+        item.id === id ? { ...original, x, y } : item) }
+      const frameArea = assessArchitectureRouteDiagnostics(moved).frameOverlapArea
+      if (frameArea >= result.routeDiagnostics.frameOverlapArea * 0.9) continue
+      options.push({ id, x, y, frameArea })
+    }
+    options.sort((a, b) => a.frameArea - b.frameArea
+      || Math.abs(a.x - original.x) + Math.abs(a.y - original.y)
+        - Math.abs(b.x - original.x) - Math.abs(b.y - original.y))
+    candidatePositions.push(...options.slice(0, 2))
+  }
+  let best: { scene: CanvasScene; quality: CanvasVisualQualityAssessment;
+    route: ReturnType<typeof assessArchitectureRouteDiagnostics>;
+    presentation: ReturnType<typeof assessArchitecturePresentation>;
+    evaluation: ArchitectureLayoutAssessment } | undefined
+  for (const position of candidatePositions.slice(0, 16)) {
+    const original = byId.get(position.id)!
+    const moved: CanvasScene = { ...scene, elements: scene.elements.map((item) => item.id === position.id
+      ? { ...original, x: position.x, y: position.y } : item) }
+    const candidate = routeArchitectureEdgesIncremental(moved, [position.id])
+    const quality = assessCanvasVisualQuality(candidate)
+    const before = result.quality.metrics, after = quality.metrics
+    if (after.nodeOverlaps > before.nodeOverlaps || after.edgeCrossings > before.edgeCrossings
+      || after.edgeOverlaps > before.edgeOverlaps || after.edgeNodeIntersections > before.edgeNodeIntersections
+      || after.labelOverlaps > before.labelOverlaps || after.labelOverflows > before.labelOverflows
+      || after.labelNodeIntersections > before.labelNodeIntersections) continue
+    // A node move must never silently rewrite a genuine fan-out bundle.
+    if (candidate.elements.some((item) => item.type === 'arrow'
+      && item.bundleKey !== arrows.find((arrow) => arrow.id === item.id)?.bundleKey)) continue
+    const routedNodes = new Map(candidate.elements.filter((item): item is CanvasNode => item.type === 'node')
+      .map((node) => [node.id, node]))
+    const sharedBundles = new Map<string, CanvasArrow[]>()
+    for (const item of candidate.elements) {
+      if (item.type !== 'arrow' || !item.bundleKey?.startsWith('from:')) continue
+      sharedBundles.set(item.bundleKey, [...(sharedBundles.get(item.bundleKey) ?? []), item])
+    }
+    if ([...sharedBundles.values()].some((members) => members.length < 2
+      || members.slice(1).some((arrow) => {
+        const first = members[0]
+        const from = routedNodes.get(first.from), to = routedNodes.get(first.to)
+        const otherFrom = routedNodes.get(arrow.from), otherTo = routedNodes.get(arrow.to)
+        return !from || !to || !otherFrom || !otherTo
+          || !canvasSharedSourceStem(canvasArrowBoxRoute(from, to, first),
+            canvasArrowBoxRoute(otherFrom, otherTo, arrow))
+      }))) continue
+    const route = assessArchitectureRouteDiagnostics(candidate)
+    if (route.frameOverlapArea > position.frameArea || route.frameOverlapArea >= result.routeDiagnostics.frameOverlapArea * 0.9
+      || route.unrelatedFrameIntrusionLength > result.routeDiagnostics.unrelatedFrameIntrusionLength
+      || route.totalRouteLength > result.routeDiagnostics.totalRouteLength * 1.15) continue
+    const presentation = assessArchitecturePresentation(candidate)
+    const evaluation = evaluateArchitectureLayout(candidate, quality, result.evaluation.layout, result.evaluation.density)
+    if (presentation.estimatedTitlePxAtFit < result.presentation.estimatedTitlePxAtFit
+      // Frame intrusion isn't part of the legacy 90-point geometry score. A
+      // >20% frame-area reduction can justify at most one detour point, never
+      // a new crossing, overlapping relationship or smaller title.
+      || evaluation.structuralScore < result.evaluation.structuralScore - 1
+      || route.frameOverlapArea > result.routeDiagnostics.frameOverlapArea * 0.8
+      || (best && route.frameOverlapArea >= best.route.frameOverlapArea)) continue
+    best = { scene: candidate, quality, route, presentation, evaluation }
+  }
+  if (!best) return result
+  return { ...result, scene: best.scene, quality: best.quality, routeDiagnostics: best.route,
+    presentation: best.presentation, evaluation: best.evaluation,
+    visualPlan: planArchitectureVisual(best.scene, result.semanticComposition, best.quality, best.presentation, best.route),
+    candidates: result.candidates.map((candidate) => candidate.layout === result.evaluation.layout
+      && candidate.density === result.evaluation.density ? best.evaluation : candidate),
+    layoutOrderingStrategy: 'group-grid-compaction' as const }
 }
 
 /** Pack real node rectangles into non-overlapping functional regions before
