@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { composeArchitectureGraph, type ArchitectureIntentGraph } from '../src/architectureComposer.js'
+import { architecturePresentationSelectionPenalty, composeArchitectureGraph, type ArchitectureIntentGraph } from '../src/architectureComposer.js'
 import { parseCanvasScene, serializeCanvasScene, type CanvasArrow } from '../src/canvas.js'
 import { DiagramStore } from '../src/store.js'
 
@@ -48,6 +48,19 @@ test('fixed density limits candidates and keeps deterministic layout', () => {
   const result = composeArchitectureGraph({ ...input, density: 'compact' })
   assert.ok(result.candidates.every((candidate) => candidate.density === 'compact'))
   assert.equal(result.summary.resolvedDensity, 'compact')
+})
+
+test('layout candidate selection penalizes small fit text and unrelated region intrusions independently', () => {
+  const presentation = { referenceWidth: 1200, estimatedTitlePxAtFit: 12, nodeBoundsCoverage: .75, nodeAreaCoverage: .2, warnings: [] }
+  const route = {
+    totalRouteLength: 1000, crossPartitionRouteLength: 500, crossPartitionDirectDistance: 400,
+    crossPartitionRelations: 2, backwardCrossPartitionRelations: 0, frameOverlaps: 0,
+    frameOverlapArea: 0, unrelatedFrameIntrusionLength: 0, worstFrameIntrusions: [],
+  }
+  assert.equal(architecturePresentationSelectionPenalty(presentation, route), 0)
+  assert.ok(architecturePresentationSelectionPenalty({ ...presentation, estimatedTitlePxAtFit: 8.5 }, route) > 0)
+  assert.ok(architecturePresentationSelectionPenalty(presentation, { ...route, unrelatedFrameIntrusionLength: 300 }) > 0)
+  assert.ok(architecturePresentationSelectionPenalty(presentation, { ...route, frameOverlapArea: 28000 }) > 0)
 })
 
 test('confirmed primary path and functional regions survive automatic layout and Canvas round trip', () => {

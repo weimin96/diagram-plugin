@@ -46,6 +46,18 @@ export interface ArchitectureLayoutAssessment {
   detourPenalty: number
 }
 
+/** Layout selection penalty from measurable presentation defects, not aesthetic judgment.
+ * Only scored after the candidate has completed the existing routing pipeline. */
+export function architecturePresentationSelectionPenalty(
+  presentation: ReturnType<typeof assessArchitecturePresentation>,
+  route: ReturnType<typeof assessArchitectureRouteDiagnostics>,
+): number {
+  const fontPenalty = Math.min(12, Math.max(0, 11 - presentation.estimatedTitlePxAtFit) * 5)
+  const boundaryPenalty = Math.min(6, route.frameOverlapArea / 14000)
+  const intrusionPenalty = Math.min(7, route.unrelatedFrameIntrusionLength / 150)
+  return Math.round((fontPenalty + boundaryPenalty + intrusionPenalty) * 10) / 10
+}
+
 function architectureDetourMetrics(scene: CanvasScene) {
   const boxes = new Map(scene.elements.filter((item): item is CanvasNode => item.type === 'node').map((node) => [node.id, node]))
   let longDetours = 0
@@ -450,17 +462,29 @@ function composeArchitectureGraphCandidate(
     .slice(0, 3)
   const refined = shortlisted.map((candidate) => {
     const result = refineArchitectureRoutes(candidate.scene, candidate.summary.composition, candidate.summary.resolvedDensity)
+    const visualPenalty = architecturePresentationSelectionPenalty(
+      assessArchitecturePresentation(result.scene),
+      assessArchitectureRouteDiagnostics(result.scene),
+    )
+    const structuralSelectionScore = result.evaluation.structuralScore
+      - (candidate.summary.composition === inferred ? 0 : 6)
+      - (candidate.summary.resolvedDensity === autoDensity ? 0 : 1)
     return {
       ...candidate,
       ...result,
-      selectionScore: result.evaluation.structuralScore
-        - (candidate.summary.composition === inferred ? 0 : 6)
-        - (candidate.summary.resolvedDensity === autoDensity ? 0 : 1),
+      visualPenalty,
+      structuralSelectionScore,
+      selectionScore: structuralSelectionScore - visualPenalty,
     }
-  }).sort((a, b) => b.selectionScore - a.selectionScore
+  })
+  // Readability may decide between near-equivalent layouts, but cannot buy a
+  // substantially worse graph by trading away crossings or routed quality.
+  const bestStructuralSelectionScore = Math.max(...refined.map((item) => item.structuralSelectionScore))
+  const eligible = refined.filter((item) => item.structuralSelectionScore >= bestStructuralSelectionScore - 1)
+  eligible.sort((a, b) => b.selectionScore - a.selectionScore
     || a.quality.issues.length - b.quality.issues.length
     || a.summary.composition.localeCompare(b.summary.composition))
-  const { selectionScore: _selectionScore, ...selected } = refined[0]
+  const { selectionScore: _selectionScore, structuralSelectionScore: _structuralSelectionScore, visualPenalty: _visualPenalty, ...selected } = eligible[0]
   const ordered = refineArchitectureNodeOrder(selected, selected.summary.composition, selected.summary.resolvedDensity)
   // Reordering can reintroduce node intersections after the first routing
   // pass. Repair only those hard geometry failures, not the whole graph again.
