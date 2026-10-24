@@ -1,0 +1,44 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+import { architectureCases } from './fixtures/architecture/cases.js'
+import { composeArchitectureGraph } from '../src/architectureComposer.js'
+import { parseCanvasScene, serializeCanvasScene } from '../src/canvas.js'
+import { assessCanvasVisualQuality } from '../src/canvasQuality.js'
+import { layoutWithElk } from '../scripts/elk-architecture-candidate.js'
+
+test('ELK 实验候选不修改原图，节点/关系/语义分区与历史序列化保持完整', async () => {
+  const input = composeArchitectureGraph(architectureCases.find((item) => item.id === 'data-platform')!.intent).scene
+  const original = serializeCanvasScene(input)
+  for (const variant of ['flat', 'compound'] as const) {
+    const result = await layoutWithElk(input, variant)
+    assert.deepEqual(result.elements.map((element) => element.id), input.elements.map((element) => element.id))
+    assert.deepEqual(result.elements.filter((element) => element.type === 'node')
+      .map(({ id, groupId, icon, stencil }) => ({ id, groupId, icon, stencil })),
+    input.elements.filter((element) => element.type === 'node')
+      .map(({ id, groupId, icon, stencil }) => ({ id, groupId, icon, stencil })))
+    assert.deepEqual(result.elements.filter((element) => element.type === 'arrow')
+      .map(({ id, from, to }) => ({ id, from, to })),
+    input.elements.filter((element) => element.type === 'arrow')
+      .map(({ id, from, to }) => ({ id, from, to })))
+    assert.deepEqual(result.groups, input.groups)
+    for (const element of result.elements) {
+      if (element.type !== 'node') continue
+      assert.ok(Number.isFinite(element.x) && Number.isFinite(element.y))
+      assert.ok(element.x >= 0 && element.x + element.width <= result.width, element.id)
+      assert.ok(element.y >= 0 && element.y + element.height <= result.height, element.id)
+    }
+    assert.ok(result.width > 0 && result.height > 0)
+    assert.ok(assessCanvasVisualQuality(result).metrics.nodeOverlaps === 0)
+    assert.equal(parseCanvasScene(serializeCanvasScene(result)).elements.length, input.elements.length)
+  }
+  assert.equal(serializeCanvasScene(input), original)
+})
+
+test('ELK 实验对无效依赖直接失败，不创建悬空连线', async () => {
+  const input = composeArchitectureGraph(architectureCases[0].intent).scene
+  const firstArrow = input.elements.find((item) => item.type === 'arrow')!
+  const broken = { ...input, elements: input.elements.map((item) =>
+    item.id === firstArrow.id
+      ? { ...item, from: 'not-found' } : item) }
+  await assert.rejects(layoutWithElk(broken, 'flat'), /Invalid relation endpoint/)
+})

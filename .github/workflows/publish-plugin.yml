@@ -54,6 +54,7 @@ jobs:
         run: |
           pnpm typecheck
           pnpm test
+          pnpm benchmark:architecture
           pnpm build
           pnpm smoke
           pnpm check:hosts

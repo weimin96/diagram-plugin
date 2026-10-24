@@ -153,3 +153,18 @@ node scripts/check-codex-package.mjs release/weimin96-diagram-plugin-<version>.t
 Canvas 文档类型与 Mermaid 样式指令保留向后兼容：读取时同时接受 `codex-diagram-canvas` 与 `%% codex-diagram:style=`，写入时统一使用新前缀，旧图可直接打开并在首次保存后迁移。最近工作区状态优先写入 `~/.diagram-plugin`，并回退读取 `~/.codex-diagram`。
 
 改名前的 `@weimin96/diagram-deepseek` 与正式包是不同包。已安装旧插件的用户应先移除旧插件，再安装新包，否则会重复注册 Diagram 标签页和工具。
+
+## 架构图布局实验（仅开发环境）
+
+目前的正式生成逻辑仍使用 `architectureComposer` + 内置正交路由。ELK Layered 是隔离的开发试验，没有加入 `src/server.ts`，不会自动影响现有用户图表。
+
+- 快速基准：`pnpm benchmark:architecture`，5 个参考架构，会在生成节点重叠/穿节点时失败；已加入 npm 发布门禁。
+- 扩展基准：`pnpm benchmark:architecture --suite=extended`，20 个参考/合成场景，重点检查输入顺序、中文长标签和高扇出；合成用例并非用户生产拓扑。
+- 压力样例：`pnpm benchmark:architecture --suite=stress`，30/50/80 节点，运行成本较高，不放到默认 CI。
+- 对比试验：`pnpm benchmark:architecture:engines`，或 `pnpm benchmark:architecture:engines --suite=extended`。输出 `test-results/architecture-engines/index.html`、`report.json` 及各候选的可编辑 Canvas JSON 与 SVG。支持 `--case=data-platform` 只跑单例。
+
+ELK 平铺与复合分组候选仅修改节点坐标，再使用当前 Canvas 正交路由，**尚未接入 ELK 原生端口/边线**。报告额外记录画布尺寸、宽高比、分组边界重叠、总线长和文字适配字号。时间字段口径不同：`current` 包含整套候选搜索与优化；`elk-*` 仅包含在已完成的 Canvas 图上再次布局与布线，不能当作整体生成速度 A/B 结论。
+
+初次 20 例实验统计：原引擎累计交叉 5、重叠 44；ELK flat 累计交叉 21、重叠 75；ELK compound 累计交叉 56、重叠 52。当前不得据此替换默认布局引擎，后续应重点验证原生端口、复合分区、不穿节点与复杂图阅读顺序，并在同一准备阶段重新计时。已识别原引擎在合成的 `business-platform-fanout` 有一处穿节点，属于待修复的扩展质量缺陷，不能用放宽门禁掩盖。
+
+ELK 0.12.0 当前只作为 devDependency 引入。其许可标识为 `EPL-2.0 OR GPL-3.0-or-later`，在考虑把 ELK 打包进发行版前，必须完成授权条件与第三方声明核查。
