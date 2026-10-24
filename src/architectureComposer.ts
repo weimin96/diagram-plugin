@@ -74,6 +74,52 @@ function evaluateArchitectureLayout(scene: CanvasScene, quality: CanvasVisualQua
   return { structuralScore, layout: composition, density, issueCount: quality.issues.length, aspectRatio: Math.round(ratio * 100) / 100, ...detours }
 }
 
+/**
+ * Shift one interior orthogonal corridor; keep endpoint anchors and all nodes
+ * fixed. This resolves collinear overlaps that the standard A* rerouter can
+ * repeat, without introducing a second layout engine.
+ */
+function nudgeArchitectureCorridors(scene: CanvasScene, arrowId: string): CanvasScene[] {
+  const arrows = scene.elements.filter((item) => item.type === 'arrow')
+  const arrow = arrows.find((item) => item.id === arrowId)
+  if (!arrow || arrow.bundleKey) return []
+  const boxes = new Map(scene.elements.filter((item): item is CanvasNode => item.type === 'node').map((item) => [item.id, item]))
+  const from = boxes.get(arrow.from)
+  const to = boxes.get(arrow.to)
+  if (!from || !to) return []
+  const route = canvasArrowBoxRoute(from, to, arrow)
+  const candidates: CanvasScene[] = []
+  // For a segment to slide, the segments immediately before and after must
+  // be perpendicular; endpoints stay anchored to their original nodes.
+  for (let index = 1; index < route.length - 2 && candidates.length < 8; index += 1) {
+    const a = route[index], b = route[index + 1]
+    const vertical = a.x === b.x && a.y !== b.y
+    const horizontal = a.y === b.y && a.x !== b.x
+    if (!vertical && !horizontal) continue
+    const previous = route[index - 1], next = route[index + 2]
+    if (vertical && (previous.y !== a.y || next.y !== b.y)) continue
+    if (horizontal && (previous.x !== a.x || next.x !== b.x)) continue
+    for (const offset of [-32, -20, 20, 32]) {
+      const displaced = route.map((point) => ({ ...point }))
+      if (vertical) {
+        displaced[index].x += offset
+        displaced[index + 1].x += offset
+      } else {
+        displaced[index].y += offset
+        displaced[index + 1].y += offset
+      }
+      if (displaced.some((point) => point.x < 0 || point.x > scene.width || point.y < 0 || point.y > scene.height)) continue
+      const revised = { ...arrow, points: displaced.slice(1, -1) }
+      candidates.push({
+        ...scene,
+        elements: scene.elements.map((item) => item.id === arrowId ? revised : item),
+      })
+      if (candidates.length >= 8) break
+    }
+  }
+  return candidates
+}
+
 /** Only reroute implicated edges, and accept strictly improving results; never move authored nodes. */
 function refineArchitectureRoutes(
   initialScene: CanvasScene,
@@ -93,15 +139,16 @@ function refineArchitectureRoutes(
     if (!affectedIds.length) break
     let best: { scene: CanvasScene; quality: CanvasVisualQualityAssessment; evaluation: ArchitectureLayoutAssessment } | undefined
     for (const id of affectedIds) {
-      const candidate = routeArchitectureArrowIds(scene, [id])
-      const nextQuality = assessCanvasVisualQuality(candidate)
-      if (nextQuality.metrics.edgeNodeIntersections > quality.metrics.edgeNodeIntersections
-        || nextQuality.metrics.nodeOverlaps > quality.metrics.nodeOverlaps) continue
-      const nextEvaluation = evaluateArchitectureLayout(candidate, nextQuality, composition, density)
-      const previous = best?.evaluation ?? evaluation
-      if (nextEvaluation.structuralScore > previous.structuralScore
-        || (nextEvaluation.structuralScore === previous.structuralScore && nextQuality.issues.length < (best?.quality.issues.length ?? quality.issues.length))) {
-        best = { scene: candidate, quality: nextQuality, evaluation: nextEvaluation }
+      for (const candidate of [routeArchitectureArrowIds(scene, [id]), ...nudgeArchitectureCorridors(scene, id)]) {
+        const nextQuality = assessCanvasVisualQuality(candidate)
+        if (nextQuality.metrics.edgeNodeIntersections > quality.metrics.edgeNodeIntersections
+          || nextQuality.metrics.nodeOverlaps > quality.metrics.nodeOverlaps) continue
+        const nextEvaluation = evaluateArchitectureLayout(candidate, nextQuality, composition, density)
+        const previous = best?.evaluation ?? evaluation
+        if (nextEvaluation.structuralScore > previous.structuralScore
+          || (nextEvaluation.structuralScore === previous.structuralScore && nextQuality.issues.length < (best?.quality.issues.length ?? quality.issues.length))) {
+          best = { scene: candidate, quality: nextQuality, evaluation: nextEvaluation }
+        }
       }
     }
     if (!best) break

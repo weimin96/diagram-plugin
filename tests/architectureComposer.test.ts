@@ -73,7 +73,7 @@ test('多区域候选局部重排减少交叉且不改动节点与语义关系',
   const composed = composeArchitectureGraph(graph)
   const arrows = composed.scene.elements.filter((item) => item.type === 'arrow')
   assert.equal(composed.quality.metrics.edgeCrossings, 0)
-  assert.ok(composed.quality.metrics.edgeOverlaps <= 1)
+  assert.equal(composed.quality.metrics.edgeOverlaps, 0)
   assert.equal(composed.quality.metrics.edgeNodeIntersections, 0)
   assert.ok(composed.reroutedEdges >= 1 && composed.reroutedEdges <= 3)
   assert.deepEqual(arrows.map((arrow) => [arrow.from, arrow.to]), relations.map(([from, to]) => [from, to]))
