@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { pathToFileURL } from 'node:url'
 import { architectureCases } from '../tests/fixtures/architecture/cases.js'
+import { architectureBenchmarkCases } from './architecture-benchmark-cases.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { canvasSceneToSvg, serializeCanvasScene } from '../src/canvas.js'
 
@@ -18,7 +19,12 @@ const humanChecklist = [
   '跨区连线不干扰主要业务信息',
   'Canvas 可编辑，SVG 在目标尺寸下清晰可读',
 ]
-const ids = ['business-platform', 'microservices', 'data-platform']
+const extended = process.argv.includes('--extended')
+const ids = [
+  'business-platform', 'microservices', 'data-platform',
+  ...(extended ? ['microservices-fanout', 'data-platform-fanout', 'deployment-fanout'] : []),
+]
+const referenceCases = extended ? architectureBenchmarkCases('extended') : architectureCases
 const captureScreenshots = process.argv.includes('--screenshots')
 const output = path.resolve(process.argv.find((arg) => arg.startsWith('--out='))?.slice(6)
   ?? 'test-results/architecture-design-review')
@@ -27,7 +33,7 @@ const chrome = captureScreenshots ? await findChrome() : undefined
 if (captureScreenshots && !chrome) throw new Error('截图验收需要本地 Chrome/Chromium，当前未找到浏览器。')
 const cases = []
 for (const id of ids) {
-  const sample = architectureCases.find((item) => item.id === id)!
+  const sample = referenceCases.find((item) => item.id === id)!
   const started = performance.now()
   const result = composeArchitectureGraph(sample.intent)
   const elapsedMs = Math.round(performance.now() - started)
@@ -38,7 +44,8 @@ for (const id of ids) {
   if (screenshot && chrome) await captureDiagramScreenshot(chrome, output, file, screenshot)
   cases.push({
     id,
-    label: result.visualPlan.reference.label,
+    label: `${result.visualPlan.reference.label}${id.endsWith('-fanout') ? ' · 合成高扇出' : ''}`,
+    source: id.endsWith('-fanout') ? 'synthetic' : 'fictional-reference',
     scenario: result.visualPlan.scenario,
     readingPattern: result.visualPlan.reference.readingPattern,
     priorities: result.visualPlan.reference.priorities,
@@ -56,7 +63,7 @@ for (const id of ids) {
   })
 }
 await writeFile(path.join(output, 'manifest.json'), JSON.stringify({
-  version: 1, source: 'fictional-reference', rubric: humanChecklist,
+  version: 1, source: extended ? 'fictional-reference-and-synthetic' : 'fictional-reference', rubric: humanChecklist,
   note: 'Browser screenshot capture is visual evidence, not an automatic aesthetic judgment. All human checkboxes are intentionally empty.',
   cases,
 }, null, 2) + '\n')
@@ -67,7 +74,7 @@ await writeFile(path.join(output, 'index.html'), `<!doctype html><html lang="zh-
 ${cases.map((item) => `<section><h2>${item.label}</h2><div class="metadata">${item.readingPattern} · 交叉 ${item.quality.edgeCrossings} · 关系线重叠 ${item.quality.edgeOverlaps} · 适配字号 ${item.presentation.estimatedTitlePxAtFit}px</div><img class="preview" src="${item.screenshot ?? item.svg}" alt="${item.label}"><p><a href="${item.svg}">SVG</a> · <a href="${item.id}.diagram.json">可编辑 Canvas JSON</a></p><strong>人工观察</strong><ul class="questions">${humanChecklist.map((question) => `<li>□ ${question}</li>`).join('')}</ul></section>`).join('')}
 </main></html>\n`)
 const markdown = ['# 专业架构图视觉验收',
-  '这三类案例均为虚构系统。结构检测自动完成，以下视觉评价必须由人实际查看后勾选。',
+  '案例来自虚构参考系统及明确标识的合成压力图。结构检测自动完成，以下视觉评价必须由人实际查看后勾选。',
   ...cases.flatMap((item) => [
     `## ${item.label}`,
     `阅读路径：${item.readingPattern}`,
@@ -87,7 +94,7 @@ const markdown = ['# 专业架构图视觉验收',
 ].join('\n\n')
 await writeFile(path.join(output, 'review.md'), markdown + '\n')
 console.table(cases.map((item) => ({
-  scenario: item.scenario, mainNodes: item.primaryNodeIds.length,
+  scenario: item.label, mainNodes: item.primaryNodeIds.length,
   crossings: item.quality.edgeCrossings, overlaps: item.quality.edgeOverlaps,
   fitFont: item.presentation.estimatedTitlePxAtFit, ms: item.elapsedMs,
 })))
