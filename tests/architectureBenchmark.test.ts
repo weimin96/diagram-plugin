@@ -67,3 +67,14 @@ test('扩大正交走廊搜索后数据平台连线重叠有上界且不破坏�
   assert.deepEqual(result.scene.elements.filter((item) => item.type === 'arrow')
     .map(({ from, to }) => [from, to]), example.intent.relations.map(({ from, to }) => [from, to]))
 })
+
+test('扩大同分区节点邻域后微服务架构不再出现交叉', () => {
+  const example = architectureCases.find((item) => item.id === 'microservices')!
+  const result = composeArchitectureGraph(example.intent)
+  assert.equal(result.quality.metrics.edgeCrossings, 0)
+  assert.ok(result.quality.metrics.edgeOverlaps <= 2)
+  assert.equal(result.quality.metrics.edgeNodeIntersections, 0)
+  assert.ok(result.reorderedPairs <= 3)
+  assert.deepEqual(result.scene.elements.filter((item) => item.type === 'arrow')
+    .map(({ from, to }) => [from, to]), example.intent.relations.map(({ from, to }) => [from, to]))
+})

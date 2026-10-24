@@ -173,9 +173,9 @@ function refineArchitectureNodeOrder(
   if (initial.scene.elements.filter((item) => item.type === 'node').length > 30) {
     return { ...initial, reorderedPairs }
   }
-  // Limit graph search to two passes of at most twelve swaps. A swap changes
+  // Limit graph search to three passes of at most sixteen swaps. A swap changes
   // only the positions of two unlocked nodes within the same semantic group.
-  for (let pass = 0; pass < 2; pass += 1) {
+  for (let pass = 0; pass < 3; pass += 1) {
     const conflicts = best.quality.issues.filter(({ code }) =>
       code === 'edge-crossing' || code === 'edge-overlap' || code === 'excessive-edge-detour')
     if (!conflicts.length) break
@@ -187,7 +187,7 @@ function refineArchitectureNodeOrder(
       .flatMap((id) => {
         const edge = edges.get(id)
         return edge ? [edge.from, edge.to] : []
-      }))].slice(0, 6)
+      }))].slice(0, 9)
     const candidates: Array<[string, string]> = []
     const seen = new Set<string>()
     for (const id of focused) {
@@ -199,15 +199,15 @@ function refineArchitectureNodeOrder(
         .sort((a, b) => Math.abs(a.x - node.x) + Math.abs(a.y - node.y)
           - Math.abs(b.x - node.x) - Math.abs(b.y - node.y)
           || a.id.localeCompare(b.id))
-        .slice(0, 2)
+        .slice(0, 4)
       for (const peer of peers) {
         const key = [node.id, peer.id].sort().join(':')
         if (seen.has(key)) continue
         seen.add(key)
         candidates.push([node.id, peer.id])
-        if (candidates.length >= 12) break
+        if (candidates.length >= 16) break
       }
-      if (candidates.length >= 12) break
+      if (candidates.length >= 16) break
     }
     let improved: typeof best | undefined
     for (const [firstId, secondId] of candidates) {
