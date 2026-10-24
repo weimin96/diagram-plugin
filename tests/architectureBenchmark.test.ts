@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
+import { assessCanvasVisualQuality } from '../src/canvasQuality.js'
+import { canvasBundleTrunks } from '../src/canvas.js'
 import { architectureCases } from './fixtures/architecture/cases.js'
 
 test('真实规模虚构拓扑基准不丢失语义关系或穿过节点', () => {
@@ -72,9 +74,22 @@ test('扩大同分区节点邻域后微服务架构不再出现交叉', () => {
   const example = architectureCases.find((item) => item.id === 'microservices')!
   const result = composeArchitectureGraph(example.intent)
   assert.equal(result.quality.metrics.edgeCrossings, 0)
-  assert.ok(result.quality.metrics.edgeOverlaps <= 2)
+  assert.equal(result.quality.metrics.edgeOverlaps, 1)
   assert.equal(result.quality.metrics.edgeNodeIntersections, 0)
   assert.ok(result.reorderedPairs <= 3)
   assert.deepEqual(result.scene.elements.filter((item) => item.type === 'arrow')
     .map(({ from, to }) => [from, to]), example.intent.relations.map(({ from, to }) => [from, to]))
+})
+
+test('共享真实出口主干，仍检测无关线路重叠与伪造 Bundle', () => {
+  const example = architectureCases.find((item) => item.id === 'microservices')!
+  const result = composeArchitectureGraph(example.intent)
+  const fanouts = result.scene.elements.filter((item) => item.type === 'arrow' && item.bundleKey?.startsWith('from:orders'))
+  assert.equal(fanouts.length, 2)
+  assert.ok(canvasBundleTrunks(result.scene).some((trunk) => trunk.count === 2))
+  assert.equal(result.quality.metrics.edgeOverlaps, 1)
+  const fake = { ...result.scene, elements: result.scene.elements.map((item) =>
+    item.type === 'arrow' && (item.id === '__relation-2' || item.id === '__relation-10')
+      ? { ...item, bundleKey: 'from:forged' } : item) }
+  assert.equal(assessCanvasVisualQuality(fake).metrics.edgeOverlaps, 1)
 })

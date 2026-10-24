@@ -121,6 +121,59 @@ function nudgeArchitectureCorridors(scene: CanvasScene, arrowId: string): Canvas
   return candidates
 }
 
+function segmentsOverlapBeyondFork(left: ReturnType<typeof canvasArrowBoxRoute>, right: ReturnType<typeof canvasArrowBoxRoute>) {
+  // Both routes already share one explicit source stem. Branches must not
+  // overlap for any positive distance after the fork.
+  for (let i = 1; i + 1 < left.length; i += 1) {
+    const a = left[i], b = left[i + 1]
+    for (let j = 1; j + 1 < right.length; j += 1) {
+      const c = right[j], d = right[j + 1]
+      if (a.x === b.x && c.x === d.x && a.x === c.x
+        && Math.min(Math.max(a.y, b.y), Math.max(c.y, d.y)) - Math.max(Math.min(a.y, b.y), Math.min(c.y, d.y)) > 2) return true
+      if (a.y === b.y && c.y === d.y && a.y === c.y
+        && Math.min(Math.max(a.x, b.x), Math.max(c.x, d.x)) - Math.max(Math.min(a.x, b.x), Math.min(c.x, d.x)) > 2) return true
+    }
+  }
+  return false
+}
+
+/** Explicitly identify a real shared source stem, not arbitrary edge overlaps. */
+function annotateSourceFanoutTrunks(scene: CanvasScene): CanvasScene {
+  const nodes = new Map(scene.elements.filter((item): item is CanvasNode => item.type === 'node').map((item) => [item.id, item]))
+  const arrows = scene.elements.filter((item) => item.type === 'arrow')
+  const bundles = new Map<string, string>()
+  for (const source of new Set(arrows.map((arrow) => arrow.from))) {
+    const outgoing = arrows.filter((arrow) => arrow.from === source && !arrow.bundleKey)
+    if (outgoing.length < 2) continue
+    const paths = outgoing.flatMap((arrow) => {
+      const from = nodes.get(arrow.from), to = nodes.get(arrow.to)
+      return from && to ? [{ arrow, path: canvasArrowBoxRoute(from, to, arrow) }] : []
+    })
+    // Shared-bus SVG rendering uses the identical first waypoint. Require
+    // at least 12px of collinear outgoing trunk followed by separate branches.
+    for (let i = 0; i < paths.length; i += 1) {
+      const first = paths[i]
+      if (bundles.has(first.arrow.id) || first.path.length < 3) continue
+      for (let j = i + 1; j < paths.length; j += 1) {
+        const second = paths[j]
+        if (bundles.has(second.arrow.id) || second.path.length < 3) continue
+        const [a, b] = first.path, [c, d] = second.path
+        if (a.x !== c.x || a.y !== c.y || b.x !== d.x || b.y !== d.y) continue
+        if (Math.abs(b.x - a.x) + Math.abs(b.y - a.y) < 12) continue
+        if (segmentsOverlapBeyondFork(first.path, second.path)) continue
+        const key = `from:${source}:${Math.round(b.x)}:${Math.round(b.y)}`
+        bundles.set(first.arrow.id, key)
+        bundles.set(second.arrow.id, key)
+        break
+      }
+    }
+  }
+  if (!bundles.size) return scene
+  return { ...scene, elements: scene.elements.map((item) => item.type === 'arrow' && bundles.has(item.id)
+    ? { ...item, bundleKey: bundles.get(item.id) }
+    : item) }
+}
+
 /** Only reroute implicated edges, and accept strictly improving results; never move authored nodes. */
 function refineArchitectureRoutes(
   initialScene: CanvasScene,
@@ -320,17 +373,19 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
   const { selectionScore: _selectionScore, ...selected } = refined[0]
   const ordered = refineArchitectureNodeOrder(selected, selected.summary.composition, selected.summary.resolvedDensity)
   const titleScale = recommendArchitectureTitleScale(ordered.scene)
-  const finalScene: CanvasScene = titleScale > 1
+  const finalScene: CanvasScene = annotateSourceFanoutTrunks(titleScale > 1
     ? { ...ordered.scene, architecture: { ...ordered.scene.architecture!, titleScale } }
-    : ordered.scene
+    : ordered.scene)
+  const finalQuality = assessCanvasVisualQuality(finalScene)
+  const finalEvaluation = evaluateArchitectureLayout(finalScene, finalQuality, selected.summary.composition, selected.summary.resolvedDensity)
   const refinedByLayout = new Map(refined.map((candidate) =>
     [`${candidate.summary.composition}:${candidate.summary.resolvedDensity}`, candidate.evaluation]))
   return {
-    ...selected, ...ordered, scene: finalScene,
+    ...selected, ...ordered, scene: finalScene, quality: finalQuality, evaluation: finalEvaluation,
     presentation: assessArchitecturePresentation(finalScene),
     candidates: candidates.map(({ evaluation, summary }) =>
       summary.composition === selected.summary.composition && summary.resolvedDensity === selected.summary.resolvedDensity
-        ? ordered.evaluation
+        ? finalEvaluation
         : refinedByLayout.get(`${summary.composition}:${summary.resolvedDensity}`) ?? evaluation),
   }
 }

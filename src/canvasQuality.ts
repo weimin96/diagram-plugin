@@ -251,7 +251,14 @@ export function assessCanvasVisualQuality(scene: CanvasScene): CanvasVisualQuali
       const right = arrows[rightIndex]
       const rightRoute = routes.get(right.id)
       if (!rightRoute) continue
-      if (!(left.bundleKey && left.bundleKey === right.bundleKey) && routesOverlap(leftRoute, rightRoute)) {
+      const sameBundle = Boolean(left.bundleKey && left.bundleKey === right.bundleKey)
+      const validSharedSource = sameBundle && left.bundleKey!.startsWith('from:')
+        && left.from === right.from && sharedEndpointStem(leftRoute, rightRoute, false)
+      const validSharedTarget = sameBundle && left.bundleKey!.startsWith('to:')
+        && left.to === right.to && sharedEndpointStem(leftRoute, rightRoute, true)
+      const intentionalBundle = validSharedSource || validSharedTarget
+        || (sameBundle && left.bundleKey!.startsWith('group:'))
+      if (!intentionalBundle && routesOverlap(leftRoute, rightRoute)) {
         edgeOverlaps += 1
         issues.push({
           code: 'edge-overlap',
@@ -532,6 +539,16 @@ function routesOverlap(left: CanvasPoint[], right: CanvasPoint[]): boolean {
     }
   }
   return false
+}
+
+function sharedEndpointStem(left: CanvasPoint[], right: CanvasPoint[], incoming: boolean): boolean {
+  if (left.length < 3 || right.length < 3) return false
+  const a = incoming ? [...left].reverse() : left
+  const b = incoming ? [...right].reverse() : right
+  if (a[0].x !== b[0].x || a[0].y !== b[0].y
+    || a[1].x !== b[1].x || a[1].y !== b[1].y) return false
+  const length = Math.abs(a[1].x - a[0].x) + Math.abs(a[1].y - a[0].y)
+  return length >= 12 && !routesOverlap(a.slice(1), b.slice(1))
 }
 
 function dedupeIssues(issues: CanvasQualityIssue[]): CanvasQualityIssue[] {
