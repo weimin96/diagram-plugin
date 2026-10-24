@@ -24,6 +24,40 @@ test('真实规模虚构拓扑基准不丢失语义关系或穿过节点', () =>
     assert.equal(quality.labelNodeIntersections, 0, example.id)
     assert.ok(composed.evaluation.structuralScore > 0, example.id)
     assert.equal(composed.inputOrderStrategy, 'original', `healthy source-order case should not need normalization: ${example.id}`)
+    assert.equal(composed.layoutOrderingStrategy, 'semantic', `healthy case should avoid dependency relayout: ${example.id}`)
+  }
+})
+
+test('P24 仅对低质量多交叉图进行联合分区依赖排布并保留真实关系', () => {
+  const sample = architectureBenchmarkCases('extended').find((item) => item.id === 'deployment-fanout')!
+  const original = JSON.stringify(sample.intent)
+  const result = composeArchitectureGraph(sample.intent)
+  assert.equal(result.layoutOrderingStrategy, 'dependency')
+  assert.equal(result.inputOrderStrategy, 'original')
+  assert.ok(result.evaluation.structuralScore >= 74, 'full-route score improves over 56 baseline')
+  assert.equal(result.quality.metrics.edgeCrossings, 0)
+  assert.ok(result.quality.metrics.edgeOverlaps <= 6)
+  assert.equal(result.quality.metrics.nodeOverlaps, 0)
+  assert.equal(result.quality.metrics.edgeNodeIntersections, 0)
+  assert.equal(result.quality.metrics.labelNodeIntersections, 0)
+  assert.ok(result.routeDiagnostics.crossPartitionRouteLength <= 6500)
+  assert.ok(result.presentation.estimatedTitlePxAtFit >= 11)
+  assert.deepEqual(result.scene.elements.filter((item) => item.type === 'arrow').map(({ from, to }) => [from, to]),
+    sample.intent.relations.map(({ from, to }) => [from, to]))
+  assert.deepEqual(result.scene.elements.filter((item) => item.type === 'arrow').map((item) => item.id),
+    sample.intent.relations.map((_, index) => `__relation-${index + 1}`))
+  assert.equal(JSON.stringify(sample.intent), original)
+  const repeated = composeArchitectureGraph(sample.intent)
+  assert.deepEqual(repeated.scene, result.scene, 'same graph yields deterministic geometry and ordered elements')
+  assert.equal(repeated.layoutOrderingStrategy, result.layoutOrderingStrategy)
+})
+
+test('P24 不为零交叉高扇出图追加联合布局搜索', () => {
+  for (const id of ['microservices-fanout', 'data-platform-fanout']) {
+    const input = architectureBenchmarkCases('extended').find((item) => item.id === id)!.intent
+    const output = composeArchitectureGraph(input)
+    assert.equal(output.layoutOrderingStrategy, 'semantic', id)
+    assert.equal(output.quality.metrics.edgeNodeIntersections, 0, id)
   }
 })
 

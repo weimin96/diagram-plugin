@@ -26,6 +26,8 @@ export interface ArchitectureBeautifyOptions {
   density?: CanvasArchitectureDensity
   /** Candidate-layout evaluation only; normal architecture inference remains the default. */
   composition?: ArchitectureComposition
+  /** Experimental initial peer ordering from actual inter-region dependencies. */
+  peerOrder?: 'semantic' | 'dependency'
   repartition?: boolean
   relayout?: boolean
   reroute?: boolean
@@ -226,7 +228,7 @@ export function beautifyArchitectureScene(scene: CanvasScene, options: Architect
     },
   }
 
-  if (relayout && repartition) next = layoutArchitectureTopology(next, partitionById, theme, resolvedDensity, composition)
+  if (relayout && repartition) next = layoutArchitectureTopology(next, partitionById, theme, resolvedDensity, composition, options.peerOrder === 'dependency')
   next = applyArchitectureTheme(next, theme, partitionById)
   next = applyArchitectureEmphasis(next, partitionById)
   if (reroute) next = routeArchitectureEdges(next)
@@ -1429,6 +1431,7 @@ function layoutArchitectureTopology(
   theme: ArchitectureTheme,
   density: Exclude<CanvasArchitectureDensity, 'auto'>,
   composition: ArchitectureComposition,
+  dependencyOrder = false,
 ): CanvasScene {
   const metrics = architectureTopologyMetrics(theme, density)
   const boxes = scene.elements.filter((item): item is CanvasNode | CanvasNote => item.type !== 'arrow')
@@ -1439,12 +1442,33 @@ function layoutArchitectureTopology(
     connectionDegree.set(item.from, (connectionDegree.get(item.from) ?? 0) + 1)
     connectionDegree.set(item.to, (connectionDegree.get(item.to) ?? 0) + 1)
   })
+  const byId = new Map(boxes.map((item) => [item.id, item]))
+  // Cross-region dependency-aware barycenters. Ordering is decided before
+  // assigning positions and never uses generated coordinates or input array
+  // order as a graph invariant. Weakly connected nodes keep semantic order.
+  const affinity = new Map<string, { sum: number; weight: number }>()
+  if (dependencyOrder) {
+    for (const edge of scene.elements) {
+      if (edge.type !== 'arrow') continue
+      const source = byId.get(edge.from), target = byId.get(edge.to)
+      if (!source || !target || partitions.get(source.id) === partitions.get(target.id)) continue
+      for (const [id, opposite, weight] of [[source.id, target, 1], [target.id, source, 2]] as const) {
+        const prev = affinity.get(id) ?? { sum: 0, weight: 0 }
+        prev.sum += architectureSortKey(opposite) * weight
+        prev.weight += weight
+        affinity.set(id, prev)
+      }
+    }
+  }
   const members = new Map<ArchitecturePartition, Array<CanvasNode | CanvasNote>>()
   for (const partition of partitionOrder) {
     const placementMode = architectureCompositionPartitionPlacement(composition, partition)
     members.set(partition, boxes
       .filter((item) => partitions.get(item.id) === partition && !item.locked)
-      .sort((a, b) => placementMode === 'center'
+      .sort((a, b) => dependencyOrder && affinity.has(a.id) && affinity.has(b.id)
+        ? (affinity.get(a.id)!.sum / affinity.get(a.id)!.weight - affinity.get(b.id)!.sum / affinity.get(b.id)!.weight)
+          || architectureSortKey(a) - architectureSortKey(b) || a.id.localeCompare(b.id, 'en')
+        : placementMode === 'center'
         ? (connectionDegree.get(b.id) ?? 0) - (connectionDegree.get(a.id) ?? 0) || architectureSortKey(a) - architectureSortKey(b) || (sourceOrder.get(a.id) ?? 0) - (sourceOrder.get(b.id) ?? 0)
         : architectureSortKey(a) - architectureSortKey(b) || a.y - b.y || a.x - b.x))
   }

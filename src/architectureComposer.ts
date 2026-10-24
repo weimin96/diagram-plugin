@@ -352,7 +352,10 @@ function refineArchitectureNodeOrder(
   return { ...best, reorderedPairs }
 }
 
-function composeArchitectureGraphCore(intent: ArchitectureIntentGraph, relationIds?: readonly string[]) {
+function composeArchitectureGraphCandidate(
+  intent: ArchitectureIntentGraph, peerOrder: 'semantic' | 'dependency',
+  relationIds?: readonly string[],
+) {
   const ids = new Set<string>()
   for (const node of intent.nodes) {
     if (ids.has(node.id)) throw new Error(`架构节点 ID 重复：${node.id}`)
@@ -407,7 +410,7 @@ function composeArchitectureGraphCore(intent: ArchitectureIntentGraph, relationI
         ? [inferred, 'layered']
         : [inferred]
   const candidates = compositionCandidates.flatMap((composition) => densityCandidates.map((density) => {
-    const result = beautifyArchitectureScene(scene, { theme: intent.theme, density, composition })
+    const result = beautifyArchitectureScene(scene, { theme: intent.theme, density, composition, peerOrder })
     const quality = assessCanvasVisualQuality(result.scene)
     const evaluation = evaluateArchitectureLayout(result.scene, quality, composition, density)
     // Respect the inferred topology when structural metrics do not justify a different layout.
@@ -474,6 +477,9 @@ function composeArchitectureGraphCore(intent: ArchitectureIntentGraph, relationI
   }
 }
 
+const composeArchitectureGraphCore = (intent: ArchitectureIntentGraph, relationIds?: readonly string[]) =>
+  composeArchitectureGraphCandidate(intent, 'semantic', relationIds)
+
 /**
  * AI clients do not guarantee node/relationship enumeration order. On small
  * graphs with unresolved visual defects, compare the existing composition with
@@ -485,13 +491,39 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
   const baseline = composeArchitectureGraphCore(intent)
   const n = intent.nodes.length
   const m = intent.relations.length
+  // A coordinated variant: cross-region dependencies influence peer placement
+  // BEFORE the ordinary full routing/refinement sequence. Only consider this
+  // expensive alternative for visibly defective, bounded-size graphs.
+  if (n >= 12 && n <= 22 && m <= 30
+    && baseline.quality.metrics.edgeCrossings >= 2
+    && baseline.evaluation.structuralScore < 70) {
+    const candidate = composeArchitectureGraphCandidate(intent, 'dependency')
+    const before = baseline.quality.metrics
+    const after = candidate.quality.metrics
+    const sourceGeometry = baseline.routeDiagnostics
+    const targetGeometry = candidate.routeDiagnostics
+    if (after.nodeOverlaps <= before.nodeOverlaps
+      && after.edgeNodeIntersections <= before.edgeNodeIntersections
+      && after.labelNodeIntersections <= before.labelNodeIntersections
+      && after.edgeCrossings <= before.edgeCrossings - 2
+      && after.edgeOverlaps <= before.edgeOverlaps + 1
+      && candidate.evaluation.structuralScore >= baseline.evaluation.structuralScore + 8
+      && candidate.presentation.estimatedTitlePxAtFit >= 11
+      && candidate.presentation.estimatedTitlePxAtFit >= baseline.presentation.estimatedTitlePxAtFit - 0.5
+      && targetGeometry.crossPartitionRouteLength <= sourceGeometry.crossPartitionRouteLength * 0.9
+      && targetGeometry.frameOverlaps <= sourceGeometry.frameOverlaps + 1
+      && targetGeometry.frameOverlapArea <= sourceGeometry.frameOverlapArea * 2
+      && targetGeometry.unrelatedFrameIntrusionLength <= sourceGeometry.unrelatedFrameIntrusionLength + 300) {
+      return { ...candidate, inputOrderStrategy: 'original' as const, layoutOrderingStrategy: 'dependency' as const }
+    }
+  }
   // Do not double high-fanout search latency or spend more CPU on mild local
   // imperfections for which an order alternative rarely helps.
   if (n < 7 || n > 16 || m > 24
     || (baseline.evaluation.structuralScore >= 80
       && baseline.quality.metrics.edgeOverlaps < 2
       && baseline.quality.metrics.edgeCrossings < 2)) {
-    return { ...baseline, inputOrderStrategy: 'original' as const }
+    return { ...baseline, inputOrderStrategy: 'original' as const, layoutOrderingStrategy: 'semantic' as const }
   }
 
   const idOrder = new Map([
@@ -546,5 +578,5 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
     }
     inputOrderStrategy = variant.name
   }
-  return { ...best, inputOrderStrategy }
+  return { ...best, inputOrderStrategy, layoutOrderingStrategy: 'semantic' as const }
 }

@@ -42,6 +42,7 @@ for (const example of architectureBenchmarkCases(suite)) {
     density: composed.evaluation.density,
     structuralScore: composed.evaluation.structuralScore,
     inputOrderStrategy: composed.inputOrderStrategy,
+    layoutOrderingStrategy: composed.layoutOrderingStrategy,
     presentation: composed.presentation,
     visualPlan: composed.visualPlan,
     partitionFlow: {
@@ -77,6 +78,7 @@ ${results.map((result) => `<section><header><div><h2>${escapeHtml(result.title)}
 <small>${escapeHtml(result.description)}</small></div><div class="stats">
 <span>${result.composition}</span><span>${result.density}</span>
 <span>输入顺序：${result.inputOrderStrategy}</span>
+<span>布局排序：${result.layoutOrderingStrategy}</span>
 <span>${escapeHtml(result.visualPlan.reference.label)} · ${result.visualPlan.recommendedView === 'overview' ? '先看总览' : '直接查看详情'}</span>
 <span>${result.nodes} 节点 / ${result.relations} 关系</span>
 <span>${result.structuralScore} / 90</span>
