@@ -354,6 +354,25 @@ test('renders compact presentation architecture without dashboard metadata in SV
   assert.doesNotMatch(svg, />PG</)
 })
 
+test('enterprise architecture renders primary technical nodes with a restrained focus plate in SVG export', () => {
+  const scene: CanvasScene = {
+    type: 'diagram-plugin-canvas', version: 1, title: 'Main business path',
+    width: 960, height: 620, architecture: { theme: 'enterprise', view: 'detail' },
+    elements: [
+      { id: 'api', type: 'node', x: 90, y: 190, width: 180, height: 80, text: 'Core API', icon: 'api', emphasis: 'primary' },
+      { id: 'worker', type: 'node', x: 430, y: 190, width: 180, height: 80, text: 'Aux Worker', icon: 'worker', emphasis: 'secondary' },
+      { id: 'edge', type: 'arrow', from: 'api', to: 'worker', emphasis: 'primary' },
+    ],
+  }
+  const svg = canvasSceneToSvg(scene)
+  assert.match(svg, /fill-opacity="0\.14" stroke="[^"]+" stroke-opacity="0\.35" stroke-width="1"/)
+  assert.match(svg, /font-weight="730"[^>]*>Core API<\/text>/)
+  assert.doesNotMatch(svg, /font-weight="730"[^>]*>Aux Worker<\/text>/)
+  assert.equal((svg.match(/fill-opacity="0\.14"/g) ?? []).length, 1)
+  const technical = canvasSceneToSvg({ ...scene, architecture: { theme: 'technical' } })
+  assert.doesNotMatch(technical, /font-weight="730"[^>]*>Core API<\/text>/)
+})
+
 test('overview projection keeps source data intact while reducing low-priority architecture detail', () => {
   const nodes = Array.from({ length: 30 }, (_, index) => ({
     id: `node-${index}`,

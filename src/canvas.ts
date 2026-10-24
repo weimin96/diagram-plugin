@@ -1465,6 +1465,7 @@ function renderArchitectureCanvasNode(
   const titleY = item.y + item.height / 2 + (item.subtitle ? -4 : 4)
   const subtitleY = titleY + 17
   const titleSize = compact ? 12 : density === 'compact' ? 12.5 : 13
+  const focused = item.emphasis === 'primary' && theme === 'enterprise'
   const subtitleSize = compact ? 9 : 9.5
   const opacity = item.emphasis === 'muted' ? '0.68' : '1'
   const darkSurface = hexLuminance(palette.text) > 0.62
@@ -1481,10 +1482,12 @@ function renderArchitectureCanvasNode(
     ? `<text x="${textX}" y="${subtitleY}" font-size="${subtitleSize}" fill="${escapeXml(palette.text)}" opacity="${profile.subtitleOpacity}"${fontFamily}>${escapeXml(truncateCanvasText(item.subtitle, compact ? 20 : 26))}</text>`
     : ''
   if (item.iconRef || item.stencil || isArchitectureTechnicalRole(item.icon)) {
-    const plate = profile.nodePlateOpacity > 0
-      ? `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="${profile.nodeRadius}" fill="${escapeXml(palette.fill)}" fill-opacity="${profile.nodePlateOpacity}" stroke="${escapeXml(palette.stroke)}" stroke-opacity="${profile.nodeStrokeOpacity}" stroke-width="${profile.nodeStrokeWidth}"${profile.sketchEdges ? ' stroke-dasharray="6 5"' : ''}/>`
+    const plateOpacity = focused ? 0.14 : profile.nodePlateOpacity
+    const strokeOpacity = focused ? 0.35 : profile.nodeStrokeOpacity
+    const plate = plateOpacity > 0
+      ? `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="${profile.nodeRadius}" fill="${escapeXml(palette.fill)}" fill-opacity="${plateOpacity}" stroke="${escapeXml(palette.stroke)}" stroke-opacity="${strokeOpacity}" stroke-width="${focused ? 1 : profile.nodeStrokeWidth}"${profile.sketchEdges ? ' stroke-dasharray="6 5"' : ''}/>`
       : ''
-    return `<g opacity="${opacity}">${plate}${mark}<text x="${textX}" y="${titleY}" font-size="${(titleSize + profile.titleSizeDelta) * titleScale}" font-weight="${profile.titleWeight}" fill="${escapeXml(palette.text)}"${fontFamily}>${escapeXml(truncateCanvasText(item.text.replace(/\n/g, ' '), compact ? 20 : 26))}</text>${subtitle}</g>`
+    return `<g opacity="${opacity}">${plate}${mark}<text x="${textX}" y="${titleY}" font-size="${(titleSize + profile.titleSizeDelta + (focused ? 0.8 : 0)) * titleScale}" font-weight="${focused ? 730 : profile.titleWeight}" fill="${escapeXml(palette.text)}"${fontFamily}>${escapeXml(truncateCanvasText(item.text.replace(/\n/g, ' '), compact ? 20 : 26))}</text>${subtitle}</g>`
   }
   const borderDash = item.icon === 'external' || item.c4Type === 'software-system' ? ' stroke-dasharray="5 4"' : ''
   const fillOpacity = item.emphasis === 'primary' ? '0.54' : '0.32'

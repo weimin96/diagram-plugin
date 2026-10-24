@@ -824,6 +824,8 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 :root[data-theme='dark'] .freeform-editor.is-architecture-mode .freeform-arrow.is-collapsed-summary { opacity: .96; }
 .freeform-editor.is-architecture-mode .freeform-group-frame > rect:first-of-type { fill: color-mix(in srgb, var(--surface-muted) 12%, transparent); stroke: color-mix(in srgb, var(--text-tertiary) 38%, transparent); stroke-width: 1; }
 .freeform-editor.architecture-theme-enterprise .freeform-group-frame > rect:first-of-type { fill: color-mix(in srgb, var(--surface-muted) 8%, transparent); stroke: color-mix(in srgb, var(--text-tertiary) 28%, transparent); stroke-dasharray: 7 7; }
+.freeform-editor.is-architecture-mode.architecture-theme-enterprise .freeform-box.is-architecture-mark.emphasis-primary > rect:first-of-type { fill: color-mix(in srgb, var(--surface-raised) 14%, transparent); stroke: color-mix(in srgb, var(--text-secondary) 35%, transparent); stroke-width: 1; }
+.freeform-editor.is-architecture-mode.architecture-theme-enterprise .freeform-box.is-architecture-mark.emphasis-primary .freeform-node-title { font-size: 13.8px; font-weight: 730; }
 .freeform-editor.architecture-theme-enterprise .freeform-grid-line { opacity: .18; }
 .freeform-editor.architecture-theme-enterprise .freeform-group-frame.tone-accent text { fill: color-mix(in srgb, var(--accent) 60%, var(--text-secondary)); }
 .freeform-editor.architecture-theme-enterprise .freeform-group-frame.tone-success text { fill: color-mix(in srgb, #059669 58%, var(--text-secondary)); }
