@@ -14,6 +14,7 @@
     "visual:smoke": "node scripts/visual-smoke.mjs",
     "visual:styles": "node --import tsx scripts/visual-styles.ts",
     "visual:benchmark": "node scripts/visual-smoke.mjs --source-dir tests/fixtures/visual-stress --quality-benchmark",
+    "benchmark:architecture": "node --import tsx scripts/benchmark-architecture.ts",
     "perf:canvas": "node scripts/benchmark-canvas.mjs",
     "visual:regression": "node scripts/visual-regression.mjs",
     "visual:regression:update": "node scripts/visual-regression.mjs --update",

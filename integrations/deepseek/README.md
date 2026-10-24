@@ -44,6 +44,7 @@ dsh plugin --profile desktop add @weimin96/diagram-plugin
 - 设计质量检查：除了重叠和交叉，还会提示重复产品卡片矩阵、互不连通的高扇出中心和只有分层背景却没有跨层关系的图表。不会为了通过检查自动虚构调用关系。
 - 多候选布局：专业架构会对自动推断的结构和紧凑程度尝试有限个确定性候选，按碰撞、边线交叉、外围绕线和画布可读性选择；返回的 `architectureEvaluation.structuralScore` 最高只有 90，是程序结构启发式分数，**不是视觉审美的百分制评分**。新架构使用浅色语义节点，避免大面积高饱和度色块。
 - 局部线路收敛：候选布局选定后，最多执行三轮有界 reroute，只针对交叉、重叠、穿节点或超长绕线涉及的关系边；质量没有严格提升则不保存候选，节点位置和原始语义关系始终不变。
+- 架构质量基准：运行 `pnpm benchmark:architecture`，对五类虚构参考拓扑生成可编辑 `.diagram.json`、独立 `.svg`、`report.json` 与 `index.html` 视觉对比页，默认输出在被 Git 忽略的 `test-results/architecture-benchmark/`。数值只代表几何/结构启发式，视觉仍需人工检查。
 
 ## 兼容性
 
