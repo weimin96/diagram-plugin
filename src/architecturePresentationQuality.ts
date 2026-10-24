@@ -28,6 +28,44 @@ export function recommendArchitectureReadableZoom(
   return Math.min(maxZoom, Math.max(currentZoom, 1, Math.ceil(target * 100) / 100))
 }
 
+/** A view-only camera recommendation, centered on the most connected existing
+ * primary-path node. Dense panoramas should not open into unreadable blank
+ * corridors. The actual canvas geometry and all relationships are untouched. */
+export function recommendArchitectureReadingViewport(
+  scene: CanvasScene,
+  viewportWidth: number,
+  viewportHeight: number,
+  currentZoom = 1,
+  targetFontPx = 11.5,
+  maxZoom = 4,
+): { x: number; y: number; zoom: number } {
+  if (!scene.architecture || viewportWidth <= 0 || viewportHeight <= 0
+    || scene.width <= 0 || scene.height <= 0) return { x: 0, y: 0, zoom: currentZoom }
+  const nodes = scene.elements.filter((item): item is CanvasNode => item.type === 'node')
+  const primary = nodes.filter((item) => item.emphasis === 'primary')
+  const relevant = primary.length ? primary : nodes
+  const degrees = new Map<string, number>()
+  for (const item of scene.elements) {
+    if (item.type !== 'arrow') continue
+    const weight = item.emphasis === 'primary' ? 2 : 1
+    degrees.set(item.from, (degrees.get(item.from) ?? 0) + weight)
+    degrees.set(item.to, (degrees.get(item.to) ?? 0) + weight)
+  }
+  const focus = relevant.slice().sort((a, b) =>
+    (degrees.get(b.id) ?? 0) - (degrees.get(a.id) ?? 0) || a.id.localeCompare(b.id, 'en'))[0]
+  const zoom = recommendArchitectureReadableZoom(scene, viewportWidth, viewportHeight, currentZoom, targetFontPx, maxZoom)
+  const visibleWidth = scene.width / zoom
+  const visibleHeight = scene.height / zoom
+  const centerX = focus ? focus.x + focus.width / 2 : scene.width / 2
+  const centerY = focus ? focus.y + focus.height / 2 : scene.height / 2
+  const clamp = (x: number, max: number) => Math.max(0, Math.min(max, x))
+  return {
+    x: clamp(centerX - visibleWidth / 2, Math.max(0, scene.width - visibleWidth)),
+    y: clamp(centerY - visibleHeight / 2, Math.max(0, scene.height - visibleHeight)),
+    zoom,
+  }
+}
+
 /** Boost generated titles only when they still fit their cards. Never upscale existing files implicitly. */
 export function recommendArchitectureTitleScale(scene: CanvasScene, referenceWidth = 1200): number {
   if (!scene.architecture || scene.width <= referenceWidth || !scene.elements.length) return 1

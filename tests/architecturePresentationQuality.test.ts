@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { CanvasScene } from '../src/canvas.js'
-import { assessArchitecturePresentation, recommendArchitectureReadableZoom, recommendArchitectureTitleScale } from '../src/architecturePresentationQuality.js'
+import { assessArchitecturePresentation, recommendArchitectureReadableZoom, recommendArchitectureReadingViewport, recommendArchitectureTitleScale } from '../src/architecturePresentationQuality.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
-import { canvasSceneToSvg, parseCanvasScene, serializeCanvasScene } from '../src/canvas.js'
+import { canvasArchitectureProjection, canvasSceneToSvg, parseCanvasScene, serializeCanvasScene } from '../src/canvas.js'
 import { architectureCases } from './fixtures/architecture/cases.js'
 
 function twoNodes(width: number, nodesAt: number[]): CanvasScene {
@@ -74,4 +74,44 @@ test('清晰阅读使用实际面板尺寸，同时不修改场景和既有缩�
   const ordinary = { ...wide, architecture: undefined }
   assert.equal(recommendArchitectureReadableZoom(ordinary, 720, 500), 1)
   assert.equal(JSON.stringify(wide), original)
+})
+
+test('主链阅读优先聚焦真实高关联核心节点，并维持字号与场景不变', () => {
+  const scene: CanvasScene = {
+    ...twoNodes(2400, [100, 1950]), height: 960,
+    elements: [
+      { id: 'entry', type: 'node', text: '入口', x: 100, y: 100, width: 160, height: 72, emphasis: 'primary' },
+      { id: 'core', type: 'node', text: '核心', x: 1570, y: 420, width: 160, height: 72, emphasis: 'primary' },
+      { id: 'other', type: 'node', text: '外围', x: 2080, y: 700, width: 160, height: 72, emphasis: 'secondary' },
+      { id: 'link1', type: 'arrow', from: 'entry', to: 'core', emphasis: 'primary' },
+      { id: 'link2', type: 'arrow', from: 'core', to: 'other' },
+      { id: 'link3', type: 'arrow', from: 'core', to: 'entry' },
+    ],
+  }
+  const before = JSON.stringify(scene)
+  const view = recommendArchitectureReadingViewport(scene, 900, 620)
+  const scale = Math.min(900 / scene.width, 620 / scene.height)
+  assert.ok(12.5 * view.zoom * scale >= 11.5)
+  const centerX = view.x + scene.width / view.zoom / 2
+  const centerY = view.y + scene.height / view.zoom / 2
+  assert.ok(Math.abs(centerX - 1650) < 0.1, 'center on the primary node with highest relationship degree')
+  assert.ok(Math.abs(centerY - 456) < 0.1)
+  assert.equal(recommendArchitectureReadingViewport(scene, 900, 620, view.zoom + .2).zoom, view.zoom + .2)
+  assert.equal(JSON.stringify(scene), before)
+  assert.deepEqual(recommendArchitectureReadingViewport({ ...scene, architecture: undefined }, 900, 620),
+    { x: 0, y: 0, zoom: 1 })
+})
+
+test('总览只在当前可见节点中选择聚焦对象，不追踪被隐藏的主链节点', () => {
+  const scene = twoNodes(2400, [200, 800])
+  const primary = scene.elements[0]
+  if (primary.type !== 'node') throw new Error('Expected node')
+  scene.elements[0] = { ...primary, emphasis: 'primary' }
+  const preview = { ...scene, elements: scene.elements.slice(1) }
+  const view = recommendArchitectureReadingViewport(preview, 800, 500)
+  assert.ok(view.zoom > 1)
+  const centerX = view.x + scene.width / view.zoom / 2
+  assert.ok(Math.abs(centerX - 880) < 1)
+  const full = canvasArchitectureProjection({ ...scene, architecture: { ...scene.architecture!, view: 'detail' } })
+  assert.equal(full.scene.elements.length, scene.elements.length)
 })
