@@ -2,6 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
+import { architecturePartitionFlow } from '../src/architecturePartitionFlow.js'
 import { canvasSceneToSvg, serializeCanvasScene } from '../src/canvas.js'
 import { architectureBenchmarkCases } from './architecture-benchmark-cases.js'
 
@@ -24,6 +25,7 @@ const results = []
 for (const example of architectureBenchmarkCases(suite)) {
   const started = performance.now()
   const composed = composeArchitectureGraph(example.intent)
+  const partitionFlow = architecturePartitionFlow(composed.scene)
   const elapsedMs = Math.round(performance.now() - started)
   const svg = canvasSceneToSvg(composed.scene)
   await writeFile(path.join(output, `${example.id}.diagram.json`), serializeCanvasScene(composed.scene))
@@ -39,6 +41,11 @@ for (const example of architectureBenchmarkCases(suite)) {
     density: composed.evaluation.density,
     structuralScore: composed.evaluation.structuralScore,
     presentation: composed.presentation,
+    partitionFlow: {
+      stages: partitionFlow.steps.map((step) => step.id),
+      crossPartitionRelations: partitionFlow.crossPartitionRelations,
+      internalRelations: partitionFlow.internalRelations,
+    },
     reroutedEdges: composed.reroutedEdges,
     aspectRatio: composed.evaluation.aspectRatio,
     metrics: composed.quality.metrics,
@@ -69,6 +76,7 @@ ${results.map((result) => `<section><header><div><h2>${escapeHtml(result.title)}
 <span>${result.structuralScore} / 90</span>
 <span>适配字号约 ${result.presentation.estimatedTitlePxAtFit}px</span>
 <span>交叉 ${result.metrics.edgeCrossings} · 重叠 ${result.metrics.edgeOverlaps} · 穿节点 ${result.metrics.edgeNodeIntersections}</span>
+<span>跨分区 ${result.partitionFlow.crossPartitionRelations}</span>
 </div></header><img src="./${result.id}.svg" loading="lazy" alt="${escapeHtml(result.title)}">
 ${result.issues.length || result.presentation.warnings.length ? `<p class="issues">${[...result.issues.map(({ code }) => code), ...result.presentation.warnings].map(escapeHtml).join(' · ')}</p>` : ''}</section>`).join('\n')}
 </main></body></html>`)

@@ -6,6 +6,7 @@ import { buildCanvasPlaybackPlan } from './canvasPlayback.js'
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Hand, Link2, MousePointer2, Shapes, Type, type IconNode } from 'lucide'
 import { applyArchitectureTheme as applyArchitectureThemeToScene, beautifyArchitectureScene, routeArchitectureArrowIds, routeArchitectureEdges, routeArchitectureEdgesIncremental, type ArchitectureTheme } from './architectureDesign.js'
+import { architecturePartitionFlow } from './architecturePartitionFlow.js'
 import { recommendArchitectureReadableZoom } from './architecturePresentationQuality.js'
 import { ARCHITECTURE_NODE_TEMPLATES, architectureNodeTemplate, type ArchitectureNodeTemplate, type ArchitectureNodeTemplateProvider } from './architectureNodeTemplates.js'
 import { anchorPoint, canvasArchitectureCardTemplate, canvasArchitectureHeader, canvasArchitectureProjection, canvasArchitectureRelationLabelVisible, canvasArchitectureScopeProjection, canvasArrowBoxRoute, canvasArrowLabelLayouts, canvasArrowPath, canvasArrowRoutePath, canvasArrowRoutePoints, canvasBundleTrunks, canvasCollapsedConnections, canvasCollapsedOwners, canvasGroupFrames, canvasIconLabel, canvasIconPaths, canvasIconRefLabel, canvasIconRefMarkup, canvasSemanticLodProjection, resolveCanvasSemanticLod, canvasStencilLabel, canvasStencilVisual, c4Label, parseCanvasScene, serializeCanvasScene, type CanvasAnchor, type CanvasArchitectureDensity, type CanvasArchitectureScope, type CanvasArchitectureView, type CanvasArrow, type CanvasC4Type, type CanvasElement, type CanvasGroup, type CanvasGroupFrame, type CanvasIcon, type CanvasIconRef, type CanvasLineStyle, type CanvasNode, type CanvasNote, type CanvasPoint, type CanvasRouting, type CanvasScene, type CanvasSemanticLodLevel, type CanvasShape, type CanvasStencil, type CanvasTone } from './canvas.js'
@@ -853,6 +854,8 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
     if (!parsed.scene) return null
     return canvasArchitectureProjection(parsed.scene)
   }, [parsed.scene])
+  const partitionFlow = useMemo(() => parsed.scene?.architecture
+    ? architecturePartitionFlow(parsed.scene) : null, [parsed.scene])
   const staticScopeProjection = useMemo(() => {
     if (!parsed.scene || !architectureScope) return null
     return canvasArchitectureScopeProjection(parsed.scene, architectureScope)
@@ -2796,6 +2799,27 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                       ))}
                     </div>
                   </section>
+                  {partitionFlow?.steps.length ? (
+                    <section className="freeform-architecture-dependency-navigation">
+                      <span>依赖分区 · {partitionFlow.crossPartitionRelations} 跨区关系</span>
+                      <div className="freeform-menu-stack">
+                        {partitionFlow.steps.map((step, index) => (
+                          <button
+                            type="button"
+                            key={step.id}
+                            aria-label={`查看分区 ${step.label}，${step.nodeCount} 个节点`}
+                            aria-current={architectureScope?.kind === 'group' && architectureScope.id === step.id ? 'step' : undefined}
+                            className={architectureScope?.kind === 'group' && architectureScope.id === step.id ? 'is-selected' : ''}
+                            onClick={() => { enterArchitectureScope({ kind: 'group', id: step.id }); setToolbarMenu(null) }}
+                          >
+                            <span><strong>{index + 1}. {step.label}</strong><small>{step.nodeCount} 节点 · 入 {step.incoming} / 出 {step.outgoing}</small></span>
+                            <b>›</b>
+                          </button>
+                        ))}
+                      </div>
+                      {architectureScope ? <button type="button" onClick={() => { leaveArchitectureScope(); setToolbarMenu(null) }}>返回全局</button> : null}
+                    </section>
+                  ) : null}
                   <section className="freeform-asset-library-entry">
                     <button type="button" onClick={() => setArchitecturePanel('assets')}>
                       <span><strong>组件模板</strong><small>通用、AWS、Azure、GCP</small></span>
