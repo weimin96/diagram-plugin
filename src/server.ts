@@ -903,7 +903,7 @@ server.registerTool('diagram.composeArchitecture', {
       kind: 'diagram', workspacePath: store.workspacePath, diagram,
       architectureDesign: composed.summary,
       quality: composed.quality,
-      architectureEvaluation: { selected: composed.evaluation, candidates: composed.candidates, reroutedEdges: composed.reroutedEdges, reorderedPairs: composed.reorderedPairs, note: 'Structural/layout heuristic only, not a visual aesthetic score.' },
+      architectureEvaluation: { semanticComposition: composed.semanticComposition, selected: composed.evaluation, candidates: composed.candidates, reroutedEdges: composed.reroutedEdges, reorderedPairs: composed.reorderedPairs, note: 'Structural/layout heuristic only, not a visual aesthetic score. The selected layout can differ from the semantic composition when geometry improves.' },
       presentationQuality: composed.presentation,
     },
   }

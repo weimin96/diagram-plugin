@@ -3,6 +3,7 @@ import test from 'node:test'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { assessCanvasVisualQuality } from '../src/canvasQuality.js'
 import { canvasBundleTrunks } from '../src/canvas.js'
+import { inferArchitectureComposition } from '../src/architectureDesign.js'
 import { architectureCases } from './fixtures/architecture/cases.js'
 
 test('真实规模虚构拓扑基准不丢失语义关系或穿过节点', () => {
@@ -93,4 +94,22 @@ test('共享真实出口主干，仍检测无关线路重叠与伪造 Bundle', (
     item.type === 'arrow' && (item.id === '__relation-2' || item.id === '__relation-10')
       ? { ...item, bundleKey: 'from:forged' } : item) }
   assert.equal(assessCanvasVisualQuality(fake).metrics.edgeOverlaps, 1)
+})
+
+test('Kafka 和批流数据管线不会被混成普通事件图，微服务不误判', () => {
+  for (const [id, expected] of [['data-platform', 'data-platform'], ['microservices', 'event-driven']] as const) {
+    const example = architectureCases.find((item) => item.id === id)!
+    const scene = {
+      type: 'diagram-plugin-canvas' as const, version: 1 as const, title: example.intent.title,
+      width: 1200, height: 800,
+      elements: [
+        ...example.intent.nodes.map((node) => ({ ...node, type: 'node' as const, x: 0, y: 0, width: 204, height: 84 })),
+        ...example.intent.relations.map(({ from, to }, index) => ({ id: `rel-${index}`, type: 'arrow' as const, from, to })),
+      ],
+    }
+    assert.equal(inferArchitectureComposition(scene), expected, id)
+    const result = composeArchitectureGraph(example.intent)
+    assert.equal(result.semanticComposition, expected, id)
+    assert.ok(result.candidates.some((candidate) => candidate.layout === expected), id)
+  }
 })

@@ -86,6 +86,8 @@ test('架构语义图通过真实 MCP 一次生成、保存和质量评估', asy
     assert.equal(created.structuredContent.diagram.canvasWorkbench, 'architecture')
     assert.equal(created.structuredContent.quality.metrics.nodeOverlaps, 0)
     assert.ok(created.structuredContent.architectureEvaluation.candidates.length >= 2)
+    assert.ok(['layered', 'hub-spoke', 'event-driven', 'data-platform', 'agent-runtime', 'cloud-native']
+      .includes(created.structuredContent.architectureEvaluation.semanticComposition))
     assert.ok(created.structuredContent.architectureEvaluation.selected.structuralScore <= 90)
     assert.ok(created.structuredContent.presentationQuality.estimatedTitlePxAtFit > 0)
     assert.ok(created.structuredContent.architectureEvaluation.reroutedEdges >= 0)

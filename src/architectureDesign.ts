@@ -136,8 +136,12 @@ function detectArchitectureComposition(
 
   if (ai.length && mcp.length && Math.max(...ai.map((item) => degree.get(item.id) ?? 0), 0) >= 3) return 'agent-runtime'
   if (cloudInfra.length >= 2 && boxes.filter((item) => partitions.get(item.id) === 'application').length >= 2) return 'cloud-native'
+  // A Kafka bus alone must not turn a complete ingest/process/store pipeline
+  // into an event-only diagram. Prefer its data-platform semantics when the
+  // independent processing and storage tiers are both present.
+  if (processing.length >= 2 && data.length >= 3 && sources.length >= 1
+    && (!queues.length || workers.length >= 2)) return 'data-platform'
   if (queues.length && workers.length && queues.some((item) => (degree.get(item.id) ?? 0) >= 2)) return 'event-driven'
-  if (processing.length >= 2 && data.length >= 3 && sources.length >= 1) return 'data-platform'
 
   const degrees = boxes.map((item) => degree.get(item.id) ?? 0)
   const maxDegree = Math.max(...degrees, 0)

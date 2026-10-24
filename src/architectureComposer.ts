@@ -386,6 +386,7 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
     [`${candidate.summary.composition}:${candidate.summary.resolvedDensity}`, candidate.evaluation]))
   return {
     ...selected, ...ordered, scene: finalScene, quality: finalQuality, evaluation: finalEvaluation,
+    semanticComposition: inferred,
     presentation: assessArchitecturePresentation(finalScene),
     candidates: candidates.map(({ evaluation, summary }) =>
       summary.composition === selected.summary.composition && summary.resolvedDensity === selected.summary.resolvedDensity
