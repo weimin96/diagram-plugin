@@ -202,8 +202,15 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
   const densityCandidates: Array<Exclude<CanvasArchitectureDensity, 'auto'>> = intent.density && intent.density !== 'auto'
     ? [intent.density]
     : [...new Set([autoDensity, autoDensity === 'comfortable' ? 'compact' : 'comfortable'])] as Array<Exclude<CanvasArchitectureDensity, 'auto'>>
-  const compositionCandidates: ArchitectureComposition[] = ['hub-spoke', 'event-driven', 'data-platform', 'cloud-native'].includes(inferred)
-    ? [inferred, 'layered'] : [inferred]
+  // Keep the semantic intent, but consider one additional topology when the
+  // initial event/data/cloud silhouette produces excessive routing detours.
+  // The inferred composition retains a six-point tie-breaking preference.
+  const compositionCandidates: ArchitectureComposition[] =
+    ['event-driven', 'data-platform', 'cloud-native'].includes(inferred)
+      ? [inferred, 'layered', 'hub-spoke']
+      : inferred === 'hub-spoke' || inferred === 'agent-runtime'
+        ? [inferred, 'layered']
+        : [inferred]
   const candidates = compositionCandidates.flatMap((composition) => densityCandidates.map((density) => {
     const result = beautifyArchitectureScene(scene, { theme: intent.theme, density, composition })
     const quality = assessCanvasVisualQuality(result.scene)
@@ -216,10 +223,31 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
   candidates.sort((a, b) => b.selectionScore - a.selectionScore
     || a.quality.issues.length - b.quality.issues.length
     || a.summary.composition.localeCompare(b.summary.composition))
-  const { selectionScore: _selectionScore, ...selected } = candidates[0]
-  const refined = refineArchitectureRoutes(selected.scene, selected.summary.composition, selected.summary.resolvedDensity)
+  // Comparing only pre-refinement layouts can select a worse final diagram.
+  // Refine the best candidate for each distinct topology (max 3) and select
+  // according to the actual post-routing quality, not the preliminary score.
+  const shortlisted = candidates
+    .filter((candidate, index) => candidates.findIndex((other) =>
+      other.summary.composition === candidate.summary.composition) === index)
+    .slice(0, 3)
+  const refined = shortlisted.map((candidate) => {
+    const result = refineArchitectureRoutes(candidate.scene, candidate.summary.composition, candidate.summary.resolvedDensity)
+    return {
+      ...candidate,
+      ...result,
+      selectionScore: result.evaluation.structuralScore
+        - (candidate.summary.composition === inferred ? 0 : 6)
+        - (candidate.summary.resolvedDensity === autoDensity ? 0 : 1),
+    }
+  }).sort((a, b) => b.selectionScore - a.selectionScore
+    || a.quality.issues.length - b.quality.issues.length
+    || a.summary.composition.localeCompare(b.summary.composition))
+  const { selectionScore: _selectionScore, ...selected } = refined[0]
+  const refinedByLayout = new Map(refined.map((candidate) =>
+    [`${candidate.summary.composition}:${candidate.summary.resolvedDensity}`, candidate.evaluation]))
   return {
-    ...selected, ...refined,
-    candidates: candidates.map(({ evaluation }, index) => index === 0 ? refined.evaluation : evaluation),
+    ...selected,
+    candidates: candidates.map(({ evaluation, summary }) =>
+      refinedByLayout.get(`${summary.composition}:${summary.resolvedDensity}`) ?? evaluation),
   }
 }

@@ -30,3 +30,15 @@ test('业务平台基准无交叉、无重叠，且输出稳定', () => {
   assert.equal(first.quality.metrics.excessiveEdgeDetours, 0)
   assert.deepEqual(composeArchitectureGraph(example.intent).scene, first.scene)
 })
+
+test('部署拓扑候选选择在不退化业务平台的条件下降低交叉', () => {
+  const example = architectureCases.find((item) => item.id === 'deployment')!
+  const output = composeArchitectureGraph(example.intent)
+  assert.ok(output.candidates.length >= 3)
+  assert.equal(output.quality.metrics.nodeOverlaps, 0)
+  assert.equal(output.quality.metrics.edgeNodeIntersections, 0)
+  assert.equal(output.quality.metrics.edgeCrossings, 0)
+  assert.ok(output.evaluation.structuralScore >= 80)
+  assert.ok(output.candidates.some((candidate) => candidate.layout === 'hub-spoke'))
+  assert.equal(output.evaluation.issueCount, output.quality.issues.length)
+})
