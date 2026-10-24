@@ -11,7 +11,11 @@ export interface ArchitectureRouteDiagnostics {
   /** Pixel area of overlapping, unrelated sibling frames. */
   frameOverlapArea: number
   /** Largest unrelated frame collisions, with the two actual group IDs. */
-  worstFrameOverlaps: Array<{ firstGroupId: string; secondGroupId: string; area: number }>
+  worstFrameOverlaps: Array<{
+    firstGroupId: string; secondGroupId: string; area: number
+    /** Members geometrically entering the opposing frame; not inferred causes. */
+    intrudingNodeIds: string[]
+  }>
   /** Total length of route segments passing inside unrelated partition frames. */
   unrelatedFrameIntrusionLength: number
   /** Top offending edge/frame pairs for targeted route review (not a visual score). */
@@ -38,6 +42,9 @@ export function assessArchitectureRouteDiagnostics(scene: CanvasScene): Architec
     .map((item) => [item.id, item]))
   const groups = new Map((scene.groups ?? []).map((group) => [group.id, group]))
   const frames = canvasGroupFrames(scene).filter((frame) => !frame.collapsed)
+  const intersects = (node: CanvasNode, frame: (typeof frames)[number]) =>
+    Math.min(node.x + node.width, frame.x + frame.width) > Math.max(node.x, frame.x)
+    && Math.min(node.y + node.height, frame.y + frame.height) > Math.max(node.y, frame.y)
   let frameOverlaps = 0
   let frameOverlapArea = 0
   const frameCollisions: ArchitectureRouteDiagnostics['worstFrameOverlaps'] = []
@@ -54,7 +61,20 @@ export function assessArchitectureRouteDiagnostics(scene: CanvasScene): Architec
       frameOverlaps += 1
       const area = Math.round(width * height)
       frameOverlapArea += area
-      frameCollisions.push({ firstGroupId: a.id, secondGroupId: b.id, area })
+      const intrudingNodes = [
+        ...a.memberIds.filter((id) => nodes.get(id)?.groupId === a.id && intersects(nodes.get(id)!, b)),
+        ...b.memberIds.filter((id) => nodes.get(id)?.groupId === b.id && intersects(nodes.get(id)!, a)),
+      ]
+      const overlapWithOppositeFrame = (id: string) => {
+        const node = nodes.get(id)!
+        const opposite = node.groupId === a.id ? b : a
+        return (Math.min(node.x + node.width, opposite.x + opposite.width) - Math.max(node.x, opposite.x))
+          * (Math.min(node.y + node.height, opposite.y + opposite.height) - Math.max(node.y, opposite.y))
+      }
+      const intrudingNodeIds = intrudingNodes.sort((left, right) =>
+        overlapWithOppositeFrame(right) - overlapWithOppositeFrame(left)
+        || left.localeCompare(right, 'en')).slice(0, 4)
+      frameCollisions.push({ firstGroupId: a.id, secondGroupId: b.id, area, intrudingNodeIds })
     }
   }
   let totalRouteLength = 0

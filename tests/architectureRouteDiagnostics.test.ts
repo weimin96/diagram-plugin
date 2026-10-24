@@ -18,6 +18,7 @@ test('跨区指标独立于图表存储与原始节点关系，重复计算确�
   assert.deepEqual(assessArchitectureRouteDiagnostics(graph), result)
   assert.ok(result.worstFrameIntrusions.every((item) => item.length > 0))
   assert.ok(result.worstFrameOverlaps.every((item) => item.area > 0))
+  assert.ok(result.worstFrameOverlaps.every((item) => item.intrudingNodeIds.length <= 4))
   assert.equal(JSON.stringify(graph), before)
 })
 
@@ -39,6 +40,7 @@ test('只将无关分区的几何交叠作为错误，不将父子包含误报',
   assert.ok(collided.frameOverlapArea > 0)
   assert.deepEqual(collided.worstFrameOverlaps.map(({ firstGroupId, secondGroupId, area }) =>
     [firstGroupId, secondGroupId, area]), [['root', 'other', collided.frameOverlapArea]])
+  assert.deepEqual(collided.worstFrameOverlaps[0].intrudingNodeIds, ['b'])
   const other = scene.elements[1]
   if (other.type !== 'node') throw new Error('Expected a node')
   scene.elements[1] = { ...other, x: 650 }

@@ -67,6 +67,7 @@ test('高扇出重叠给出真实关系 ID 的定向修复目标，而不是虚�
   assert.ok(frameTargets.every((target) => target.elementIds.length === 2
     && target.elementIds.every((id) => groupIds.has(id))
     && target.action.includes('不能简单平移')))
+  assert.ok(frameTargets.some((target) => target.action.includes('进入对方边界的节点')))
   assert.ok(output.visualPlan.review.repairTargets.length <= 5)
 })
 

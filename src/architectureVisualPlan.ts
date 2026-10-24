@@ -176,7 +176,7 @@ export function planArchitectureVisual(
     if (!existingGroups.has(overlap.firstGroupId) || !existingGroups.has(overlap.secondGroupId)) continue
     repairTargets.push({
       concern: 'frame-overlap', elementIds: [overlap.firstGroupId, overlap.secondGroupId],
-      action: `两个无关分区重叠 ${overlap.area}px²；需联合调整分区布局和关联路线，不能简单平移或缩小节点`,
+      action: `两个无关分区重叠 ${overlap.area}px²${overlap.intrudingNodeIds.length ? `，进入对方边界的节点：${overlap.intrudingNodeIds.join('、')}` : ''}；需联合调整分区布局和关联路线，不能简单平移或缩小节点`,
     })
   }
   // The five-target budget must not hide an unreadable wide diagram behind
