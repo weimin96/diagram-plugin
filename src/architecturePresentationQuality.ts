@@ -9,6 +9,25 @@ export interface ArchitecturePresentationQuality {
   warnings: Array<'small-fit-text' | 'low-content-coverage'>
 }
 
+/** Compute a legible zoom for the real editor size, rather than assuming a
+ * 1200px-wide canvas. This is a transient viewport adjustment, not a scene edit. */
+export function recommendArchitectureReadableZoom(
+  scene: CanvasScene,
+  viewportWidth: number,
+  viewportHeight: number,
+  currentZoom = 1,
+  targetFontPx = 11.5,
+  maxZoom = 4,
+): number {
+  if (!scene.architecture || viewportWidth <= 0 || viewportHeight <= 0 || scene.width <= 0 || scene.height <= 0) {
+    return currentZoom
+  }
+  const font = (scene.architecture.density === 'dense' ? 12 : 12.5) * (scene.architecture.titleScale ?? 1)
+  const screenScaleAtOne = Math.min(viewportWidth / scene.width, viewportHeight / scene.height)
+  const target = targetFontPx / Math.max(.01, font * screenScaleAtOne)
+  return Math.min(maxZoom, Math.max(currentZoom, 1, Math.ceil(target * 100) / 100))
+}
+
 /** Boost generated titles only when they still fit their cards. Never upscale existing files implicitly. */
 export function recommendArchitectureTitleScale(scene: CanvasScene, referenceWidth = 1200): number {
   if (!scene.architecture || scene.width <= referenceWidth || !scene.elements.length) return 1

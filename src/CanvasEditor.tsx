@@ -6,6 +6,7 @@ import { buildCanvasPlaybackPlan } from './canvasPlayback.js'
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Hand, Link2, MousePointer2, Shapes, Type, type IconNode } from 'lucide'
 import { applyArchitectureTheme as applyArchitectureThemeToScene, beautifyArchitectureScene, routeArchitectureArrowIds, routeArchitectureEdges, routeArchitectureEdgesIncremental, type ArchitectureTheme } from './architectureDesign.js'
+import { recommendArchitectureReadableZoom } from './architecturePresentationQuality.js'
 import { ARCHITECTURE_NODE_TEMPLATES, architectureNodeTemplate, type ArchitectureNodeTemplate, type ArchitectureNodeTemplateProvider } from './architectureNodeTemplates.js'
 import { anchorPoint, canvasArchitectureCardTemplate, canvasArchitectureHeader, canvasArchitectureProjection, canvasArchitectureRelationLabelVisible, canvasArchitectureScopeProjection, canvasArrowBoxRoute, canvasArrowLabelLayouts, canvasArrowPath, canvasArrowRoutePath, canvasArrowRoutePoints, canvasBundleTrunks, canvasCollapsedConnections, canvasCollapsedOwners, canvasGroupFrames, canvasIconLabel, canvasIconPaths, canvasIconRefLabel, canvasIconRefMarkup, canvasSemanticLodProjection, resolveCanvasSemanticLod, canvasStencilLabel, canvasStencilVisual, c4Label, parseCanvasScene, serializeCanvasScene, type CanvasAnchor, type CanvasArchitectureDensity, type CanvasArchitectureScope, type CanvasArchitectureView, type CanvasArrow, type CanvasC4Type, type CanvasElement, type CanvasGroup, type CanvasGroupFrame, type CanvasIcon, type CanvasIconRef, type CanvasLineStyle, type CanvasNode, type CanvasNote, type CanvasPoint, type CanvasRouting, type CanvasScene, type CanvasSemanticLodLevel, type CanvasShape, type CanvasStencil, type CanvasTone } from './canvas.js'
 import { CANVAS_ICON_CATALOG, type CanvasIconSource } from './iconRegistry.js'
@@ -2621,6 +2622,27 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
     setViewport({ x: 0, y: 0, zoom: 1 })
   }
 
+  function readArchitectureClearly() {
+    const live = currentScene()
+    const bounds = svgRef.current?.getBoundingClientRect()
+    if (!live.architecture || !bounds) return
+    const nextZoom = recommendArchitectureReadableZoom(
+      live, bounds.width, bounds.height, viewport.zoom, 11.5, MAX_ZOOM,
+    )
+    if (nextZoom <= viewport.zoom) return
+    const viewWidth = live.width / viewport.zoom
+    const viewHeight = live.height / viewport.zoom
+    const centerX = viewport.x + viewWidth / 2
+    const centerY = viewport.y + viewHeight / 2
+    const nextWidth = live.width / nextZoom
+    const nextHeight = live.height / nextZoom
+    setViewport({
+      zoom: nextZoom,
+      x: clamp(centerX - nextWidth / 2, 0, Math.max(0, live.width - nextWidth)),
+      y: clamp(centerY - nextHeight / 2, 0, Math.max(0, live.height - nextHeight)),
+    })
+  }
+
   function recenterFromMinimap(event: React.PointerEvent<SVGSVGElement>) {
     const bounds = event.currentTarget.getBoundingClientRect()
     const targetX = minimapViewBounds.x + ((event.clientX - bounds.left) / Math.max(1, bounds.width)) * minimapViewBounds.width
@@ -3561,6 +3583,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
           <button type="button" aria-label="放大画布" onClick={() => zoomAt(viewport.zoom * 1.15)}>+</button>
           <span />
           <button type="button" aria-pressed={minimapVisible} onClick={() => setMinimapOpen(!minimapVisible)}>缩略图</button>
+          {scene.architecture ? <button type="button" aria-label="清晰阅读架构图" title="按当前面板宽高放大节点文字，使用适配查看全图" onClick={readArchitectureClearly}>阅读</button> : null}
           <button type="button" aria-label="适配画布" onClick={fit}>适配</button>
         </div>
         {minimapVisible ? <svg className={`freeform-minimap${architectureScope ? ' is-scoped' : ''}`} aria-label={architectureScope ? '当前架构范围缩略图' : '画布缩略图'} viewBox={`${minimapViewBounds.x} ${minimapViewBounds.y} ${minimapViewBounds.width} ${minimapViewBounds.height}`} onPointerDown={recenterFromMinimap}>

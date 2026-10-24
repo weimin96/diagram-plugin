@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { CanvasScene } from '../src/canvas.js'
-import { assessArchitecturePresentation, recommendArchitectureTitleScale } from '../src/architecturePresentationQuality.js'
+import { assessArchitecturePresentation, recommendArchitectureReadableZoom, recommendArchitectureTitleScale } from '../src/architecturePresentationQuality.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { canvasSceneToSvg, parseCanvasScene, serializeCanvasScene } from '../src/canvas.js'
 import { architectureCases } from './fixtures/architecture/cases.js'
@@ -60,4 +60,18 @@ test('标题补偿有界，并且不影响已有 Canvas 文件和特别长的标
   if (first.type !== 'node') throw new Error('Expected a node')
   first.text = '这是一条很长很长的系统架构节点说明文字'
   assert.equal(recommendArchitectureTitleScale(long), 1)
+})
+
+test('清晰阅读使用实际面板尺寸，同时不修改场景和既有缩放', () => {
+  const wide = twoNodes(2400, [140, 600])
+  const original = JSON.stringify(wide)
+  const calculated = recommendArchitectureReadableZoom(wide, 720, 500)
+  assert.ok(calculated > 1 && calculated <= 4)
+  assert.ok(12.5 * calculated * Math.min(720 / wide.width, 500 / wide.height) >= 11.5)
+  assert.equal(recommendArchitectureReadableZoom(wide, 720, 500, calculated + .2), calculated + .2)
+  assert.equal(recommendArchitectureReadableZoom(wide, 260, 160), 4)
+  assert.equal(recommendArchitectureReadableZoom(wide, 0, 500), 1)
+  const ordinary = { ...wide, architecture: undefined }
+  assert.equal(recommendArchitectureReadableZoom(ordinary, 720, 500), 1)
+  assert.equal(JSON.stringify(wide), original)
 })
