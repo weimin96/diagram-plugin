@@ -370,6 +370,8 @@ test('enterprise architecture renders visible aligned cards and a legible primar
   }
   const svg = canvasSceneToSvg(scene)
   assert.match(svg, /fill-opacity="0\.94" stroke="[^"]+" stroke-opacity="0\.9" stroke-width="1\.7"/)
+  assert.equal((svg.match(/fill="#f8fafc" fill-opacity="0\.94"/g) ?? []).length, 2,
+    'primary and secondary cards share the same neutral surface; emphasis is not a solid fill wall')
   assert.match(svg, /font-weight="730"[^>]*>Core API<\/text>/)
   assert.doesNotMatch(svg, /font-weight="730"[^>]*>Aux Worker<\/text>/)
   assert.equal((svg.match(/fill-opacity="0\.94"/g) ?? []).length, 2)
@@ -397,6 +399,24 @@ test('architecture actors, branded nodes and manual fill share card geometry and
   assert.match(svg, /opacity="0\.62"><path[^>]+marker-end="url\(#arrow\)"/)
   for (const label of ['用户', 'PostgreSQL', '手工底色']) assert.match(svg, new RegExp(`>${label}<\\/text>`))
   assert.equal(serializeCanvasScene(scene), before)
+})
+
+test('architecture style preset must not convert primary cards into opaque tone fills', () => {
+  const scene: CanvasScene = {
+    type: 'diagram-plugin-canvas', version: 1, title: 'Styled architecture', width: 940, height: 420,
+    style: 'nord', architecture: { theme: 'enterprise', view: 'detail' },
+    elements: [
+      { id: 'ingest', type: 'node', x: 40, y: 130, width: 180, height: 80, text: '数据采集', icon: 'service', tone: 'accent', emphasis: 'primary' },
+      { id: 'db', type: 'node', x: 310, y: 130, width: 180, height: 80, text: 'PostgreSQL', stencil: 'postgres', tone: 'success', emphasis: 'primary' },
+      { id: 'actor', type: 'node', x: 580, y: 130, width: 180, height: 80, text: '分析人员', icon: 'user', tone: 'muted' },
+    ],
+  }
+  const svg = canvasSceneToSvg(scene)
+  assert.equal((svg.match(/fill="#f8fafc" fill-opacity="0\.94"/g) ?? []).length, 3)
+  assert.match(svg, /fill="#243247"[^>]*>数据采集<\/text>/)
+  assert.match(svg, /fill="#243247"[^>]*>PostgreSQL<\/text>/)
+  assert.deepEqual(scene.elements.filter((element) => element.type === 'node').map((node) => node.fillColor),
+    [undefined, undefined, undefined])
 })
 
 test('overview projection keeps source data intact while reducing low-priority architecture detail', () => {

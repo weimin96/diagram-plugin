@@ -442,12 +442,14 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
     return `<g><path d="${geometry}" fill="none" stroke="${escapeXml(architectureMode ? architectureBorder : border)}" stroke-width="${architectureMode ? 2.4 : 2.2}"${dash} marker-end="url(#arrow)"/>${label || suffix ? `<text x="${(start.x + end.x) / 2}" y="${(start.y + end.y) / 2 - 8}" text-anchor="middle" font-size="13" fill="${escapeXml(text)}">${escapeXml(`${label}${suffix}`)}</text>` : ''}</g>`
   }).join('')
   const shapes = [...nodes.values()].map((rawItem) => {
-    const skin = canvasVisualSkin(rawItem.type === 'note' ? undefined : scene.style, hexLuminance(baseBackground) < 0.18, rawItem.tone, rawItem.emphasis === 'primary')
-    const item = canvasStyledBox(rawItem, skin)
+    const skin = canvasVisualSkin(rawItem.type === 'note' ? undefined : scene.style, hexLuminance(baseBackground) < 0.18, rawItem.tone, rawItem.emphasis === 'primary' && !architectureMode)
+    // Style presets are color guidance in architecture mode, not persisted
+    // per-node fill overrides. This mirrors CanvasEditor card CSS semantics.
+    const item = architectureMode && rawItem.type === 'node' ? rawItem : canvasStyledBox(rawItem, skin)
     const wrapRotation = (markup: string) => item.rotation
       ? `<g transform="rotate(${item.rotation} ${item.x + item.width / 2} ${item.y + item.height / 2})">${markup}</g>`
       : markup
-    const architectureMark = architectureMode && item.type === 'node' && Boolean(item.iconRef || item.stencil || (item.icon && item.icon !== 'user' && item.icon !== 'external'))
+    const architectureMark = architectureMode && item.type === 'node' && Boolean(item.iconRef || item.stencil || item.icon)
     const palette = skin && item.type === 'node'
       ? { fill: item.fillColor ?? skin.fill, text: architectureMark && !rawItem.fillColor ? text : canvasFillTextColor(item.fillColor, skin.text), stroke: item.strokeColor ?? skin.stroke }
       : architectureMode
@@ -472,7 +474,10 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
       return wrapRotation(`<g opacity="${item.opacity ?? 1}"><clipPath id="clip-${escapeXml(item.id)}"><rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="${radius}"/></clipPath><g clip-path="url(#clip-${escapeXml(item.id)})">${content}</g><rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="${radius}" fill="none" stroke="${escapeXml(item.strokeColor ?? border)}" stroke-width="${item.strokeWidth ?? 1}"/></g>`)
     }
     const architectureCard = item.type === 'node' && Boolean(item.iconRef || item.icon || item.stencil || item.c4Type)
-    if (architectureMode && architectureCard) return wrapRotation(renderArchitectureCanvasNode(item, palette, projection.density, architectureTheme, skin?.font, scene.architecture?.titleScale ?? 1))
+    if (architectureMode && architectureCard) return wrapRotation(renderArchitectureCanvasNode(item,
+      { ...palette, text: item.fillColor ? palette.text : darkArchitecture ? '#f8fafc' : '#243247' },
+      projection.density, architectureTheme, skin?.font, scene.architecture?.titleScale ?? 1,
+      darkArchitecture ? '#222d3c' : '#f8fafc'))
     const cardTemplate = canvasArchitectureCardTemplate(item)
     const showSubtitle = Boolean(item.subtitle && (!architectureCard || projection.density !== 'dense'))
     const cardTitleLimit = projection.density === 'dense' ? 22 : projection.density === 'compact' ? 26 : 30
@@ -1475,6 +1480,7 @@ function renderArchitectureCanvasNode(
   theme: CanvasArchitectureTheme,
   fontOverride?: string,
   titleScale = 1,
+  neutralSurface = '#f8fafc',
 ): string {
   const profile = canvasArchitectureThemeProfile(theme)
   const compact = density === 'dense'
@@ -1504,7 +1510,7 @@ function renderArchitectureCanvasNode(
     : ''
   // Every architecture node, including a technology logo or external actor,
   // has the same hit area and visible card. No invisible technical-node plates.
-  const plate = `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="${profile.nodeRadius || 8}" fill="${escapeXml(item.fillColor ?? palette.fill)}" fill-opacity="${item.fillColor ? 1 : 0.94}" stroke="${escapeXml(item.strokeColor ?? palette.stroke)}" stroke-opacity="${item.strokeColor ? 1 : focused ? 0.9 : 0.72}" stroke-width="${item.strokeWidth ?? (focused ? 1.7 : 1.25)}"/>`
+  const plate = `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="${profile.nodeRadius || 8}" fill="${escapeXml(item.fillColor ?? neutralSurface)}" fill-opacity="${item.fillColor ? 1 : 0.94}" stroke="${escapeXml(item.strokeColor ?? palette.stroke)}" stroke-opacity="${item.strokeColor ? 1 : focused ? 0.9 : 0.72}" stroke-width="${item.strokeWidth ?? (focused ? 1.7 : 1.25)}"/>`
   return `<g opacity="${opacity}">${plate}${mark}<text x="${textX}" y="${titleY}" font-size="${(titleSize + profile.titleSizeDelta + (focused ? 0.8 : 0)) * titleScale}" font-weight="${focused ? 730 : profile.titleWeight}" fill="${escapeXml(palette.text)}"${fontFamily}>${escapeXml(truncateCanvasText(item.text.replace(/\n/g, ' '), compact ? 20 : 26))}</text>${subtitle}</g>`
 }
 

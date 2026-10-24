@@ -43,7 +43,7 @@ test('架构节点的实底和手工底色在导出中使用可读前景色', ()
   ] }
   const before = serializeCanvasScene(scene)
   const svg = canvasSceneToSvg(scene)
-  assert.match(svg, /fill="#f8fafc">主入口<\/text>/)
+  assert.match(svg, /fill="#243247">主入口<\/text>/)
   assert.match(svg, /fill="#f8fafc">深色节点<\/text>/)
   assert.match(svg, /fill="#243247">浅色节点<\/text>/)
   assert.match(canvasSceneToSvg({ ...scene, style: undefined }), /fill="#f8fafc">深色节点<\/text>/)

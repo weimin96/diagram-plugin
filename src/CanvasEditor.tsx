@@ -262,7 +262,9 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
   const originalItem = item
   // Architecture nodes use semantic outlines rather than a wall of solid primary cards.
   const skin = canvasVisualSkin(originalItem.type === 'note' ? undefined : visualStyle, darkTheme, originalItem.tone, originalItem.emphasis === 'primary' && !architecture)
-  const displayItem = canvasStyledBox(originalItem, skin)
+  // A visual-style preset must not silently turn a semantic architecture card
+  // into an authored solid-fill node. Only explicit node colors override cards.
+  const displayItem = architecture && originalItem.type === 'node' ? originalItem : canvasStyledBox(originalItem, skin)
   const displayText = displayItem.text
   const imagePath = displayItem.type === 'note' ? displayItem.imagePath : undefined
   const imageFit = displayItem.type === 'note' ? displayItem.imageFit : undefined
@@ -270,7 +272,7 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
   const cardTemplate = canvasArchitectureCardTemplate(displayItem)
   const cardMeta = displayItem.iconRef ? canvasIconRefLabel(displayItem.iconRef) : displayItem.stencil ? canvasStencilLabel(displayItem.stencil) : architectureCard ? cardTemplate.label : displayItem.icon ? canvasIconLabel(displayItem.icon) : undefined
   // Actor, external and technical nodes share a common card/icon/title grid.
-  const architectureMark = Boolean(architecture && architectureCard)
+  const architectureMark = Boolean(architecture && architectureCard && (displayItem.iconRef || displayItem.stencil || displayItem.icon))
   const titleColor = architectureMark && !originalItem.fillColor
     ? darkTheme ? '#f8fafc' : '#243247'
     : canvasFillTextColor(displayItem.fillColor, skin?.text ?? (darkTheme ? '#f8fafc' : '#243247'))
@@ -3422,14 +3424,14 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
           {visibleRenderBoxes.map((item) => {
             const originalItem = item
             const skin = canvasVisualSkin(originalItem.type === 'note' ? undefined : scene.style, darkTheme, originalItem.tone, originalItem.emphasis === 'primary' && !scene.architecture)
-            const displayItem = canvasStyledBox(originalItem, skin)
+            const displayItem = scene.architecture && originalItem.type === 'node' ? originalItem : canvasStyledBox(originalItem, skin)
             const displayX = displayItem.x
             const displayY = displayItem.y
             const imagePath = displayItem.type === 'note' ? displayItem.imagePath : undefined
             const imageSource = imagePath ? imageSources[imagePath] : undefined
             const architectureCard = displayItem.type === 'node' && Boolean(displayItem.iconRef || displayItem.icon || displayItem.stencil || displayItem.c4Type)
             const cardTemplate = canvasArchitectureCardTemplate(displayItem)
-            const architectureMark = Boolean(scene.architecture && architectureCard)
+            const architectureMark = Boolean(scene.architecture && architectureCard && (displayItem.iconRef || displayItem.stencil || displayItem.icon))
             const selectedForLod = selectedIdSet.has(item.id)
             const showAnchorPoints = !imagePath && !(displayItem.type === 'note' && displayItem.textOnly) && (selectedForLod || tool === 'connect' || connectFrom === item.id)
             return (
