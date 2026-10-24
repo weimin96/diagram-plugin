@@ -1,6 +1,7 @@
 import {
   canvasArrowBoxRoute,
   canvasArrowRoutePoints,
+  canvasSharedSourceStem,
   canvasArrowLabelLayouts,
   canvasArchitectureRelationLabelVisible,
   type CanvasArrow,
@@ -260,8 +261,10 @@ export function assessCanvasVisualQuality(scene: CanvasScene): CanvasVisualQuali
       const rightRoute = routes.get(right.id)
       if (!rightRoute) continue
       const sameBundle = Boolean(left.bundleKey && left.bundleKey === right.bundleKey)
-      const validSharedSource = sameBundle && left.bundleKey!.startsWith('from:')
-        && left.from === right.from && sharedEndpointStem(leftRoute, rightRoute, false)
+      const sourceStem = sameBundle && left.bundleKey!.startsWith('from:') && left.from === right.from
+        ? canvasSharedSourceStem(leftRoute, rightRoute) : undefined
+      const validSharedSource = Boolean(sourceStem
+        && !routesOverlap(sourceStem.leftTail, sourceStem.rightTail))
       const validSharedTarget = sameBundle && left.bundleKey!.startsWith('to:')
         && left.to === right.to && sharedEndpointStem(leftRoute, rightRoute, true)
       const intentionalBundle = validSharedSource || validSharedTarget

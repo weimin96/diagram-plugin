@@ -1,7 +1,7 @@
 import { beautifyArchitectureScene, inferArchitectureComposition, routeArchitectureArrowIds, routeArchitectureEdges, type ArchitectureComposition, type ArchitectureTheme } from './architectureDesign.js'
 import { assessCanvasVisualQuality, type CanvasVisualQualityAssessment } from './canvasQuality.js'
 import type { DiagramVisualStyle } from './diagramVisualStyles.js'
-import { canvasArrowBoxRoute, type CanvasArchitectureDensity, type CanvasIcon, type CanvasNode, type CanvasScene, type CanvasStencil } from './canvas.js'
+import { canvasArrowBoxRoute, canvasSharedSourceStem, type CanvasArchitectureDensity, type CanvasIcon, type CanvasNode, type CanvasScene, type CanvasStencil } from './canvas.js'
 import { assessArchitecturePresentation, recommendArchitectureTitleScale } from './architecturePresentationQuality.js'
 
 /** Intent is the authoritative input; pixel coordinates are exclusively assigned by the layout engine. */
@@ -177,9 +177,9 @@ function bypassArchitectureBlockingNode(scene: CanvasScene, arrowId: string, blo
 function segmentsOverlapBeyondFork(left: ReturnType<typeof canvasArrowBoxRoute>, right: ReturnType<typeof canvasArrowBoxRoute>) {
   // Both routes already share one explicit source stem. Branches must not
   // overlap for any positive distance after the fork.
-  for (let i = 1; i + 1 < left.length; i += 1) {
+  for (let i = 0; i + 1 < left.length; i += 1) {
     const a = left[i], b = left[i + 1]
-    for (let j = 1; j + 1 < right.length; j += 1) {
+    for (let j = 0; j + 1 < right.length; j += 1) {
       const c = right[j], d = right[j + 1]
       if (a.x === b.x && c.x === d.x && a.x === c.x
         && Math.min(Math.max(a.y, b.y), Math.max(c.y, d.y)) - Math.max(Math.min(a.y, b.y), Math.min(c.y, d.y)) > 2) return true
@@ -210,11 +210,11 @@ function annotateSourceFanoutTrunks(scene: CanvasScene): CanvasScene {
       for (let j = i + 1; j < paths.length; j += 1) {
         const second = paths[j]
         if (bundles.has(second.arrow.id) || second.path.length < 3) continue
-        const [a, b] = first.path, [c, d] = second.path
-        if (a.x !== c.x || a.y !== c.y || b.x !== d.x || b.y !== d.y) continue
-        if (Math.abs(b.x - a.x) + Math.abs(b.y - a.y) < 12) continue
-        if (segmentsOverlapBeyondFork(first.path, second.path)) continue
-        const key = `from:${source}:${Math.round(b.x)}:${Math.round(b.y)}`
+        const shared = canvasSharedSourceStem(first.path, second.path)
+        if (!shared || segmentsOverlapBeyondFork(shared.leftTail, shared.rightTail)) continue
+        const b = shared.trunk.at(-1)!
+        // Keep disjoint pairs separate even when their fork coordinates match.
+        const key = `from:${source}:${Math.round(b.x)}:${Math.round(b.y)}:${i}:${j}`
         bundles.set(first.arrow.id, key)
         bundles.set(second.arrow.id, key)
         break

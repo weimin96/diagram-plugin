@@ -206,6 +206,28 @@ test('质量检查区分独立连线重叠与共享总线', () => {
   assert.equal(assessCanvasVisualQuality(bundled).metrics.edgeOverlaps, 0)
 })
 
+test('两条同源 Bundle 分叉后再次汇合，仍报告非主干重叠', () => {
+  const scene: CanvasScene = {
+    type: 'diagram-plugin-canvas', version: 1, title: '分叉后再次重叠',
+    width: 900, height: 650,
+    elements: [
+      { id: 'source', type: 'node', x: 50, y: 100, width: 100, height: 60, text: '入口' },
+      { id: 'left', type: 'node', x: 600, y: 100, width: 100, height: 60, text: '服务A' },
+      { id: 'right', type: 'node', x: 600, y: 400, width: 100, height: 60, text: '服务B' },
+      { id: 'first', type: 'arrow', from: 'source', to: 'left', routing: 'orthogonal',
+        bundleKey: 'from:source:shared', fromAnchor: 'right', toAnchor: 'left',
+        points: [{ x: 250, y: 130 }, { x: 250, y: 240 }, { x: 500, y: 240 }, { x: 500, y: 130 }] },
+      { id: 'second', type: 'arrow', from: 'source', to: 'right', routing: 'orthogonal',
+        bundleKey: 'from:source:shared', fromAnchor: 'right', toAnchor: 'left',
+        points: [{ x: 250, y: 130 }, { x: 250, y: 350 }, { x: 400, y: 350 },
+          { x: 400, y: 240 }, { x: 550, y: 240 }, { x: 550, y: 430 }] },
+    ],
+  }
+  const result = assessCanvasVisualQuality(scene)
+  assert.equal(result.metrics.edgeOverlaps, 1)
+  assert.equal(result.issues.some((issue) => issue.code === 'edge-overlap'), true)
+})
+
 test('Canvas quality gate passes a simple clean diagram', () => {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',

@@ -206,6 +206,46 @@ export interface CanvasBundleTrunk {
   count: number
 }
 
+/**
+ * The genuinely shared prefix of two orthogonal routes from the same source.
+ * The remainder is returned separately so callers can reject routes that
+ * split and then unexpectedly overlap again.
+ */
+export function canvasSharedSourceStem(left: CanvasPoint[], right: CanvasPoint[]): {
+  trunk: CanvasPoint[]
+  leftTail: CanvasPoint[]
+  rightTail: CanvasPoint[]
+} | undefined {
+  if (left.length < 3 || right.length < 3
+    || left[0].x !== right[0].x || left[0].y !== right[0].y) return undefined
+  let i = 1
+  let j = 1
+  let current = left[0]
+  const trunk = [current]
+  let totalLength = 0
+  while (i < left.length && j < right.length) {
+    const a = left[i], b = right[j]
+    const deltaA = { x: a.x - current.x, y: a.y - current.y }
+    const deltaB = { x: b.x - current.x, y: b.y - current.y }
+    const lengthA = Math.abs(deltaA.x) + Math.abs(deltaA.y)
+    const lengthB = Math.abs(deltaB.x) + Math.abs(deltaB.y)
+    if (!lengthA) { i += 1; continue }
+    if (!lengthB) { j += 1; continue }
+    if ((deltaA.x && deltaA.y) || (deltaB.x && deltaB.y)) break
+    const signA = [Math.sign(deltaA.x), Math.sign(deltaA.y)]
+    const signB = [Math.sign(deltaB.x), Math.sign(deltaB.y)]
+    if (signA[0] !== signB[0] || signA[1] !== signB[1]) break
+    const distance = Math.min(lengthA, lengthB)
+    current = { x: current.x + signA[0] * distance, y: current.y + signA[1] * distance }
+    trunk.push(current)
+    totalLength += distance
+    if (distance === lengthA) i += 1
+    if (distance === lengthB) j += 1
+  }
+  if (totalLength < 12 || i >= left.length || j >= right.length) return undefined
+  return { trunk, leftTail: [current, ...left.slice(i)], rightTail: [current, ...right.slice(j)] }
+}
+
 export interface CanvasArrowLabelLayout {
   lines: string[]
   id: string
@@ -513,6 +553,28 @@ export function canvasBundleTrunks(scene: CanvasScene): CanvasBundleTrunk[] {
   for (const [bundleKey, arrows] of groups) {
     if (arrows.length < 2) continue
     if (bundleKey.startsWith('from:')) {
+      // Generated source bundles are disjoint pairs. Derive the drawable trunk
+      // from both *resolved routes*, not arrow.points[0]: that waypoint may be
+      // absent or differ between arrows sharing only a short first segment.
+      if (arrows.length === 2) {
+        const [left, right] = arrows
+        const source = boxes.get(left.from)
+        const firstTarget = boxes.get(left.to)
+        const secondTarget = boxes.get(right.to)
+        if (left.from === right.from && source && firstTarget && secondTarget) {
+          const stem = canvasSharedSourceStem(
+            canvasArrowBoxRoute(source, firstTarget, left),
+            canvasArrowBoxRoute(source, secondTarget, right),
+          )
+          if (stem) result.push({
+            id: bundleKey,
+            path: stem.trunk.map((point, index) => `${index ? 'L' : 'M'} ${point.x} ${point.y}`).join(' '),
+            emphasis: strongestEmphasis(arrows),
+            count: arrows.length,
+          })
+        }
+        continue
+      }
       const clusters = new Map<string, CanvasArrow[]>()
       arrows.forEach((arrow) => {
         const point = arrow.points?.[0]
@@ -527,7 +589,9 @@ export function canvasBundleTrunks(scene: CanvasScene): CanvasBundleTrunk[] {
         const end = first.points?.[0]
         if (!box || !end) continue
         const start = anchorPoint(box, first.fromAnchor, end)
-        result.push({ id: `${bundleKey}:${clusterKey}`, path: `M ${start.x} ${start.y} L ${end.x} ${end.y}`, emphasis: strongestEmphasis(members), count: members.length })
+        result.push({ id: `${bundleKey}:${clusterKey}`,
+          path: `M ${start.x} ${start.y} L ${end.x} ${end.y}`,
+          emphasis: strongestEmphasis(members), count: members.length })
       }
     } else if (bundleKey.startsWith('to:')) {
       const clusters = new Map<string, CanvasArrow[]>()
