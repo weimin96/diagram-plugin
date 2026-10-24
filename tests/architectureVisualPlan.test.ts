@@ -67,3 +67,18 @@ test('用户明确给出的场景会持久化，但不会改变真实关系和�
   assert.deepEqual(result.scene.elements.filter((item) => item.type === 'arrow').map((item) => [item.from, item.to]),
     intent.relations.map((item) => [item.from, item.to]))
 })
+
+test('视觉修正目标仅引用真实元素，不以局部穿区指标诱导破坏其他连线', () => {
+  const sample = architectureCases.find((item) => item.id === 'data-platform')!
+  const result = composeArchitectureGraph(sample.intent)
+  const targets = result.visualPlan.review.repairTargets
+  const ids = new Set([
+    ...result.scene.elements.map((item) => item.id),
+    ...(result.scene.groups ?? []).map((item) => item.id),
+  ])
+  assert.ok(targets.length <= 5)
+  assert.ok(targets.some((item) => item.concern === 'cross-boundary-intrusion'))
+  assert.ok(targets.every((item) => item.elementIds.every((id) => ids.has(id))))
+  assert.ok(targets.filter((item) => item.concern === 'cross-boundary-intrusion')
+    .every((item) => item.action.includes('不能单独绕线造成新增交叉')))
+})

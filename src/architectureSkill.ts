@@ -34,7 +34,7 @@ export function architectureDesignSkill(theme: ArchitectureTheme = 'enterprise')
     '完成语义内容后调用 diagram.beautifyArchitecture，让插件统一执行分区、配色、图标补全、布局和连线整理。',
     '如果节点位置和分区已经合适，只需要减少交叉/穿节点/叠线，则调用 diagram.routeArchitectureEdges，不要重新布局整张图。',
     '完成写回和美化后调用 diagram.inspectQuality 做一次质量回检；若 needsRevision=true，只修复报告出的重叠、穿节点、交叉过多、层级过平或标签过长问题，再回检一次，不做无关重写。',
-    '语义自动架构生成返回 visualPlan 时，核对 scenario、primaryNodeIds、regions、recommendedView 和 review.concerns；这些是构图与视觉审查提示，绝不是已经通过人工审美验收。如果视觉问题仍明显，给出可定位的具体修正，不要空泛宣称 90 分。',
+    '语义自动架构生成返回 visualPlan 时，核对 scenario、primaryNodeIds、regions、recommendedView 和 review.repairTargets；按明确的 elementIds 进行最多一次定向修复与复核，不要为了消除一条穿区线而制造更多交叉。这些只是几何证据与视觉审查提示，绝不是已经通过人工审美验收。',
   ]
 }
 

@@ -62,6 +62,13 @@ export type ArchitectureVisualConcernCode =
   | 'weak-main-path' | 'dense-detail' | 'tiny-overview-text'
   | 'wide-canvas' | 'cross-boundary-intrusion' | 'frame-overlap'
 
+export interface ArchitectureVisualRepairTarget {
+  concern: ArchitectureVisualConcernCode
+  /** IDs are always drawn from an existing scene, never invented. */
+  elementIds: string[]
+  action: string
+}
+
 export interface ArchitectureVisualPlan {
   scenario: ArchitectureVisualScenario
   reference: ArchitectureVisualReference
@@ -74,7 +81,12 @@ export interface ArchitectureVisualPlan {
   primaryRelationIds: string[]
   /** Existing groups in dependency order; no new/grouped-away nodes. */
   regions: Array<{ id: string; label: string; nodeCount: number }>
-  review: { readyForVisualReview: boolean; concerns: ArchitectureVisualConcernCode[] }
+  review: {
+    readyForVisualReview: boolean
+    concerns: ArchitectureVisualConcernCode[]
+    /** Bounded, evidence-based suggestions; not claims that a visual reviewer has inspected pixels. */
+    repairTargets: ArchitectureVisualRepairTarget[]
+  }
 }
 
 export function architectureVisualScenario(
@@ -120,6 +132,30 @@ export function planArchitectureVisual(
   if (scene.width / Math.max(1, scene.height) > 2.3) concerns.push('wide-canvas')
   if (geometry.unrelatedFrameIntrusionLength > 0) concerns.push('cross-boundary-intrusion')
   if (geometry.frameOverlaps > 0) concerns.push('frame-overlap')
+  const repairTargets: ArchitectureVisualRepairTarget[] = []
+  const existingArrows = new Set(relations.map((edge) => edge.id))
+  const existingGroups = new Set((scene.groups ?? []).map((group) => group.id))
+  for (const intrusion of geometry.worstFrameIntrusions.slice(0, 3)) {
+    if (!existingArrows.has(intrusion.edgeId) || !existingGroups.has(intrusion.frameId)) continue
+    repairTargets.push({
+      concern: 'cross-boundary-intrusion',
+      elementIds: [intrusion.edgeId, intrusion.frameId],
+      action: `检查跨区线路经过无关分区 ${intrusion.length}px；应与关联线路联合检查，不能单独绕线造成新增交叉`,
+    })
+  }
+  if (concerns.includes('weak-main-path')) repairTargets.push({
+    concern: 'weak-main-path', elementIds: primaryNodeIds.slice(0, 5),
+    action: '检查真实入口与核心业务路径；只根据现有关系调整主次，不得增补虚构连线',
+  })
+  if (concerns.includes('tiny-overview-text') || concerns.includes('wide-canvas')) repairTargets.push({
+    concern: concerns.includes('tiny-overview-text') ? 'tiny-overview-text' : 'wide-canvas',
+    elementIds: [],
+    action: '检查适配后的字号和画布宽高；优先采用总览及分区下钻，不直接缩小字体或删除数据',
+  })
+  if (concerns.includes('frame-overlap')) repairTargets.push({
+    concern: 'frame-overlap', elementIds: [],
+    action: '检查无关同级分区边界的交叠及分区内节点；先调整分区构图再评估线路',
+  })
   return {
     scenario, reference, recommendedView,
     nodeCount: nodes.length, relationCount: relations.length,
@@ -129,6 +165,7 @@ export function planArchitectureVisual(
         && quality.metrics.edgeNodeIntersections === 0
         && quality.metrics.labelNodeIntersections === 0,
       concerns,
+      repairTargets: repairTargets.slice(0, 5),
     },
   }
 }
