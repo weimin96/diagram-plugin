@@ -58,6 +58,13 @@ test('高扇出重叠给出真实关系 ID 的定向修复目标，而不是虚�
   assert.ok(targets.every((item) => item.elementIds.length === 2
     && item.elementIds.every((id) => arrowIds.has(id))
     && item.action.includes('不得伪造共享主干')))
+  const hotspots = output.visualPlan.review.overlapHotspots
+  assert.ok(hotspots.length > 0 && hotspots.length <= 5)
+  assert.equal(hotspots[0].edgeId, '__relation-10', 'the payment-external connection is the actual congestion hotspot')
+  assert.ok(hotspots[0].conflictingEdgeIds.length >= 3)
+  assert.ok(hotspots.every((hotspot) => arrowIds.has(hotspot.edgeId)
+    && hotspot.conflictingEdgeIds.every((id) => arrowIds.has(id) && id !== hotspot.edgeId)))
+  assert.ok(targets.some((item) => item.action.includes('__relation-10')))
   const frameTargets = output.visualPlan.review.repairTargets.filter((item) => item.concern === 'frame-overlap')
   const groupIds = new Set(output.scene.groups?.map((group) => group.id))
   assert.ok(output.routeDiagnostics.frameOverlaps > 0)

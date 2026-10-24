@@ -4,7 +4,7 @@ import type { DiagramVisualStyle } from './diagramVisualStyles.js'
 import { canvasArrowBoxRoute, canvasSharedSourceStem, type CanvasArchitectureDensity, type CanvasArchitectureScenario, type CanvasArrow, type CanvasIcon, type CanvasNode, type CanvasScene, type CanvasStencil } from './canvas.js'
 import { assessArchitecturePresentation, recommendArchitectureTitleScale } from './architecturePresentationQuality.js'
 import { assessArchitectureRouteDiagnostics } from './architectureRouteDiagnostics.js'
-import { planArchitectureVisual } from './architectureVisualPlan.js'
+import { planArchitectureVisual, rankArchitectureOverlapHotspots } from './architectureVisualPlan.js'
 
 /** Intent is the authoritative input; pixel coordinates are exclusively assigned by the layout engine. */
 export interface ArchitectureIntentGraph {
@@ -951,9 +951,11 @@ function improveCongestedPorts(result: ReturnType<typeof composeArchitectureGrap
   if (nodes < 16 || nodes > 24 || arrows.length > 32
     || result.quality.metrics.edgeOverlaps < 3) return result
   const byId = new Map(arrows.map((arrow) => [arrow.id, arrow]))
-  const affected = [...new Set(result.quality.issues
-    .filter((issue) => issue.code === 'edge-overlap')
-    .flatMap((issue) => issue.elementIds))]
+  // Fix the edge conflicting with the most independent relationships first.
+  // Stable ID tie-breaks prevent the source enumeration order from changing
+  // which of the bounded reroute attempts receive attention.
+  const affected = rankArchitectureOverlapHotspots(result.scene, result.quality)
+    .map((hotspot) => hotspot.edgeId)
     .filter((id) => !byId.get(id)?.bundleKey).slice(0, 10)
   let scene = result.scene
   let quality = result.quality
@@ -986,8 +988,8 @@ function improveCongestedPorts(result: ReturnType<typeof composeArchitectureGrap
   // the common stem and both port normals, changing only the branch corridor.
   // This is a bounded local search; unrelated and group-bus edges are excluded.
   if (quality.metrics.edgeOverlaps >= 4) {
-    const bundled = [...new Set(quality.issues.filter((issue) => issue.code === 'edge-overlap')
-      .flatMap((issue) => issue.elementIds))]
+    const bundled = rankArchitectureOverlapHotspots(scene, quality)
+      .map((hotspot) => hotspot.edgeId)
       .filter((id) => {
         const arrow = scene.elements.find((item) => item.id === id)
         return arrow?.type === 'arrow' && arrow.bundleKey?.startsWith('from:')

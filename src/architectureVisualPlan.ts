@@ -70,6 +70,44 @@ export interface ArchitectureVisualRepairTarget {
   action: string
 }
 
+/** A relation is a routing hotspot when it conflicts with several *different*
+ * semantic relations. Count distinct peers, not repeated geometric segments. */
+export interface ArchitectureOverlapHotspot {
+  edgeId: string
+  conflictingEdgeIds: string[]
+  fromGroupId?: string
+  toGroupId?: string
+}
+
+export function rankArchitectureOverlapHotspots(
+  scene: CanvasScene, quality: CanvasVisualQualityAssessment,
+): ArchitectureOverlapHotspot[] {
+  const nodes = new Map(scene.elements.filter((item): item is CanvasNode => item.type === 'node')
+    .map((item) => [item.id, item]))
+  const arrows = new Map(scene.elements.filter((item) => item.type === 'arrow')
+    .map((item) => [item.id, item]))
+  const peers = new Map<string, Set<string>>()
+  for (const issue of quality.issues) {
+    if (issue.code !== 'edge-overlap' || issue.elementIds.length !== 2) continue
+    const [a, b] = issue.elementIds
+    if (!arrows.has(a) || !arrows.has(b) || a === b) continue
+    if (!peers.has(a)) peers.set(a, new Set())
+    if (!peers.has(b)) peers.set(b, new Set())
+    peers.get(a)!.add(b)
+    peers.get(b)!.add(a)
+  }
+  return [...peers.entries()].map(([edgeId, conflicts]) => {
+    const edge = arrows.get(edgeId)!
+    return {
+      edgeId,
+      conflictingEdgeIds: [...conflicts].sort((a, b) => a.localeCompare(b, 'en')),
+      fromGroupId: nodes.get(edge.from)?.groupId,
+      toGroupId: nodes.get(edge.to)?.groupId,
+    }
+  }).sort((a, b) => b.conflictingEdgeIds.length - a.conflictingEdgeIds.length
+    || a.edgeId.localeCompare(b.edgeId, 'en'))
+}
+
 export interface ArchitectureVisualPlan {
   scenario: ArchitectureVisualScenario
   reference: ArchitectureVisualReference
@@ -87,6 +125,8 @@ export interface ArchitectureVisualPlan {
     concerns: ArchitectureVisualConcernCode[]
     /** Bounded, evidence-based suggestions; not claims that a visual reviewer has inspected pixels. */
     repairTargets: ArchitectureVisualRepairTarget[]
+    /** Distinct real conflicting relationships, highest-degree first. */
+    overlapHotspots: ArchitectureOverlapHotspot[]
   }
 }
 
@@ -149,17 +189,19 @@ export function planArchitectureVisual(
   // Independent edges must not be disguised as a shared bundle to silence a warning.
   const overlaps = quality.issues.filter((issue) => issue.code === 'edge-overlap'
     && issue.elementIds.length === 2 && issue.elementIds.every((id) => existingArrows.has(id)))
-  const overlapDegree = new Map<string, number>()
-  overlaps.forEach((issue) => issue.elementIds.forEach((id) =>
-    overlapDegree.set(id, (overlapDegree.get(id) ?? 0) + 1)))
+  const overlapHotspots = rankArchitectureOverlapHotspots(scene, quality)
+  const overlapDegree = new Map(overlapHotspots.map((item) => [item.edgeId, item.conflictingEdgeIds.length]))
   overlaps.sort((a, b) => b.elementIds.reduce((sum, id) => sum + (overlapDegree.get(id) ?? 0), 0)
-    - a.elementIds.reduce((sum, id) => sum + (overlapDegree.get(id) ?? 0), 0))
+    - a.elementIds.reduce((sum, id) => sum + (overlapDegree.get(id) ?? 0), 0)
+    || a.elementIds.join('\u0000').localeCompare(b.elementIds.join('\u0000'), 'en'))
   if (quality.metrics.edgeOverlaps >= 2) {
     for (const issue of overlaps.slice(0, 2)) {
+      const worst = issue.elementIds.slice().sort((a, b) => (overlapDegree.get(b) ?? 0) - (overlapDegree.get(a) ?? 0))[0]
+      const count = overlapDegree.get(worst) ?? 1
       repairTargets.push({
         concern: 'overlapping-relationships',
         elementIds: issue.elementIds,
-        action: '复核这两条真实依赖的正交走廊与分支端口；仅在没有新增交叉、穿节点或语义变化时局部重布线，不得伪造共享主干',
+        action: `${worst} 与 ${count} 条不同关系存在重叠；应联合检查其出口走廊与分支端口，不能仅改变单根线；不得伪造共享主干，不得新增交叉、穿节点或改变语义`,
       })
     }
   }
@@ -203,6 +245,7 @@ export function planArchitectureVisual(
         && geometry.frameOverlapArea < scene.width * scene.height * 0.1,
       concerns,
       repairTargets: repairTargets.slice(0, 5),
+      overlapHotspots: overlapHotspots.slice(0, 5),
     },
   }
 }
