@@ -14,7 +14,7 @@ const suite = suiteArg?.slice(8) ?? 'core'
 if (suite !== 'core' && suite !== 'extended' && suite !== 'stress') throw new Error('Unknown suite')
 const caseArg = args.find((arg) => arg.startsWith('--case='))?.slice(7)
 const output = path.resolve(args.find((arg) => arg.startsWith('--out='))?.slice(6) ?? 'test-results/architecture-engines')
-const variants: ElkBenchmarkVariant[] = ['flat', 'compound']
+const variants: ElkBenchmarkVariant[] = ['flat', 'compound', 'native']
 const entries = architectureBenchmarkCases(suite).filter((entry) => !caseArg || entry.id === caseArg)
 if (!entries.length) throw new Error('No matching benchmark case')
 await mkdir(output, { recursive: true })
@@ -93,7 +93,7 @@ for (const entry of entries) {
 
 await writeFile(path.join(output, 'report.json'), JSON.stringify({
   version: 1, suite, caseCount: entries.length,
-  note: 'Timing scopes differ: current.ms includes the entire composer with multi-candidate refinement; elk-*.ms includes only experimental relayout and canonical routing on an already composed scene. This is NOT an end-to-end speed comparison. Synthetic cases are not production data.',
+  note: 'Timing scopes differ: current.ms includes the entire composer with multi-candidate refinement; elk-*.ms includes only experimental relayout on an already composed scene. ELK native also imports ELK sections as editable Canvas waypoints, rather than using canonical rerouting. This is NOT an end-to-end speed comparison. Synthetic cases are not production data.',
   results,
 }, null, 2) + '\n')
 const groups = entries.map((entry) => ({

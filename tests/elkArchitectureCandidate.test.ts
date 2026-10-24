@@ -2,14 +2,14 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { architectureCases } from './fixtures/architecture/cases.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
-import { parseCanvasScene, serializeCanvasScene } from '../src/canvas.js'
+import { canvasArrowBoxRoute, parseCanvasScene, serializeCanvasScene } from '../src/canvas.js'
 import { assessCanvasVisualQuality } from '../src/canvasQuality.js'
 import { layoutWithElk } from '../scripts/elk-architecture-candidate.js'
 
 test('ELK 实验候选不修改原图，节点/关系/语义分区与历史序列化保持完整', async () => {
   const input = composeArchitectureGraph(architectureCases.find((item) => item.id === 'data-platform')!.intent).scene
   const original = serializeCanvasScene(input)
-  for (const variant of ['flat', 'compound'] as const) {
+  for (const variant of ['flat', 'compound', 'native'] as const) {
     const result = await layoutWithElk(input, variant)
     assert.deepEqual(result.elements.map((element) => element.id), input.elements.map((element) => element.id))
     assert.deepEqual(result.elements.filter((element) => element.type === 'node')
@@ -32,6 +32,22 @@ test('ELK 实验候选不修改原图，节点/关系/语义分区与历史序�
     assert.equal(parseCanvasScene(serializeCanvasScene(result)).elements.length, input.elements.length)
   }
   assert.equal(serializeCanvasScene(input), original)
+})
+
+test('ELK 原生路径保留可编辑折点、端点和 SVG/JSON 兼容', async () => {
+  const scene = composeArchitectureGraph(architectureCases.find((item) => item.id === 'data-platform')!.intent).scene
+  const result = await layoutWithElk(scene, 'native')
+  const arrows = result.elements.filter((item) => item.type === 'arrow')
+  assert.equal(arrows.length, scene.elements.filter((item) => item.type === 'arrow').length)
+  assert.ok(arrows.every((arrow) => arrow.routing === 'orthogonal' && arrow.points?.length))
+  assert.ok(arrows.every((arrow) => ['top', 'right', 'bottom', 'left'].includes(arrow.fromAnchor ?? '')))
+  const boxes = new Map(result.elements.filter((item) => item.type === 'node').map((node) => [node.id, node]))
+  for (const arrow of arrows) {
+    const route = canvasArrowBoxRoute(boxes.get(arrow.from)!, boxes.get(arrow.to)!, arrow)
+    assert.ok(route.slice(1).every((point, index) =>
+      point.x === route[index].x || point.y === route[index].y), arrow.id)
+  }
+  assert.equal(parseCanvasScene(serializeCanvasScene(result)).elements.length, result.elements.length)
 })
 
 test('ELK 实验对无效依赖直接失败，不创建悬空连线', async () => {
