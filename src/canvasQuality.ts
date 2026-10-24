@@ -172,7 +172,15 @@ export function assessCanvasVisualQuality(scene: CanvasScene): CanvasVisualQuali
 
   let nodeOverlaps = 0
   for (let leftIndex = 0; leftIndex < boxes.length; leftIndex += 1) {
-    for (let rightIndex = leftIndex + 1; rightIndex < boxes.length; rightIndex += 1) {
+    // Reuse the existing spatial index. The old exhaustive pair scan was
+    // repeated for every generated route candidate, despite most nodes being
+    // far apart. Sorting keeps issue ordering stable for callers and tests.
+    boxIndex.beginQuery()
+    const candidates: number[] = []
+    boxIndex.query(boxes[leftIndex], candidates)
+    candidates.sort((a, b) => a - b)
+    for (const rightIndex of candidates) {
+      if (rightIndex <= leftIndex) continue
       const left = boxes[leftIndex]
       const right = boxes[rightIndex]
       if (!boxesOverlap(left, right)) continue

@@ -4,6 +4,39 @@ import { readFileSync } from 'node:fs'
 import { assessCanvasVisualQuality } from '../src/canvasQuality.js'
 import type { CanvasScene } from '../src/canvas.js'
 
+test('空间索引在密集、稀疏及跨网格节点上与完整两两碰撞判定一致', () => {
+  for (const spacing of [29, 84, 240]) {
+    const elements: CanvasScene['elements'] = Array.from({ length: 180 }, (_, index) => ({
+      id: `n-${index}`, type: 'node', text: `节点 ${index}`,
+      x: (index % 20) * spacing + (index % 3) * 9,
+      y: Math.floor(index / 20) * spacing + (index % 4) * 7,
+      width: 66 + index % 5 * 9, height: 50 + index % 7 * 5,
+    }))
+    const inset = 2
+    const expected: string[] = []
+    for (let left = 0; left < elements.length; left += 1) {
+      const a = elements[left]
+      if (a.type !== 'node') continue
+      for (let right = left + 1; right < elements.length; right += 1) {
+        const b = elements[right]
+        if (b.type !== 'node') continue
+        if (a.x + inset < b.x + b.width - inset && a.x + a.width - inset > b.x + inset
+          && a.y + inset < b.y + b.height - inset && a.y + a.height - inset > b.y + inset) {
+          expected.push(`${a.id}|${b.id}`)
+        }
+      }
+    }
+    const scene: CanvasScene = {
+      type: 'diagram-plugin-canvas', version: 1, title: '空间网格', width: 6200, height: 2800, elements,
+    }
+    const result = assessCanvasVisualQuality(scene)
+    const actual = result.issues.filter((issue) => issue.code === 'node-overlap')
+      .map((issue) => issue.elementIds.join('|'))
+    assert.equal(result.metrics.nodeOverlaps, expected.length)
+    assert.deepEqual(actual, expected)
+  }
+})
+
 test('自动标记显著长于直接距离的外围架构绕线', () => {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas', version: 1, title: '过长绕线', width: 1400, height: 1000,
