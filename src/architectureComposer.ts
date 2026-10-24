@@ -352,7 +352,7 @@ function refineArchitectureNodeOrder(
   return { ...best, reorderedPairs }
 }
 
-export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
+function composeArchitectureGraphCore(intent: ArchitectureIntentGraph, relationIds?: readonly string[]) {
   const ids = new Set<string>()
   for (const node of intent.nodes) {
     if (ids.has(node.id)) throw new Error(`架构节点 ID 重复：${node.id}`)
@@ -377,7 +377,7 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
       ...intent.relations.map((relation, index) => ({
         // The tool schema reserves a letter as the first character of a node ID.
         // A distinct prefix prevents a generated edge from colliding with a node.
-        id: `__relation-${index + 1}`,
+        id: relationIds?.[index] ?? `__relation-${index + 1}`,
         type: 'arrow' as const,
         from: relation.from,
         to: relation.to,
@@ -472,4 +472,79 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
         ? finalEvaluation
         : refinedByLayout.get(`${summary.composition}:${summary.resolvedDensity}`) ?? evaluation),
   }
+}
+
+/**
+ * AI clients do not guarantee node/relationship enumeration order. On small
+ * graphs with unresolved visual defects, compare the existing composition with
+ * two stable-order candidates. This is an end-to-end layout comparison, not a
+ * cheap geometry reorder: every candidate runs the same full routing/refinement
+ * and must preserve all original IDs and relationships.
+ */
+export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
+  const baseline = composeArchitectureGraphCore(intent)
+  const n = intent.nodes.length
+  const m = intent.relations.length
+  // Do not double high-fanout search latency or spend more CPU on mild local
+  // imperfections for which an order alternative rarely helps.
+  if (n < 7 || n > 16 || m > 24
+    || (baseline.evaluation.structuralScore >= 80
+      && baseline.quality.metrics.edgeOverlaps < 2
+      && baseline.quality.metrics.edgeCrossings < 2)) {
+    return { ...baseline, inputOrderStrategy: 'original' as const }
+  }
+
+  const idOrder = new Map([
+    ...intent.nodes.map((node, index) => [node.id, index] as const),
+    ...intent.relations.map((_, index) => [`__relation-${index + 1}`, intent.nodes.length + index] as const),
+  ])
+  let best = baseline
+  let inputOrderStrategy: 'original' | 'node-id' | 'relation-key' = 'original'
+  const nodesSorted = intent.nodes.slice().sort((a, b) => a.id.localeCompare(b.id, 'en'))
+  const indexedRelations = intent.relations.map((relation, index) => ({
+    relation, id: `__relation-${index + 1}`, index,
+  }))
+  const relationsSorted = indexedRelations.slice().sort((a, b) =>
+    a.relation.from.localeCompare(b.relation.from, 'en')
+    || a.relation.to.localeCompare(b.relation.to, 'en')
+    || (a.relation.label ?? '').localeCompare(b.relation.label ?? '', 'en')
+    || Number(Boolean(a.relation.asynchronous)) - Number(Boolean(b.relation.asynchronous))
+    || a.index - b.index)
+
+  const nodeOrderChanged = nodesSorted.some((node, index) => node !== intent.nodes[index])
+  const relationOrderChanged = relationsSorted.some((row, index) => row.index !== index)
+  const variants: Array<{ name: 'node-id' | 'relation-key'; intent: ArchitectureIntentGraph; relationIds?: string[] }> = []
+  if (nodeOrderChanged) variants.push({ name: 'node-id', intent: { ...intent, nodes: nodesSorted } })
+  if (relationOrderChanged) variants.push({
+    name: 'relation-key',
+    intent: { ...intent, relations: relationsSorted.map((item) => item.relation) },
+    relationIds: relationsSorted.map((item) => item.id),
+  })
+  for (const variant of variants) {
+    const proposed = composeArchitectureGraphCore(variant.intent, variant.relationIds)
+    const before = best.quality.metrics
+    const after = proposed.quality.metrics
+    if (after.nodeOverlaps > before.nodeOverlaps
+      || after.edgeNodeIntersections > before.edgeNodeIntersections
+      || after.labelNodeIntersections > before.labelNodeIntersections
+      || after.edgeCrossings > before.edgeCrossings
+      || proposed.presentation.estimatedTitlePxAtFit < 11
+      || proposed.presentation.estimatedTitlePxAtFit < best.presentation.estimatedTitlePxAtFit - 1.2) continue
+    const improvement = proposed.evaluation.structuralScore - best.evaluation.structuralScore
+    const overlapDelta = after.edgeOverlaps - before.edgeOverlaps
+    // An additional shared corridor is acceptable only for a substantial
+    // improvement in global structure, and never beyond one residual overlap.
+    const acceptable = overlapDelta <= 0
+      ? improvement >= 0.8 || (improvement >= -0.2 && overlapDelta < 0)
+      : improvement >= 8 && after.edgeOverlaps <= 1 && overlapDelta === 1
+    if (!acceptable) continue
+    // Return the caller's original element order, not a new on-disk protocol.
+    best = {
+      ...proposed,
+      scene: { ...proposed.scene, elements: proposed.scene.elements.slice()
+        .sort((a, b) => (idOrder.get(a.id) ?? Infinity) - (idOrder.get(b.id) ?? Infinity)) },
+    }
+    inputOrderStrategy = variant.name
+  }
+  return { ...best, inputOrderStrategy }
 }

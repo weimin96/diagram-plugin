@@ -93,6 +93,7 @@ test('架构语义图通过真实 MCP 一次生成、保存和质量评估', asy
     assert.ok(created.structuredContent.visualPlan.reference.label)
     assert.ok(created.structuredContent.visualPlan.primaryNodeIds.every((id) => typeof id === 'string'))
     assert.ok(created.structuredContent.architectureEvaluation.routeDiagnostics.crossPartitionRouteLength >= 0)
+    assert.ok(['original', 'node-id', 'relation-key'].includes(created.structuredContent.architectureEvaluation.inputOrderStrategy))
     assert.ok(Array.isArray(created.structuredContent.architectureEvaluation.routeDiagnostics.worstFrameIntrusions))
     assert.ok(created.structuredContent.architectureEvaluation.reroutedEdges >= 0)
     assert.equal((await readFile(path.join(root, created.structuredContent.diagram.path), 'utf8')).includes('arch-application'), true)

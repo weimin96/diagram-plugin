@@ -23,6 +23,36 @@ test('真实规模虚构拓扑基准不丢失语义关系或穿过节点', () =>
     assert.equal(quality.edgeNodeIntersections, 0, example.id)
     assert.equal(quality.labelNodeIntersections, 0, example.id)
     assert.ok(composed.evaluation.structuralScore > 0, example.id)
+    assert.equal(composed.inputOrderStrategy, 'original', `healthy source-order case should not need normalization: ${example.id}`)
+  }
+})
+
+test('小规模 AI 图表对任意节点及关系输入顺序进行安全择优，不改关系 ID 和方向', () => {
+  const samples = architectureBenchmarkCases('extended')
+  const cases = [
+    { id: 'business-platform-reversed', score: 89.8, overlaps: 0 },
+    { id: 'data-platform-reversed', score: 87.5, overlaps: 1 },
+    { id: 'deployment-reversed', score: 90, overlaps: 0 },
+  ] as const
+  for (const sample of cases) {
+    const intent = samples.find((item) => item.id === sample.id)!.intent
+    const originalNodes = intent.nodes.map((node) => node.id)
+    const originalEdges = intent.relations.map(({ from, to }) => [from, to])
+    const actual = composeArchitectureGraph(intent)
+    assert.ok(actual.evaluation.structuralScore >= sample.score, sample.id)
+    assert.ok(actual.quality.metrics.edgeOverlaps <= sample.overlaps, sample.id)
+    assert.equal(actual.quality.metrics.edgeCrossings, 0, sample.id)
+    assert.equal(actual.quality.metrics.edgeNodeIntersections, 0, sample.id)
+    assert.ok(['original', 'node-id', 'relation-key'].includes(actual.inputOrderStrategy))
+    assert.deepEqual(actual.scene.elements.filter((element) => element.type === 'node').map((element) => element.id),
+      originalNodes, sample.id)
+    assert.deepEqual(actual.scene.elements.filter((element) => element.type === 'arrow').map(({ from, to }) => [from, to]),
+      originalEdges, sample.id)
+    assert.deepEqual(actual.scene.elements.filter((element) => element.type === 'arrow').map((element) => element.id),
+      originalEdges.map((_, index) => `__relation-${index + 1}`), sample.id)
+    assert.ok(actual.visualPlan.primaryRelationIds.every((id) =>
+      actual.scene.elements.some((element) => element.type === 'arrow' && element.id === id)))
+    assert.deepEqual(intent.nodes.map((node) => node.id), originalNodes)
   }
 })
 
