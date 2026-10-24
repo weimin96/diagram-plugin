@@ -1173,7 +1173,7 @@ function findOrthogonalRoute(
   for (const candidate of candidates) {
     const simplified = simplifyRoute(candidate)
     if (!routeRespectsAnchors(simplified, fromAnchor, toAnchor)) continue
-    const score = scoreRoute(simplified, obstacles, occupied, bundleKey)
+    const score = scoreRoute(simplified, obstacles, occupied, bundleKey, bestScore)
     if (score < bestScore) {
       best = simplified
       bestScore = score
@@ -1199,7 +1199,7 @@ function findOrthogonalRoute(
             end,
           ])
           if (!routeRespectsAnchors(candidate, fromAnchor, toAnchor)) continue
-          const score = scoreRoute(candidate, obstacles, occupied, bundleKey)
+          const score = scoreRoute(candidate, obstacles, occupied, bundleKey, bestScore)
           if (score < bestScore) {
             best = candidate
             bestScore = score
@@ -1220,7 +1220,7 @@ function findOrthogonalRoute(
             end,
           ])
           if (!routeRespectsAnchors(candidate, fromAnchor, toAnchor)) continue
-          const score = scoreRoute(candidate, obstacles, occupied, bundleKey)
+          const score = scoreRoute(candidate, obstacles, occupied, bundleKey, bestScore)
           if (score < bestScore) {
             best = candidate
             bestScore = score
@@ -1262,15 +1262,24 @@ function boundedCorridorCandidates(values: number[], preferredCount: number): nu
   ])
 }
 
-function scoreRoute(route: CanvasPoint[], obstacles: RouteRect[], occupied: RouteSegment[], bundleKey?: string): number {
+function scoreRoute(route: CanvasPoint[], obstacles: RouteRect[], occupied: RouteSegment[], bundleKey?: string, upperBound = Infinity): number {
   let length = 0
   let collisions = 0
   let overlapPenalty = 0
   let crossingPenalty = 0
+  const bendsPenalty = Math.max(0, route.length - 2) * 22
   for (let index = 0; index < route.length - 1; index += 1) {
     const segment = { a: route[index], b: route[index + 1] }
     length += Math.abs(segment.b.x - segment.a.x) + Math.abs(segment.b.y - segment.a.y)
-    collisions += obstacles.filter((rect) => segmentIntersectsRect(segment, rect)).length
+    // Every subsequent cost term is nonnegative. Once the partial score
+    // cannot beat the best route, the exact remainder cannot change the
+    // winner; avoid scoring thousands of known-losing candidates.
+    if (length + bendsPenalty + collisions * 100_000 + overlapPenalty + crossingPenalty >= upperBound) return upperBound
+    for (const rect of obstacles) {
+      if (!segmentIntersectsRect(segment, rect)) continue
+      collisions += 1
+      if (length + bendsPenalty + collisions * 100_000 + overlapPenalty + crossingPenalty >= upperBound) return upperBound
+    }
     for (const used of occupied) {
       const overlap = segmentOverlap(segment, used)
       overlapPenalty += overlap * (bundleKey && used.bundleKey === bundleKey ? 0.08 : 4)
@@ -1278,9 +1287,10 @@ function scoreRoute(route: CanvasPoint[], obstacles: RouteRect[], occupied: Rout
         const groupBus = bundleKey?.startsWith('group:') || used.bundleKey?.startsWith('group:')
         crossingPenalty += groupBus ? 2200 : 960
       }
+      if (length + bendsPenalty + collisions * 100_000 + overlapPenalty + crossingPenalty >= upperBound) return upperBound
     }
   }
-  return length + Math.max(0, route.length - 2) * 22 + collisions * 100_000 + overlapPenalty + crossingPenalty
+  return length + bendsPenalty + collisions * 100_000 + overlapPenalty + crossingPenalty
 }
 
 function routeCrossesOccupied(route: CanvasPoint[], occupied: RouteSegment[], bundleKey?: string): boolean {
