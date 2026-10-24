@@ -9,13 +9,31 @@ export interface ArchitecturePresentationQuality {
   warnings: Array<'small-fit-text' | 'low-content-coverage'>
 }
 
+/** Boost generated titles only when they still fit their cards. Never upscale existing files implicitly. */
+export function recommendArchitectureTitleScale(scene: CanvasScene, referenceWidth = 1200): number {
+  if (!scene.architecture || scene.width <= referenceWidth || !scene.elements.length) return 1
+  const scaleAtFit = referenceWidth / scene.width
+  const base = scene.architecture.density === 'dense' ? 12 : 12.5
+  const desired = Math.min(1.3, Math.max(1, 11.2 / Math.max(1, base * scaleAtFit)))
+  if (desired <= 1) return 1
+  const nodes = scene.elements.filter((element): element is CanvasNode => element.type === 'node')
+  const cap = nodes.reduce((limit, node) => {
+    const units = [...node.text].reduce((total, ch) =>
+      total + (/\p{Script=Han}/u.test(ch) ? 1 : ch === ' ' ? .3 : .62), 0)
+    const available = node.width - (node.icon || node.stencil || node.iconRef ? 76 : 24)
+    return Math.min(limit, Math.max(1, available / Math.max(1, units * base)))
+  }, desired)
+  return Math.round(cap * 100) / 100
+}
+
 export function assessArchitecturePresentation(
   scene: CanvasScene,
   referenceWidth = 1200,
 ): ArchitecturePresentationQuality {
   const nodes = scene.elements.filter((item): item is CanvasNode => item.type === 'node')
   const scale = Math.min(1, referenceWidth / Math.max(1, scene.width))
-  const nominalTitlePx = scene.architecture?.density === 'dense' ? 12 : 12.5
+  const nominalTitlePx = (scene.architecture?.density === 'dense' ? 12 : 12.5)
+    * (scene.architecture?.titleScale ?? 1)
   const estimatedTitlePxAtFit = Math.round(nominalTitlePx * scale * 10) / 10
   if (!nodes.length || scene.width <= 0 || scene.height <= 0) {
     return { referenceWidth, estimatedTitlePxAtFit, nodeBoundsCoverage: 0, nodeAreaCoverage: 0, warnings: [] }

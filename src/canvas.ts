@@ -81,6 +81,8 @@ export interface CanvasScene {
     presentation?: boolean
     view?: CanvasArchitectureView
     density?: CanvasArchitectureDensity
+    /** Optional font boost for generated architecture diagrams; legacy files remain unchanged. */
+    titleScale?: number
   }
 }
 
@@ -427,7 +429,7 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
       return wrapRotation(`<g opacity="${item.opacity ?? 1}"><clipPath id="clip-${escapeXml(item.id)}"><rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="${radius}"/></clipPath><g clip-path="url(#clip-${escapeXml(item.id)})">${content}</g><rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="${radius}" fill="none" stroke="${escapeXml(item.strokeColor ?? border)}" stroke-width="${item.strokeWidth ?? 1}"/></g>`)
     }
     const architectureCard = item.type === 'node' && Boolean(item.iconRef || item.icon || item.stencil || item.c4Type)
-    if (architectureMode && architectureCard) return wrapRotation(renderArchitectureCanvasNode(item, palette, projection.density, architectureTheme, skin?.font))
+    if (architectureMode && architectureCard) return wrapRotation(renderArchitectureCanvasNode(item, palette, projection.density, architectureTheme, skin?.font, scene.architecture?.titleScale ?? 1))
     const cardTemplate = canvasArchitectureCardTemplate(item)
     const showSubtitle = Boolean(item.subtitle && (!architectureCard || projection.density !== 'dense'))
     const cardTitleLimit = projection.density === 'dense' ? 22 : projection.density === 'compact' ? 26 : 30
@@ -1384,6 +1386,7 @@ function renderArchitectureCanvasNode(
   density: Exclude<CanvasArchitectureDensity, 'auto'>,
   theme: CanvasArchitectureTheme,
   fontOverride?: string,
+  titleScale = 1,
 ): string {
   const profile = canvasArchitectureThemeProfile(theme)
   const compact = density === 'dense'
@@ -1414,12 +1417,12 @@ function renderArchitectureCanvasNode(
     const plate = profile.nodePlateOpacity > 0
       ? `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="${profile.nodeRadius}" fill="${escapeXml(palette.fill)}" fill-opacity="${profile.nodePlateOpacity}" stroke="${escapeXml(palette.stroke)}" stroke-opacity="${profile.nodeStrokeOpacity}" stroke-width="${profile.nodeStrokeWidth}"${profile.sketchEdges ? ' stroke-dasharray="6 5"' : ''}/>`
       : ''
-    return `<g opacity="${opacity}">${plate}${mark}<text x="${textX}" y="${titleY}" font-size="${titleSize + profile.titleSizeDelta}" font-weight="${profile.titleWeight}" fill="${escapeXml(palette.text)}"${fontFamily}>${escapeXml(truncateCanvasText(item.text.replace(/\n/g, ' '), compact ? 20 : 26))}</text>${subtitle}</g>`
+    return `<g opacity="${opacity}">${plate}${mark}<text x="${textX}" y="${titleY}" font-size="${(titleSize + profile.titleSizeDelta) * titleScale}" font-weight="${profile.titleWeight}" fill="${escapeXml(palette.text)}"${fontFamily}>${escapeXml(truncateCanvasText(item.text.replace(/\n/g, ' '), compact ? 20 : 26))}</text>${subtitle}</g>`
   }
   const borderDash = item.icon === 'external' || item.c4Type === 'software-system' ? ' stroke-dasharray="5 4"' : ''
   const fillOpacity = item.emphasis === 'primary' ? '0.54' : '0.32'
   const strokeOpacity = item.emphasis === 'primary' ? '0.50' : '0.30'
-  return `<g opacity="${opacity}"><rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="7" fill="${escapeXml(palette.fill)}" fill-opacity="${fillOpacity}" stroke="${escapeXml(palette.stroke)}" stroke-opacity="${strokeOpacity}" stroke-width="${item.emphasis === 'primary' ? 1.25 : 0.9}"${borderDash}/>${mark}<text x="${textX}" y="${titleY}" font-size="${titleSize}" font-weight="650" fill="${escapeXml(palette.text)}">${escapeXml(truncateCanvasText(item.text.replace(/\n/g, ' '), compact ? 20 : 26))}</text>${subtitle}</g>`
+  return `<g opacity="${opacity}"><rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="7" fill="${escapeXml(palette.fill)}" fill-opacity="${fillOpacity}" stroke="${escapeXml(palette.stroke)}" stroke-opacity="${strokeOpacity}" stroke-width="${item.emphasis === 'primary' ? 1.25 : 0.9}"${borderDash}/>${mark}<text x="${textX}" y="${titleY}" font-size="${titleSize * titleScale}" font-weight="650" fill="${escapeXml(palette.text)}">${escapeXml(truncateCanvasText(item.text.replace(/\n/g, ' '), compact ? 20 : 26))}</text>${subtitle}</g>`
 }
 
 function canvasArchitectureThemeProfile(theme: CanvasArchitectureTheme) {
@@ -1596,6 +1599,7 @@ function normalizeArchitectureAppearance(value: unknown): CanvasScene['architect
     ...(item.presentation === true ? { presentation: true } : {}),
     ...(typeof item.view === 'string' && views.includes(item.view as CanvasArchitectureView) ? { view: item.view as CanvasArchitectureView } : {}),
     ...(typeof item.density === 'string' && densities.includes(item.density as CanvasArchitectureDensity) ? { density: item.density as CanvasArchitectureDensity } : {}),
+    ...(typeof item.titleScale === 'number' && Number.isFinite(item.titleScale) && item.titleScale >= 1 && item.titleScale <= 1.35 ? { titleScale: item.titleScale } : {}),
   }
 }
 

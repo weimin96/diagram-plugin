@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { CanvasScene } from '../src/canvas.js'
-import { assessArchitecturePresentation } from '../src/architecturePresentationQuality.js'
+import { assessArchitecturePresentation, recommendArchitectureTitleScale } from '../src/architecturePresentationQuality.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
+import { canvasSceneToSvg, parseCanvasScene, serializeCanvasScene } from '../src/canvas.js'
 import { architectureCases } from './fixtures/architecture/cases.js'
 
 function twoNodes(width: number, nodesAt: number[]): CanvasScene {
@@ -40,5 +41,23 @@ test('架构基准有可追溯的适配字号与画布覆盖率数据', () => {
   assert.equal(graph.presentation.referenceWidth, 1200)
   assert.ok(graph.presentation.nodeBoundsCoverage > 0 && graph.presentation.nodeBoundsCoverage <= 1)
   assert.ok(graph.presentation.nodeAreaCoverage > 0 && graph.presentation.nodeAreaCoverage <= 1)
-  assert.ok(graph.presentation.estimatedTitlePxAtFit > 0)
+  assert.ok(graph.presentation.estimatedTitlePxAtFit >= 11)
+  assert.ok(!graph.presentation.warnings.includes('small-fit-text'))
+  assert.ok((graph.scene.architecture?.titleScale ?? 1) > 1)
+  const source = serializeCanvasScene(graph.scene)
+  assert.equal(parseCanvasScene(source).architecture?.titleScale, graph.scene.architecture?.titleScale)
+  // SVG export must use the stored scale rather than the pre-boost font.
+  const boostedSvg = canvasSceneToSvg(graph.scene)
+  const unboostedSvg = canvasSceneToSvg({ ...graph.scene, architecture: { ...graph.scene.architecture!, titleScale: 1 } })
+  assert.notEqual(boostedSvg, unboostedSvg)
+  assert.match(boostedSvg, /font-size="16\.\d+"/)
+})
+
+test('标题补偿有界，并且不影响已有 Canvas 文件和特别长的标题', () => {
+  assert.equal(recommendArchitectureTitleScale(twoNodes(1200, [140, 600])), 1)
+  const long = twoNodes(2400, [140, 600])
+  const first = long.elements[0]
+  if (first.type !== 'node') throw new Error('Expected a node')
+  first.text = '这是一条很长很长的系统架构节点说明文字'
+  assert.equal(recommendArchitectureTitleScale(long), 1)
 })

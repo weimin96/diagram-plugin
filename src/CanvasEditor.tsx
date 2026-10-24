@@ -245,12 +245,14 @@ function relationLabelScene(scene: CanvasScene, architecture: boolean, level: Ca
 }
 
 
-const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, darkTheme, architecture, density, level, selected, imageSource }: {
+const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, darkTheme, architecture, architectureTheme, density, titleScale, level, selected, imageSource }: {
   item: CanvasNode | CanvasNote
   visualStyle?: DiagramVisualStyle
   darkTheme: boolean
   architecture: boolean
+  architectureTheme?: ArchitectureTheme
   density: CanvasArchitectureDensity
+  titleScale?: number
   level: CanvasSemanticLodLevel
   selected: boolean
   imageSource?: string
@@ -331,7 +333,14 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
                 >
                   {displayText.split('\n').slice(0, 8).map((line, index) => <tspan key={index} x="0" dy={index === 0 ? 0 : (displayItem.fontSize ?? 20) * 1.35}>{line}</tspan>)}
                 </text>
-              ) : <text style={displayItem.type === 'node' && (skin || originalItem.fillColor) ? { fill: titleColor, fontFamily: skin?.font, fontWeight: 600 } : undefined} className={architectureCard ? 'freeform-node-title' : undefined} x={architectureTextX} y={architectureTitleY} textAnchor={architectureCard ? 'start' : 'middle'} dominantBaseline={architectureCard ? undefined : 'middle'}>
+              ) : <text style={{
+                ...(displayItem.type === 'node' && (skin || originalItem.fillColor) ? { fill: titleColor, fontFamily: skin?.font, fontWeight: 600 } : {}),
+                ...(architecture && architectureCard && titleScale && titleScale > 1 ? {
+                  fontSize: (architectureMark
+                    ? ({ technical: 12, presentation: 14, editorial: 14.5 } as Partial<Record<ArchitectureTheme, number>>)[architectureTheme ?? 'enterprise'] ?? 13
+                    : density === 'dense' ? 12 : density === 'compact' ? 13 : 14) * titleScale,
+                } : {}),
+              }} className={architectureCard ? 'freeform-node-title' : undefined} x={architectureTextX} y={architectureTitleY} textAnchor={architectureCard ? 'start' : 'middle'} dominantBaseline={architectureCard ? undefined : 'middle'}>
                 {truncate(displayText, architectureCard ? cardTitleLimit : 28)}
               </text> : null}
               {showCardSubtitle ? <text className="freeform-node-subtitle" x={architectureTextX} y={architectureMark ? architectureTitleY + 17 : displayItem.height - 12} textAnchor={architectureCard ? 'start' : 'middle'}>{truncate(displayItem.subtitle!, architectureCard ? 34 : 32)}</text> : null}
@@ -3412,7 +3421,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
               onPointerUp={finishGesture}
               onPointerCancel={cancelGesture}
             >
-              <CanvasBoxArtwork item={originalItem} visualStyle={scene.style} darkTheme={darkTheme} architecture={Boolean(scene.architecture)} density={architectureProjection.density} level={semanticLodLevel} selected={selectedForLod} imageSource={imageSource} />
+              <CanvasBoxArtwork item={originalItem} visualStyle={scene.style} darkTheme={darkTheme} architecture={Boolean(scene.architecture)} architectureTheme={scene.architecture?.theme} density={architectureProjection.density} titleScale={scene.architecture?.titleScale} level={semanticLodLevel} selected={selectedForLod} imageSource={imageSource} />
               {showAnchorPoints ? <g className="freeform-anchor-points">
                   <circle cx={displayItem.width / 2} cy={0} r="7" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => handleAnchorClick(event, item.id, 'top')} />
                   <circle cx={displayItem.width} cy={displayItem.height / 2} r="7" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => handleAnchorClick(event, item.id, 'right')} />

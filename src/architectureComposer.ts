@@ -2,7 +2,7 @@ import { beautifyArchitectureScene, inferArchitectureComposition, routeArchitect
 import { assessCanvasVisualQuality, type CanvasVisualQualityAssessment } from './canvasQuality.js'
 import type { DiagramVisualStyle } from './diagramVisualStyles.js'
 import { canvasArrowBoxRoute, type CanvasArchitectureDensity, type CanvasIcon, type CanvasNode, type CanvasScene, type CanvasStencil } from './canvas.js'
-import { assessArchitecturePresentation } from './architecturePresentationQuality.js'
+import { assessArchitecturePresentation, recommendArchitectureTitleScale } from './architecturePresentationQuality.js'
 
 /** Intent is the authoritative input; pixel coordinates are exclusively assigned by the layout engine. */
 export interface ArchitectureIntentGraph {
@@ -319,11 +319,15 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
     || a.summary.composition.localeCompare(b.summary.composition))
   const { selectionScore: _selectionScore, ...selected } = refined[0]
   const ordered = refineArchitectureNodeOrder(selected, selected.summary.composition, selected.summary.resolvedDensity)
+  const titleScale = recommendArchitectureTitleScale(ordered.scene)
+  const finalScene: CanvasScene = titleScale > 1
+    ? { ...ordered.scene, architecture: { ...ordered.scene.architecture!, titleScale } }
+    : ordered.scene
   const refinedByLayout = new Map(refined.map((candidate) =>
     [`${candidate.summary.composition}:${candidate.summary.resolvedDensity}`, candidate.evaluation]))
   return {
-    ...selected, ...ordered,
-    presentation: assessArchitecturePresentation(ordered.scene),
+    ...selected, ...ordered, scene: finalScene,
+    presentation: assessArchitecturePresentation(finalScene),
     candidates: candidates.map(({ evaluation, summary }) =>
       summary.composition === selected.summary.composition && summary.resolvedDensity === selected.summary.resolvedDensity
         ? ordered.evaluation
