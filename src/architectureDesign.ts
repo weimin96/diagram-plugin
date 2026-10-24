@@ -28,7 +28,9 @@ export interface ArchitectureBeautifyOptions {
   /** Candidate-layout evaluation only; normal architecture inference remains the default. */
   composition?: ArchitectureComposition
   /** Experimental initial peer ordering from actual inter-region dependencies. */
-  peerOrder?: 'semantic' | 'dependency'
+  peerOrder?: 'semantic' | 'dependency' | 'main-path'
+  /** Optional candidate geometry; legacy coordinates remain the default. */
+  alignedSpacing?: boolean
   /** Verified semantic intent takes priority over label-based role inference. */
   partitionOverrides?: ReadonlyMap<string, ArchitecturePartition>
   /** An explicitly confirmed directed business path, not an inferred longest path. */
@@ -55,6 +57,8 @@ export interface ArchitectureBeautifyResult {
 }
 
 const partitionOrder: ArchitecturePartition[] = ['external', 'experience', 'application', 'processing', 'data']
+/** Placement clearance must match the collision check in applyArchitectureLayoutPositions. */
+const architectureNodeClearance = 24
 
 const partitionMeta: Record<ArchitecturePartition, { label: string; tone: CanvasTone }> = {
   external: { label: '外部与参与方', tone: 'muted' },
@@ -231,7 +235,11 @@ export function beautifyArchitectureScene(scene: CanvasScene, options: Architect
     },
   }
 
-  if (relayout && repartition) next = layoutArchitectureTopology(next, partitionById, theme, resolvedDensity, composition, options.peerOrder === 'dependency')
+  if (relayout && repartition) next = layoutArchitectureTopology(
+    next, partitionById, theme, resolvedDensity, composition,
+    options.peerOrder === 'dependency', options.peerOrder === 'main-path' ? options.primaryPath : undefined,
+    options.alignedSpacing === true,
+  )
   next = applyArchitectureTheme(next, theme, partitionById)
   next = applyArchitectureEmphasis(next, partitionById, options.primaryPath)
   if (reroute) next = routeArchitectureEdges(next)
@@ -1437,8 +1445,10 @@ function layoutArchitectureTopology(
   density: Exclude<CanvasArchitectureDensity, 'auto'>,
   composition: ArchitectureComposition,
   dependencyOrder = false,
+  mainPath?: readonly string[],
+  alignedSpacing = false,
 ): CanvasScene {
-  const metrics = architectureTopologyMetrics(theme, density)
+  const metrics = architectureTopologyMetrics(theme, density, alignedSpacing)
   const boxes = scene.elements.filter((item): item is CanvasNode | CanvasNote => item.type !== 'arrow')
   const sourceOrder = new Map(boxes.map((item, index) => [item.id, index]))
   const connectionDegree = new Map(boxes.map((item) => [item.id, 0]))
@@ -1448,6 +1458,7 @@ function layoutArchitectureTopology(
     connectionDegree.set(item.to, (connectionDegree.get(item.to) ?? 0) + 1)
   })
   const byId = new Map(boxes.map((item) => [item.id, item]))
+  const pathRanks = new Map(mainPath?.map((id, index) => [id, index]) ?? [])
   // Cross-region dependency-aware barycenters. Ordering is decided before
   // assigning positions and never uses generated coordinates or input array
   // order as a graph invariant. Weakly connected nodes keep semantic order.
@@ -1470,7 +1481,9 @@ function layoutArchitectureTopology(
     const placementMode = architectureCompositionPartitionPlacement(composition, partition)
     members.set(partition, boxes
       .filter((item) => partitions.get(item.id) === partition && !item.locked)
-      .sort((a, b) => dependencyOrder && affinity.has(a.id) && affinity.has(b.id)
+      .sort((a, b) => mainPath && (pathRanks.has(a.id) || pathRanks.has(b.id))
+        ? (pathRanks.get(a.id) ?? Infinity) - (pathRanks.get(b.id) ?? Infinity)
+        : dependencyOrder && affinity.has(a.id) && affinity.has(b.id)
         ? (affinity.get(a.id)!.sum / affinity.get(a.id)!.weight - affinity.get(b.id)!.sum / affinity.get(b.id)!.weight)
           || architectureSortKey(a) - architectureSortKey(b) || a.id.localeCompare(b.id, 'en')
         : placementMode === 'center'
@@ -1667,11 +1680,11 @@ function applyArchitectureLayoutPositions(
     }
     let collisions: typeof occupied
     do {
-      collisions = occupied.filter((box) => placed.x < box.x + box.width + 24
-        && placed.x + placed.width + 24 > box.x
-        && placed.y < box.y + box.height + 24
-        && placed.y + placed.height + 24 > box.y)
-      if (collisions.length) placed.y = Math.max(...collisions.map((box) => box.y + box.height + 24))
+      collisions = occupied.filter((box) => placed.x < box.x + box.width + architectureNodeClearance
+        && placed.x + placed.width + architectureNodeClearance > box.x
+        && placed.y < box.y + box.height + architectureNodeClearance
+        && placed.y + placed.height + architectureNodeClearance > box.y)
+      if (collisions.length) placed.y = Math.max(...collisions.map((box) => box.y + box.height + architectureNodeClearance))
     } while (collisions.length)
     occupied.push(placed)
     return placed
@@ -1737,6 +1750,7 @@ function resolveArchitectureLayoutDensity(
 function architectureTopologyMetrics(
   theme: ArchitectureTheme,
   density: Exclude<CanvasArchitectureDensity, 'auto'>,
+  alignedSpacing = false,
 ) {
   const presentation = theme === 'presentation'
   if (density === 'dense') {
@@ -1747,8 +1761,8 @@ function architectureTopologyMetrics(
       groupPaddingX: 24,
       groupHeader: 48,
       groupPaddingBottom: 22,
-      columnStep: 166,
-      rowStep: 88,
+      columnStep: alignedSpacing ? 150 + architectureNodeClearance : 166,
+      rowStep: alignedSpacing ? 68 + architectureNodeClearance : 88,
       nodeMinWidth: 132,
       nodeMaxWidth: 150,
       nodeMinHeight: 58,
@@ -1763,7 +1777,7 @@ function architectureTopologyMetrics(
       groupPaddingX: 28,
       groupHeader: 52,
       groupPaddingBottom: 26,
-      columnStep: 188,
+      columnStep: alignedSpacing ? 170 + architectureNodeClearance : 188,
       rowStep: 98,
       nodeMinWidth: 146,
       nodeMaxWidth: 170,
@@ -1778,7 +1792,7 @@ function architectureTopologyMetrics(
     groupPaddingX: 32,
     groupHeader: 56,
     groupPaddingBottom: 30,
-    columnStep: 210,
+    columnStep: alignedSpacing ? 188 + architectureNodeClearance : 210,
     rowStep: 110,
     nodeMinWidth: 158,
     nodeMaxWidth: 188,

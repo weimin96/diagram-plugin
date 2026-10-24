@@ -77,7 +77,9 @@ test('视觉修正目标仅引用真实元素，不以局部穿区指标诱导�
     ...(result.scene.groups ?? []).map((item) => item.id),
   ])
   assert.ok(targets.length <= 5)
-  assert.ok(targets.some((item) => item.concern === 'cross-boundary-intrusion'))
+  assert.equal(targets.some((item) => item.concern === 'cross-boundary-intrusion'),
+    result.routeDiagnostics.unrelatedFrameIntrusionLength > 0,
+    '只针对仍实际存在的穿区线路建议修复，不保留旧几何产生的虚假修复目标')
   assert.ok(targets.every((item) => item.elementIds.every((id) => ids.has(id))))
   assert.ok(targets.filter((item) => item.concern === 'cross-boundary-intrusion')
     .every((item) => item.action.includes('不能单独绕线造成新增交叉')))

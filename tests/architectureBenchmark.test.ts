@@ -24,7 +24,12 @@ test('真实规模虚构拓扑基准不丢失语义关系或穿过节点', () =>
     assert.equal(quality.labelNodeIntersections, 0, example.id)
     assert.ok(composed.evaluation.structuralScore > 0, example.id)
     assert.equal(composed.inputOrderStrategy, 'original', `healthy source-order case should not need normalization: ${example.id}`)
-    assert.equal(composed.layoutOrderingStrategy, 'semantic', `healthy case should avoid dependency relayout: ${example.id}`)
+    if (example.id === 'data-platform') {
+      assert.equal(composed.layoutOrderingStrategy, 'aligned-spacing', 'use aligned grid only with verified routing improvement')
+      assert.equal(quality.edgeCrossings, 0, 'aligned grid removes the prior data-pipeline crossing')
+    } else {
+      assert.equal(composed.layoutOrderingStrategy, 'semantic', `healthy case should avoid dependency relayout: ${example.id}`)
+    }
   }
 })
 
@@ -129,8 +134,8 @@ test('扩大正交走廊搜索后数据平台连线重叠有上界且不破坏�
   const example = architectureCases.find((item) => item.id === 'data-platform')!
   const result = composeArchitectureGraph(example.intent)
   assert.ok(result.quality.metrics.edgeOverlaps <= 1)
-  assert.ok(result.quality.metrics.edgeCrossings <= 1)
-  assert.ok(result.evaluation.structuralScore >= 82)
+  assert.equal(result.quality.metrics.edgeCrossings, 0)
+  assert.ok(result.evaluation.structuralScore >= 87.5)
   assert.equal(result.quality.metrics.edgeNodeIntersections, 0)
   assert.equal(result.quality.metrics.nodeOverlaps, 0)
   assert.deepEqual(result.scene.elements.filter((item) => item.type === 'arrow')

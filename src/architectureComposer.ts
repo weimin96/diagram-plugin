@@ -300,6 +300,7 @@ function refineArchitectureNodeOrder(
   initial: ReturnType<typeof refineArchitectureRoutes>,
   composition: ArchitectureComposition,
   density: Exclude<CanvasArchitectureDensity, 'auto'>,
+  protectedNodes: ReadonlySet<string> = new Set(),
 ) {
   let best = initial
   let reorderedPairs = 0
@@ -326,9 +327,9 @@ function refineArchitectureNodeOrder(
     const seen = new Set<string>()
     for (const id of focused) {
       const node = byId.get(id)
-      if (!node?.groupId?.startsWith('arch-') || node.locked) continue
+      if (!node?.groupId?.startsWith('arch-') || node.locked || protectedNodes.has(node.id)) continue
       const peers = nodes.filter((peer) =>
-        peer.id !== node.id && peer.groupId === node.groupId && !peer.locked
+        peer.id !== node.id && peer.groupId === node.groupId && !peer.locked && !protectedNodes.has(peer.id)
         && peer.width === node.width && peer.height === node.height)
         .sort((a, b) => Math.abs(a.x - node.x) + Math.abs(a.y - node.y)
           - Math.abs(b.x - node.x) - Math.abs(b.y - node.y)
@@ -370,8 +371,9 @@ function refineArchitectureNodeOrder(
 }
 
 function composeArchitectureGraphCandidate(
-  intent: ArchitectureIntentGraph, peerOrder: 'semantic' | 'dependency',
+  intent: ArchitectureIntentGraph, peerOrder: 'semantic' | 'dependency' | 'main-path',
   relationIds?: readonly string[],
+  alignedSpacing = false,
 ) {
   const ids = new Set<string>()
   for (const node of intent.nodes) {
@@ -441,7 +443,7 @@ function composeArchitectureGraphCandidate(
   const candidates = compositionCandidates.flatMap((composition) => densityCandidates.map((density) => {
     const result = beautifyArchitectureScene(scene, {
       theme: intent.theme, density, composition, peerOrder,
-      partitionOverrides, primaryPath: intent.primaryPath,
+      partitionOverrides, primaryPath: intent.primaryPath, alignedSpacing,
     })
     const quality = assessCanvasVisualQuality(result.scene)
     const evaluation = evaluateArchitectureLayout(result.scene, quality, composition, density)
@@ -485,7 +487,8 @@ function composeArchitectureGraphCandidate(
     || a.quality.issues.length - b.quality.issues.length
     || a.summary.composition.localeCompare(b.summary.composition))
   const { selectionScore: _selectionScore, structuralSelectionScore: _structuralSelectionScore, visualPenalty: _visualPenalty, ...selected } = eligible[0]
-  const ordered = refineArchitectureNodeOrder(selected, selected.summary.composition, selected.summary.resolvedDensity)
+  const ordered = refineArchitectureNodeOrder(selected, selected.summary.composition, selected.summary.resolvedDensity,
+    peerOrder === 'main-path' ? new Set(intent.primaryPath) : undefined)
   // Reordering can reintroduce node intersections after the first routing
   // pass. Repair only those hard geometry failures, not the whole graph again.
   const postOrderRepair = ordered.quality.metrics.edgeNodeIntersections > 0
@@ -524,6 +527,24 @@ function composeArchitectureGraphCandidate(
 const composeArchitectureGraphCore = (intent: ArchitectureIntentGraph, relationIds?: readonly string[]) =>
   composeArchitectureGraphCandidate(intent, 'semantic', relationIds)
 
+/** Count reversals of verified main-path nodes within the same visual region.
+ * The region layout is top-to-bottom then left-to-right; across-region order
+ * is decided by the topology and must not be silently reinterpreted here. */
+function mainPathRegionInversions(scene: CanvasScene, mainPath: readonly string[]): number {
+  const nodes = new Map(scene.elements.filter((item): item is CanvasNode => item.type === 'node').map((node) => [node.id, node]))
+  let inversions = 0
+  for (let i = 0; i < mainPath.length; i += 1) {
+    const first = nodes.get(mainPath[i])
+    if (!first) continue
+    for (let j = i + 1; j < mainPath.length; j += 1) {
+      const second = nodes.get(mainPath[j])
+      if (!second || !first.groupId || first.groupId !== second.groupId) continue
+      if (first.y > second.y + 5 || (Math.abs(first.y - second.y) <= 5 && first.x > second.x)) inversions += 1
+    }
+  }
+  return inversions
+}
+
 /**
  * AI clients do not guarantee node/relationship enumeration order. On small
  * graphs with unresolved visual defects, compare the existing composition with
@@ -535,6 +556,50 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
   const baseline = composeArchitectureGraphCore(intent)
   const n = intent.nodes.length
   const m = intent.relations.length
+  const primaryPath = intent.primaryPath
+  const pathInversions = primaryPath ? mainPathRegionInversions(baseline.scene, primaryPath) : 0
+  // The historical grid has columns slightly narrower than the collision
+  // clearance. A properly spaced candidate can avoid unnecessary row shifts,
+  // but only adopt it when the full routed result is measurably safer or it
+  // restores the confirmed path order without sacrificing graph quality.
+  if (n <= 24 && m <= 35 && (pathInversions > 0
+    || (baseline.semanticComposition === 'data-platform' && baseline.quality.metrics.edgeCrossings > 0))) {
+    const aligned = composeArchitectureGraphCandidate(intent,
+      pathInversions > 0 ? 'main-path' : 'semantic', undefined, true)
+    const before = baseline.quality.metrics, after = aligned.quality.metrics
+    const improvedPath = primaryPath && pathInversions > 0
+      && mainPathRegionInversions(aligned.scene, primaryPath) < pathInversions
+      && aligned.evaluation.structuralScore >= baseline.evaluation.structuralScore - 1
+    const improvedStructure = aligned.evaluation.structuralScore >= baseline.evaluation.structuralScore + 2
+    if ((improvedPath || improvedStructure)
+      && after.nodeOverlaps <= before.nodeOverlaps
+      && after.edgeNodeIntersections <= before.edgeNodeIntersections
+      && after.labelNodeIntersections <= before.labelNodeIntersections
+      && after.edgeCrossings <= before.edgeCrossings
+      && after.edgeOverlaps <= before.edgeOverlaps
+      && aligned.presentation.estimatedTitlePxAtFit >= baseline.presentation.estimatedTitlePxAtFit - 0.8
+      && aligned.routeDiagnostics.frameOverlaps <= baseline.routeDiagnostics.frameOverlaps + 1) {
+      return { ...aligned, inputOrderStrategy: 'original' as const,
+        layoutOrderingStrategy: improvedPath ? 'main-path' as const : 'aligned-spacing' as const }
+    }
+  }
+  if (primaryPath && primaryPath.length >= 3 && n <= 22 && m <= 30
+    && mainPathRegionInversions(baseline.scene, primaryPath) > 0) {
+    const candidate = composeArchitectureGraphCandidate(intent, 'main-path')
+    const before = baseline.quality.metrics
+    const after = candidate.quality.metrics
+    if (mainPathRegionInversions(candidate.scene, primaryPath) < mainPathRegionInversions(baseline.scene, primaryPath)
+      && after.nodeOverlaps <= before.nodeOverlaps
+      && after.edgeNodeIntersections <= before.edgeNodeIntersections
+      && after.labelNodeIntersections <= before.labelNodeIntersections
+      && after.edgeCrossings <= before.edgeCrossings
+      && after.edgeOverlaps <= before.edgeOverlaps + 1
+      && candidate.evaluation.structuralScore >= baseline.evaluation.structuralScore - 3
+      && candidate.presentation.estimatedTitlePxAtFit >= baseline.presentation.estimatedTitlePxAtFit - 0.5
+      && candidate.routeDiagnostics.frameOverlaps <= baseline.routeDiagnostics.frameOverlaps + 1) {
+      return { ...candidate, inputOrderStrategy: 'original' as const, layoutOrderingStrategy: 'main-path' as const }
+    }
+  }
   // A coordinated variant: cross-region dependencies influence peer placement
   // BEFORE the ordinary full routing/refinement sequence. Only consider this
   // expensive alternative for visibly defective, bounded-size graphs.

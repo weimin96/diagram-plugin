@@ -85,6 +85,37 @@ test('confirmed primary path and functional regions survive automatic layout and
   assert.deepEqual(composeArchitectureGraph(intent).scene, generated.scene)
 })
 
+test('verified business path preserves same-region reading order without introducing crossings', () => {
+  const intent: ArchitectureIntentGraph = {
+    title: '订单处理链路',
+    nodes: [
+      { id: 'person', text: '用户', icon: 'user' },
+      { id: 'web', text: '门户', icon: 'web' },
+      { id: 'zeta', text: '订单服务', icon: 'service', partition: 'application' },
+      { id: 'alpha', text: '库存服务', icon: 'service', partition: 'application' },
+      { id: 'mu', text: '库存扣减服务', icon: 'service', partition: 'application' },
+      { id: 'db', text: '交易数据库', icon: 'database' },
+    ],
+    relations: [
+      { from: 'person', to: 'web' }, { from: 'web', to: 'zeta' },
+      { from: 'zeta', to: 'alpha' }, { from: 'alpha', to: 'mu' },
+      { from: 'mu', to: 'db' },
+    ],
+    primaryPath: ['person', 'web', 'zeta', 'alpha', 'mu', 'db'],
+  }
+  const result = composeArchitectureGraph(intent)
+  const nodes = new Map(result.scene.elements.filter((element) => element.type === 'node')
+    .map((node) => [node.id, node]))
+  const inRegion = intent.primaryPath!.filter((id) => nodes.get(id)?.groupId === 'arch-application')
+  assert.equal(result.layoutOrderingStrategy, 'main-path')
+  assert.deepEqual(inRegion, ['zeta', 'alpha', 'mu'])
+  assert.ok(inRegion.every((id, index) => index === 0 || nodes.get(inRegion[index - 1])!.x < nodes.get(id)!.x))
+  assert.ok(inRegion.every((id) => nodes.get(id)!.y === nodes.get(inRegion[0])!.y))
+  assert.equal(result.quality.metrics.edgeCrossings, 0)
+  assert.equal(result.quality.metrics.edgeNodeIntersections, 0)
+  assert.deepEqual(composeArchitectureGraph(intent).scene, result.scene)
+})
+
 test('rejects unsupported or invented primary path before writing', () => {
   assert.throws(() => composeArchitectureGraph({ ...input, primaryPath: ['person', 'api'] }), /缺少实际有向关系/)
   assert.throws(() => composeArchitectureGraph({ ...input, primaryPath: ['api', 'web'] }), /缺少实际有向关系/)
