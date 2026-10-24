@@ -125,6 +125,55 @@ function nudgeArchitectureCorridors(scene: CanvasScene, arrowId: string): Canvas
   return candidates
 }
 
+/** A three-segment route has no movable interior corridor. Detour around the
+ * actual blocking node while retaining the authored edge's port directions. */
+function bypassArchitectureBlockingNode(scene: CanvasScene, arrowId: string, blockerId: string): CanvasScene[] {
+  const arrow = scene.elements.find((item) => item.type === 'arrow' && item.id === arrowId)
+  if (!arrow || arrow.type !== 'arrow') return []
+  const nodes = new Map(scene.elements.filter((item): item is CanvasNode => item.type === 'node').map((item) => [item.id, item]))
+  const from = arrow && nodes.get(arrow.from)
+  const to = arrow && nodes.get(arrow.to)
+  const blocker = nodes.get(blockerId)
+  if (!arrow || !from || !to || !blocker || arrow.bundleKey) return []
+  const route = canvasArrowBoxRoute(from, to, arrow)
+  if (route.length !== 3) return []
+  const [start, , end] = route
+  const horizontalFirst = arrow.fromAnchor === 'right' || arrow.fromAnchor === 'left'
+  const verticalFirst = arrow.fromAnchor === 'top' || arrow.fromAnchor === 'bottom'
+  const horizontalLast = arrow.toAnchor === 'right' || arrow.toAnchor === 'left'
+  const verticalLast = arrow.toAnchor === 'top' || arrow.toAnchor === 'bottom'
+  if (!((horizontalFirst && verticalLast) || (verticalFirst && horizontalLast))) return []
+  const portOffset = (side: string | undefined) => side === 'top' || side === 'left' ? -32 : 32
+  const axis = horizontalFirst
+    ? [blocker.x - 8, blocker.x - 16, blocker.x - 24,
+      blocker.x + blocker.width + 8, blocker.x + blocker.width + 12, blocker.x + blocker.width + 16,
+      blocker.x + blocker.width + 24]
+    : [blocker.y - 8, blocker.y - 16, blocker.y - 24,
+      blocker.y + blocker.height + 8, blocker.y + blocker.height + 12, blocker.y + blocker.height + 16,
+      blocker.y + blocker.height + 24]
+  const candidates: CanvasScene[] = []
+  for (const corridor of axis) {
+    const points = horizontalFirst
+      ? [start, { x: corridor, y: start.y }, { x: corridor, y: end.y + portOffset(arrow.toAnchor) },
+        { x: end.x, y: end.y + portOffset(arrow.toAnchor) }, end]
+      : [start, { x: start.x, y: corridor }, { x: end.x + portOffset(arrow.toAnchor), y: corridor },
+        { x: end.x + portOffset(arrow.toAnchor), y: end.y }, end]
+    // Disallow reversing either endpoint's port normal, and never leave the canvas.
+    const firstLeg = horizontalFirst ? points[1].x - start.x : points[1].y - start.y
+    const lastLeg = horizontalFirst ? end.y - points[3].y : end.x - points[3].x
+    const fromPositive = arrow.fromAnchor === 'right' || arrow.fromAnchor === 'bottom'
+    const toPositive = arrow.toAnchor === 'left' || arrow.toAnchor === 'top'
+    if ((fromPositive ? firstLeg <= 0 : firstLeg >= 0)
+      || (toPositive ? lastLeg <= 0 : lastLeg >= 0)) continue
+    if (points.some((p) => p.x < 0 || p.y < 0 || p.x > scene.width || p.y > scene.height)) continue
+    candidates.push({
+      ...scene,
+      elements: scene.elements.map((item) => item.id === arrowId ? { ...arrow, points: points.slice(1, -1) } : item),
+    })
+  }
+  return candidates
+}
+
 function segmentsOverlapBeyondFork(left: ReturnType<typeof canvasArrowBoxRoute>, right: ReturnType<typeof canvasArrowBoxRoute>) {
   // Both routes already share one explicit source stem. Branches must not
   // overlap for any positive distance after the fork.
@@ -191,13 +240,20 @@ function refineArchitectureRoutes(
   const issueCodes = new Set(['edge-crossing', 'edge-overlap', 'edge-through-node', 'excessive-edge-detour'])
   // Bounded local search: not an extra AI pass and no repeated full-scene relayout.
   for (let round = 0; round < 4; round += 1) {
+    const blockers = new Map<string, string[]>()
+    for (const issue of quality.issues) {
+      if (issue.code !== 'edge-through-node') continue
+      const [edgeId, blockerId] = issue.elementIds
+      blockers.set(edgeId, [...(blockers.get(edgeId) ?? []), blockerId])
+    }
     const affectedIds = [...new Set(quality.issues
       .filter((issue) => issueCodes.has(issue.code))
       .flatMap((issue) => issue.elementIds))].filter((id) => scene.elements.some((item) => item.type === 'arrow' && item.id === id)).slice(0, 10)
     if (!affectedIds.length) break
     let best: { scene: CanvasScene; quality: CanvasVisualQualityAssessment; evaluation: ArchitectureLayoutAssessment } | undefined
     for (const id of affectedIds) {
-      for (const candidate of [routeArchitectureArrowIds(scene, [id]), ...nudgeArchitectureCorridors(scene, id)]) {
+      const bypass = (blockers.get(id) ?? []).flatMap((blockerId) => bypassArchitectureBlockingNode(scene, id, blockerId))
+      for (const candidate of [...bypass, routeArchitectureArrowIds(scene, [id]), ...nudgeArchitectureCorridors(scene, id)]) {
         const nextQuality = assessCanvasVisualQuality(candidate)
         if (nextQuality.metrics.edgeNodeIntersections > quality.metrics.edgeNodeIntersections
           || nextQuality.metrics.nodeOverlaps > quality.metrics.nodeOverlaps) continue
@@ -376,16 +432,24 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
     || a.summary.composition.localeCompare(b.summary.composition))
   const { selectionScore: _selectionScore, ...selected } = refined[0]
   const ordered = refineArchitectureNodeOrder(selected, selected.summary.composition, selected.summary.resolvedDensity)
-  const titleScale = recommendArchitectureTitleScale(ordered.scene)
+  // Reordering can reintroduce node intersections after the first routing
+  // pass. Repair only those hard geometry failures, not the whole graph again.
+  const postOrderRepair = ordered.quality.metrics.edgeNodeIntersections > 0
+    ? refineArchitectureRoutes(ordered.scene, selected.summary.composition, selected.summary.resolvedDensity)
+    : undefined
+  const repaired = postOrderRepair
+    ? { ...ordered, ...postOrderRepair, reroutedEdges: ordered.reroutedEdges + postOrderRepair.reroutedEdges }
+    : ordered
+  const titleScale = recommendArchitectureTitleScale(repaired.scene)
   const finalScene: CanvasScene = annotateSourceFanoutTrunks(titleScale > 1
-    ? { ...ordered.scene, architecture: { ...ordered.scene.architecture!, titleScale } }
-    : ordered.scene)
+    ? { ...repaired.scene, architecture: { ...repaired.scene.architecture!, titleScale } }
+    : repaired.scene)
   const finalQuality = assessCanvasVisualQuality(finalScene)
   const finalEvaluation = evaluateArchitectureLayout(finalScene, finalQuality, selected.summary.composition, selected.summary.resolvedDensity)
   const refinedByLayout = new Map(refined.map((candidate) =>
     [`${candidate.summary.composition}:${candidate.summary.resolvedDensity}`, candidate.evaluation]))
   return {
-    ...selected, ...ordered, scene: finalScene, quality: finalQuality, evaluation: finalEvaluation,
+    ...selected, ...repaired, scene: finalScene, quality: finalQuality, evaluation: finalEvaluation,
     semanticComposition: inferred,
     presentation: assessArchitecturePresentation(finalScene),
     candidates: candidates.map(({ evaluation, summary }) =>

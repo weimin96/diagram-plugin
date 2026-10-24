@@ -5,6 +5,7 @@ import { assessCanvasVisualQuality } from '../src/canvasQuality.js'
 import { canvasBundleTrunks } from '../src/canvas.js'
 import { inferArchitectureComposition } from '../src/architectureDesign.js'
 import { architectureCases } from './fixtures/architecture/cases.js'
+import { architectureBenchmarkCases } from '../scripts/architecture-benchmark-cases.js'
 
 test('真实规模虚构拓扑基准不丢失语义关系或穿过节点', () => {
   const ids = new Set<string>()
@@ -94,6 +95,16 @@ test('共享真实出口主干，仍检测无关线路重叠与伪造 Bundle', (
     item.type === 'arrow' && (item.id === '__relation-2' || item.id === '__relation-10')
       ? { ...item, bundleKey: 'from:forged' } : item) }
   assert.equal(assessCanvasVisualQuality(fake).metrics.edgeOverlaps, 1)
+})
+
+test('高扇出三段折线必须绕过真实阻挡节点，保留端点语义', () => {
+  const sample = architectureBenchmarkCases('extended').find((item) => item.id === 'business-platform-fanout')!
+  const result = composeArchitectureGraph(sample.intent)
+  assert.equal(result.quality.metrics.nodeOverlaps, 0)
+  assert.equal(result.quality.metrics.edgeNodeIntersections, 0)
+  assert.equal(result.quality.metrics.edgeCrossings, 0)
+  assert.deepEqual(result.scene.elements.filter((item) => item.type === 'arrow').map(({ from, to }) => [from, to]),
+    sample.intent.relations.map(({ from, to }) => [from, to]))
 })
 
 test('Kafka 和批流数据管线不会被混成普通事件图，微服务不误判', () => {
