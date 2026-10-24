@@ -24,6 +24,8 @@ export interface ArchitectureBeautifyOptions {
   theme?: ArchitectureTheme
   view?: CanvasArchitectureView
   density?: CanvasArchitectureDensity
+  /** Candidate-layout evaluation only; normal architecture inference remains the default. */
+  composition?: ArchitectureComposition
   repartition?: boolean
   relayout?: boolean
   reroute?: boolean
@@ -156,7 +158,7 @@ export function beautifyArchitectureScene(scene: CanvasScene, options: Architect
   const semanticBoxes = originalBoxes.map((item) => enrichArchitectureBox(item))
   const partitionById = new Map(semanticBoxes.map((item) => [item.id, classifyArchitectureBox(item)]))
   const activePartitions = partitionOrder.filter((partition) => semanticBoxes.some((item) => partitionById.get(item.id) === partition))
-  const composition = detectArchitectureComposition(
+  const composition = options.composition ?? detectArchitectureComposition(
     semanticBoxes,
     scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow'),
     partitionById,
@@ -519,6 +521,29 @@ function routeArchitectureArrow(
     }
   }
   if (!best) return undefined
+  // Generated semantic regions are visual groupings, not impenetrable walls.
+  // A route that detours around the whole canvas is worse than crossing one
+  // otherwise empty auto-generated region. Explicit authored/C4 boundaries
+  // remain hard obstacles and are never relaxed here.
+  const autoRegionsOnly = groups.size > 0 && [...groups.keys()].every((id) => id.startsWith('arch-'))
+  const lengthOf = (points: CanvasPoint[]) => points.slice(1).reduce((total, point, index) =>
+    total + Math.abs(point.x - points[index].x) + Math.abs(point.y - points[index].y), 0)
+  const directDistance = Math.abs(dx) + Math.abs(dy)
+  if (autoRegionsOnly && groupObstacles.length && lengthOf(best.route) > Math.max(260, directDistance * 2.1)) {
+    const originalLength = lengthOf(best.route)
+    let shorter: typeof best | undefined
+    for (const [fromAnchor, toAnchor] of pairs) {
+      const start = fixedAnchorPoint(from, fromAnchor)
+      const end = fixedAnchorPoint(to, toAnchor)
+      const route = findOrthogonalRoute(start, end, nodeObstacles, occupied, bundleKey, fromAnchor, toAnchor)
+      if (countRouteObstacleCollisions(route, nodeObstacles) > 0) continue
+      const boundaries = countRouteObstacleCollisions(route, groupObstacles)
+      if (boundaries > 1 || lengthOf(route) >= originalLength * .72) continue
+      const score = scoreRoute(route, nodeObstacles, occupied, bundleKey) + boundaries * 180
+      if (!shorter || score < shorter.score) shorter = { score, route, fromAnchor, toAnchor }
+    }
+    if (shorter) best = shorter
+  }
   const simplified = simplifyRoute(best.route)
   addOccupiedSegments(simplified, occupied, bundleKey)
   return {

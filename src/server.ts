@@ -1,5 +1,5 @@
 import { diagramSessionContext } from './hosts/serverContext.js'
-import { diagramVisualStyleGuide } from './diagramVisualStyles.js'
+import { diagramVisualStyleGuide, diagramVisualStyles } from './diagramVisualStyles.js'
 import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import os from 'node:os'
@@ -10,12 +10,14 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import type { OpenAIUiToolMetadata } from '@openai/mcp-extensions/server'
 import { z } from 'zod/v4'
 import { beautifyArchitectureScene, routeArchitectureEdges } from './architectureDesign.js'
+import { composeArchitectureGraph } from './architectureComposer.js'
 import { architectureDesignSkill, isArchitectureIntent } from './architectureSkill.js'
 import { searchArchitectureNodeTemplates } from './architectureNodeTemplates.js'
 import { assessCanvasVisualQuality } from './canvasQuality.js'
 import { buildCanvasSubgraphContext, buildCanvasSubgraphPatch, canvasPatchRebaseReviewIds, mergeCanvasProposalSelection, rebaseCanvasSubgraphPatch, type CanvasSubgraphPatchInput } from './canvasPatch.js'
 import { buildCanvasPatchHistoryEntry, CanvasPatchHistoryStore, redoCanvasPatchHistory, undoCanvasPatchHistory, type CanvasPatchHistorySummary } from './canvasHistory.js'
 import { loadDiagramIcons, diagramGlobalEntrypoint } from './icons.js'
+import { CANVAS_ROLE_ICON_IDS, CANVAS_STENCIL_IDS } from './iconRegistry.js'
 import { parseCanvasScene, serializeCanvasScene, type CanvasArrow, type CanvasC4Type, type CanvasElement, type CanvasIcon, type CanvasIconRef, type CanvasNode, type CanvasNote, type CanvasScene, type CanvasStencil } from './canvas.js'
 import { nextCanvasElementId, traceCanvasGraph } from './canvasOperations.js'
 import { isCanvasIconRef } from './iconRegistry.js'
@@ -69,6 +71,7 @@ const server = new McpServer(
       'Use type=flowchart only for an explicit process/workflow/control-flow/decision-flow request, or when the user explicitly asks for Mermaid/flowchart. Do not represent a software architecture as a Mermaid flowchart merely because it has arrows.',
       ...diagramIntentRoutingGuide(),
       'Before a non-trivial diagram creation or whole-diagram redesign, call diagram.designGuide once for the chosen type. It returns only that type’s composition archetypes, evidence rules, visual grammar and quality loop so the model does not need every diagram skill in context.',
+      'For a NEW professional system architecture, prefer diagram.composeArchitecture: provide only evidence-backed semantic nodes and actual relationships; the plugin owns coordinates, grouping, orthogonal routing and quality checks. Do NOT hand-author a grid of repeated cards or x/y positions. For faithful visual tracing of a supplied picture, explicitly use the normal Canvas editing path and preserve the reference layout rather than forcing a redesign.',
       'When a confirmed technology or cloud service needs a concrete architecture node, use diagram.searchArchitectureTemplates to look up the built-in semantic role, iconRef and recommended boundary instead of guessing provider icon ids. Do not call it for unknown or generic components.',
       'All exposed Mermaid diagram types have a type-specific Diagram Skill. Preserve each type’s semantic grammar, density policy and anti-pattern rules instead of treating every diagram as generic nodes and arrows.',
       'For conversational edits to an existing diagram, prefer a reviewable proposal before writing. For Canvas changes that touch a finite set of elements, prefer diagram.proposeSubgraphPatch so only deltas are sent and authored geometry outside the impact scope is preserved. Use diagram.proposeUpdate for Mermaid, title/size/container metadata changes, or true whole-diagram rewrites. Use diagram.update directly only when the user explicitly asks to apply immediately.',
@@ -864,6 +867,47 @@ server.registerTool('diagram.create', {
   }
 })
 
+server.registerTool('diagram.composeArchitecture', {
+  title: 'Compose system architecture from semantic graph',
+  description: 'Preferred one-call NEW professional architecture generation: supply verified semantic nodes and relationships, never pixel coordinates. Deterministically chooses an architecture composition and creates a Canvas with semantic groups, layout, routing and structural quality results. No invented dependencies. Use diagram.create + diagram.update instead for faithful reference-image tracing or preserving manually specified geometry.',
+  inputSchema: z.object({
+    workspacePath: z.string().optional(),
+    title: z.string().trim().min(1).max(120),
+    theme: z.enum(['enterprise', 'technical', 'presentation', 'cloud', 'editorial', 'sketch']).default('enterprise'),
+    density: z.enum(['auto', 'comfortable', 'compact', 'dense']).default('auto'),
+    style: z.enum(diagramVisualStyles.map((style) => style.id) as [string, ...string[]]).optional().describe('Optional one unified visual theme. Defaults to a restrained, low-saturation professional preset rather than bright card walls.'),
+    nodes: z.array(z.object({
+      id: z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/).describe('Stable unique node ID, not a coordinate.'),
+      text: z.string().trim().min(1).max(100),
+      icon: z.enum(CANVAS_ROLE_ICON_IDS).optional().describe('Actual semantic role, not a decorative icon.'),
+      stencil: z.enum(CANVAS_STENCIL_IDS).optional().describe('Only if confirmed by actual project code or user input.'),
+      subtitle: z.string().max(80).optional(),
+      description: z.string().max(500).optional(),
+    })).min(2).max(80),
+    relations: z.array(z.object({
+      from: z.string().min(1),
+      to: z.string().min(1),
+      label: z.string().max(64).optional().describe('Meaningful verified relationship/protocol, not a repeated node name.'),
+      asynchronous: z.boolean().optional(),
+    })).min(1).max(160).describe('Real dependencies between nodes. Do not invent edges merely to make a picture connected.'),
+  }),
+  annotations: write,
+}, async ({ workspacePath, title, theme, density, style, nodes, relations }, extra) => {
+  const composed = composeArchitectureGraph({ title, theme, density, style: style as typeof diagramVisualStyles[number]['id'] | undefined, nodes, relations })
+  const store = await resolveStore(workspacePath, toolThreadId(extra._meta))
+  const diagram = await store.createComposedArchitecture(title, serializeCanvasScene(composed.scene))
+  markThreadDiagram(extra._meta, diagram.path, undefined, undefined, 'create', diagram.modifiedAt)
+  return {
+    content: [{ type: 'text', text: `Created architecture ${diagram.path} with ${nodes.length} semantic nodes, ${relations.length} evidence-backed relations and ${composed.summary.composition} composition. Quality: ${composed.quality.needsRevision ? `${composed.quality.issues.length} issue(s) to inspect` : 'passed'}.` }],
+    structuredContent: {
+      kind: 'diagram', workspacePath: store.workspacePath, diagram,
+      architectureDesign: composed.summary,
+      quality: composed.quality,
+      architectureEvaluation: { selected: composed.evaluation, candidates: composed.candidates, note: 'Structural/layout heuristic only, not a visual aesthetic score.' },
+    },
+  }
+})
+
 server.registerTool('diagram.update', {
   title: 'Update diagram',
   description: 'Replace the source of an existing Mermaid or Canvas diagram. Pass expectedModifiedAt from diagram.get when available to avoid overwriting concurrent edits.',
@@ -966,7 +1010,7 @@ server.registerTool('diagram.routeArchitectureEdges', {
 
 server.registerTool('diagram.inspectQuality', {
   title: 'Inspect diagram quality',
-  description: 'Run the built-in visual/structural quality gate on the current Mermaid or Canvas diagram, or on an unsaved candidate passed in source. Canvas checks node overlap, edge-through-node, line crossings/overlap, label collisions/overflow, flat architecture hierarchy and oversized labels; Mermaid checks type-specific density and split thresholds. Use after creation or a material redesign before considering the diagram finished.',
+  description: 'Run the built-in visual/structural quality gate on the current Mermaid or Canvas diagram, or on an unsaved candidate passed in source. Canvas checks node overlap, crossed/overlapping edges, label collisions, flat hierarchy, disconnected architecture hubs, repetitive card walls and decorative lanes without real cross-layer edges. Warnings do not authorize inventing missing dependencies. Mermaid checks type-specific density and split thresholds.',
   inputSchema: z.object({
     workspacePath: z.string().optional(),
     path: z.string().optional(),

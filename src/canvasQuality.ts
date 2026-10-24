@@ -20,6 +20,10 @@ export type CanvasQualityIssueCode =
   | 'label-outside-canvas'
   | 'long-label'
   | 'flat-architecture'
+  | 'isolated-architecture-hubs'
+  | 'repetitive-card-grid'
+  | 'decorative-architecture-lanes'
+  | 'excessive-edge-detour'
 
 export interface CanvasQualityIssue {
   code: CanvasQualityIssueCode
@@ -44,6 +48,10 @@ export interface CanvasVisualQualityAssessment {
     labelNodeIntersections: number
     labelOverflows: number
     longLabels: number
+    isolatedHubs: number
+    repeatedCards: number
+    crossLaneRelations: number
+    excessiveEdgeDetours: number
   }
 }
 
@@ -180,10 +188,29 @@ export function assessCanvasVisualQuality(scene: CanvasScene): CanvasVisualQuali
 
   const routes = new Map<string, CanvasPoint[]>()
   let edgeNodeIntersections = 0
+  let excessiveEdgeDetours = 0
   for (const arrow of arrows) {
     const route = arrowRoute(arrow, boxById)
     if (!route) continue
     routes.set(arrow.id, route)
+    if (scene.architecture && route.length >= 2) {
+      const from = boxById.get(arrow.from)
+      const to = boxById.get(arrow.to)
+      if (from && to) {
+        const direct = Math.abs(from.x + from.width / 2 - to.x - to.width / 2)
+          + Math.abs(from.y + from.height / 2 - to.y - to.height / 2)
+        const length = route.slice(1).reduce((sum, point, index) =>
+          sum + Math.abs(point.x - route[index].x) + Math.abs(point.y - route[index].y), 0)
+        if (length > Math.max(320, direct * 2.4)) {
+          excessiveEdgeDetours += 1
+          issues.push({
+            code: 'excessive-edge-detour', severity: 'warning',
+            message: `${arrow.label || arrow.id} 的连线绕行过长，请检查分区布局和路由约束，避免穿越无关节点。`,
+            elementIds: [arrow.id],
+          })
+        }
+      }
+    }
     boxIndex.beginQuery()
     const candidates: number[] = []
     for (let index = 0; index < route.length - 1; index += 1) {
@@ -311,6 +338,12 @@ export function assessCanvasVisualQuality(scene: CanvasScene): CanvasVisualQuali
     })
   }
 
+  // Geometry-only gates consider a neatly aligned product catalog "perfect".
+  // These structure heuristics flag the three specific anti-patterns seen in
+  // architecture diagrams, without inventing missing dependencies.
+  const structure = architectureStructureIssues(scene, boxes, arrows)
+  issues.push(...structure.issues)
+
   return {
     needsRevision: issues.length > 0,
     issues: dedupeIssues(issues),
@@ -327,8 +360,97 @@ export function assessCanvasVisualQuality(scene: CanvasScene): CanvasVisualQuali
       labelNodeIntersections,
       labelOverflows,
       longLabels,
+      isolatedHubs: structure.isolatedHubs,
+      repeatedCards: structure.repeatedCards,
+      crossLaneRelations: structure.crossLaneRelations,
+      excessiveEdgeDetours,
     },
   }
+}
+
+function architectureStructureIssues(scene: CanvasScene, boxes: CanvasBox[], arrows: CanvasArrow[]) {
+  const issues: CanvasQualityIssue[] = []
+  let isolatedHubs = 0
+  let repeatedCards = 0
+  let crossLaneRelations = 0
+  if (!scene.architecture || boxes.length < 16) return { issues, isolatedHubs, repeatedCards, crossLaneRelations }
+
+  const nodes = boxes.filter((item): item is CanvasNode => item.type === 'node')
+  const byId = new Map(nodes.map((node) => [node.id, node]))
+  const laneIds = new Set((scene.lanes ?? []).map((lane) => lane.id))
+  crossLaneRelations = arrows.filter((arrow) => {
+    const from = byId.get(arrow.from)?.laneId
+    const to = byId.get(arrow.to)?.laneId
+    return Boolean(from && to && from !== to && laneIds.has(from) && laneIds.has(to))
+  }).length
+  if (laneIds.size >= 3 && arrows.length >= 8 && crossLaneRelations === 0
+    && nodes.filter((node) => node.laneId && laneIds.has(node.laneId)).length >= 14) {
+    issues.push({
+      code: 'decorative-architecture-lanes', severity: 'warning',
+      message: '架构图跨越多个泳道却没有跨层关系；检查这些层是否仅为装饰，或是否遗漏真实的跨层依赖。',
+      elementIds: [],
+    })
+  }
+
+  const degrees = new Map(nodes.map((node) => [node.id, 0]))
+  const neighbours = new Map(nodes.map((node) => [node.id, new Set<string>()]))
+  for (const arrow of arrows) {
+    if (!degrees.has(arrow.from) || !degrees.has(arrow.to)) continue
+    degrees.set(arrow.from, (degrees.get(arrow.from) ?? 0) + 1)
+    neighbours.get(arrow.from)!.add(arrow.to)
+    neighbours.get(arrow.to)!.add(arrow.from)
+  }
+  const hubs = nodes.filter((node) => (degrees.get(node.id) ?? 0) >= 4)
+  const visited = new Set<string>()
+  const components = new Map<string, number>()
+  let componentIndex = 0
+  for (const node of nodes) {
+    if (visited.has(node.id)) continue
+    const queue = [node.id]
+    visited.add(node.id)
+    for (let index = 0; index < queue.length; index += 1) {
+      const current = queue[index]
+      components.set(current, componentIndex)
+      for (const next of neighbours.get(current) ?? []) {
+        if (visited.has(next)) continue
+        visited.add(next)
+        queue.push(next)
+      }
+    }
+    componentIndex += 1
+  }
+  isolatedHubs = new Set(hubs.map((hub) => components.get(hub.id))).size
+  if (hubs.length >= 3 && isolatedHubs >= 3) {
+    issues.push({
+      code: 'isolated-architecture-hubs', severity: 'warning',
+      message: '多个高连接度中心节点互不连通，整体更像并列产品清单；请确认真实业务主路径及跨域依赖，不能为通过检查而编造关系。',
+      elementIds: hubs.map((hub) => hub.id),
+    })
+  }
+
+  // Same-sized repeated leaves in three columns indicate an inventory/card wall.
+  const leafCards = nodes.filter((node) => (degrees.get(node.id) ?? 0) <= 1 && node.width >= 100)
+  const buckets = new Map<string, CanvasNode[]>()
+  for (const node of leafCards) {
+    const bucket = `${Math.round(node.width / 20)}:${Math.round(node.height / 10)}`
+    buckets.set(bucket, [...(buckets.get(bucket) ?? []), node])
+  }
+  const cards = [...buckets.values()].sort((a, b) => b.length - a.length)[0] ?? []
+  const columns = new Map<number, CanvasNode[]>()
+  for (const card of cards) {
+    const key = Math.round(card.x / 30)
+    columns.set(key, [...(columns.get(key) ?? []), card])
+  }
+  repeatedCards = cards.length
+  if (cards.length >= 12 && cards.length >= nodes.length * 0.5
+    && [...columns.values()].filter((column) => column.length >= 3).length >= 3) {
+    issues.push({
+      code: 'repetitive-card-grid', severity: 'warning',
+      message: '多数节点是尺寸相同、三列以上对齐的叶子卡片，视觉主次不足；优先合并为有意义的能力分组，并突出核心链路。',
+      elementIds: cards.map((card) => card.id),
+    })
+  }
+  return { issues, isolatedHubs, repeatedCards, crossLaneRelations }
 }
 
 function boxesOverlap(left: Pick<CanvasBox, 'x' | 'y' | 'width' | 'height'>, right: Pick<CanvasBox, 'x' | 'y' | 'width' | 'height'>): boolean {

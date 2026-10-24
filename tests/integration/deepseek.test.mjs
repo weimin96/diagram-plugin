@@ -59,6 +59,44 @@ test('真实 stdio 服务隔离会话与项目，缺失身份显式失败', asyn
   } finally { await client.close(); await rm(root, { recursive: true, force: true }) }
 })
 
+test('架构语义图通过真实 MCP 一次生成、保存和质量评估', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'diagram-semantic-create-'))
+  const client = await connect()
+  try {
+    const visible = (await client.listTools()).tools.filter(isModelTool)
+    assert.ok(visible.some((tool) => tool.name === 'diagram.composeArchitecture'))
+    const intent = {
+      title: '后端系统架构',
+      nodes: [
+        { id: 'user', text: '客户端', icon: 'user' },
+        { id: 'web', text: 'Web', icon: 'web' },
+        { id: 'api', text: 'API 网关', icon: 'gateway' },
+        { id: 'service', text: '核心服务', icon: 'service' },
+        { id: 'db', text: 'Postgres', icon: 'database', stencil: 'postgres' },
+        { id: 'cache', text: 'Redis', icon: 'cache', stencil: 'redis' },
+      ],
+      relations: [
+        { from: 'user', to: 'web' }, { from: 'web', to: 'api' },
+        { from: 'api', to: 'service' }, { from: 'service', to: 'db' },
+        { from: 'service', to: 'cache' },
+      ],
+    }
+    const created = await call(client, root, 'architecture-session', 'diagram.composeArchitecture', intent)
+    assert.equal(created.isError, undefined)
+    assert.equal(created.structuredContent.diagram.canvasWorkbench, 'architecture')
+    assert.equal(created.structuredContent.quality.metrics.nodeOverlaps, 0)
+    assert.ok(created.structuredContent.architectureEvaluation.candidates.length >= 2)
+    assert.ok(created.structuredContent.architectureEvaluation.selected.structuralScore <= 90)
+    assert.equal((await readFile(path.join(root, created.structuredContent.diagram.path), 'utf8')).includes('arch-application'), true)
+    assert.ok(JSON.stringify(await call(client, root, 'architecture-session', 'diagram.threadState')).includes(created.structuredContent.diagram.path))
+    const wrong = await call(client, root, 'architecture-session', 'diagram.composeArchitecture', {
+      ...intent, title: '未保存错误图', relations: [{ from: 'missing', to: 'api' }],
+    })
+    assert.equal(wrong.isError, true)
+    assert.equal((await call(client, root, 'architecture-session', 'diagram.list')).structuredContent.diagrams.length, 1)
+  } finally { await client.close(); await rm(root, { recursive: true, force: true }) }
+})
+
 test('两个服务进程竞争同一图表版本时只允许一个写入成功', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'diagram-processes-'))
   const clients = await Promise.all([connect(), connect()])

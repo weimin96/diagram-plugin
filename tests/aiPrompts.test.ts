@@ -21,8 +21,9 @@ test('keeps Canvas workbench intent explicit for architecture and flowchart boar
   const architecture = buildGenerationPrompt('/workspace', {
     type: 'canvas', canvasWorkbench: 'architecture', title: 'Platform', scope: '', instructions: '',
   })
-  assert.match(architecture, /canvasWorkbench 使用 architecture/)
-  assert.match(architecture, /Architecture Diagram Skill/)
+  assert.match(architecture, /diagram\.composeArchitecture/)
+  assert.match(architecture, /diagram\.designGuide/)
+  assert.doesNotMatch(architecture, /diagram\.update/)
 
   const flowchart = buildGenerationPrompt('/workspace', {
     type: 'canvas', canvasWorkbench: 'flowchart', title: 'Approval', scope: '', instructions: '',
@@ -72,13 +73,20 @@ test('architecture generation uses topology archetypes and a bounded quality loo
     scope: 'src/',
     instructions: '展示核心服务、数据层和外部依赖',
   })
-  assert.match(prompt, /backbone\/linear/)
-  assert.match(prompt, /fan-out/)
   assert.match(prompt, /hub-spoke/)
-  assert.match(prompt, /视觉论证/)
-  assert.match(prompt, /sourcePaths/)
+  assert.match(prompt, /关键依赖/)
+  assert.match(prompt, /x\/y\/width\/height/)
   assert.match(prompt, /diagram\.inspectQuality/)
-  assert.match(prompt, /needsRevision=true/)
+  assert.match(prompt, /quality/)
+})
+
+test('参考图片忠实重绘不强制走语义自动布局', () => {
+  const prompt = buildGenerationPrompt('/workspace', {
+    type: 'canvas', canvasWorkbench: 'architecture', title: '原有架构复刻',
+    scope: '', instructions: '参考图片，忠实保留原有分组和布局',
+  })
+  assert.match(prompt, /diagram\.create/)
+  assert.doesNotMatch(prompt, /diagram\.composeArchitecture/)
 })
 
 test('data visualization prompts enforce truthful quantitative semantics', () => {

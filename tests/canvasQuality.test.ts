@@ -4,6 +4,57 @@ import { readFileSync } from 'node:fs'
 import { assessCanvasVisualQuality } from '../src/canvasQuality.js'
 import type { CanvasScene } from '../src/canvas.js'
 
+test('自动标记显著长于直接距离的外围架构绕线', () => {
+  const scene: CanvasScene = {
+    type: 'diagram-plugin-canvas', version: 1, title: '过长绕线', width: 1400, height: 1000,
+    architecture: { theme: 'enterprise', view: 'detail', density: 'auto' },
+    elements: [
+      { type: 'node', id: 'a', x: 200, y: 200, width: 150, height: 75, text: '入口' },
+      { type: 'node', id: 'b', x: 610, y: 200, width: 150, height: 75, text: '服务' },
+      { type: 'arrow', id: 'loop', from: 'a', to: 'b', routing: 'orthogonal', fromAnchor: 'right', toAnchor: 'left',
+        points: [{ x: 430, y: 238 }, { x: 430, y: 900 }, { x: 540, y: 900 }, { x: 540, y: 238 }] },
+    ],
+  }
+  const quality = assessCanvasVisualQuality(scene)
+  assert.equal(quality.metrics.excessiveEdgeDetours, 1)
+  assert.ok(quality.issues.some((issue) => issue.code === 'excessive-edge-detour'))
+})
+
+test('架构质量检查识别漂亮但只有产品清单的重复泳道矩阵', () => {
+  const elements: CanvasScene['elements'] = []
+  for (let column = 0; column < 3; column += 1) {
+    const hub = `hub-${column}`
+    elements.push({ type: 'node', id: hub, text: `产品域 ${column}`, x: 80 + column * 440, y: 370, width: 130, height: 80, laneId: 'products' })
+    for (let row = 0; row < 6; row += 1) {
+      const leaf = `product-${column}-${row}`
+      elements.push({ type: 'node', id: leaf, text: `产品 ${row}`, x: 240 + column * 440, y: 220 + row * 72, width: 260, height: 52, laneId: 'products' })
+      elements.push({ type: 'arrow', id: `edge-${column}-${row}`, from: hub, to: leaf })
+    }
+  }
+  const scene: CanvasScene = {
+    type: 'diagram-plugin-canvas', version: 1, title: '产品清单', width: 1800, height: 1100,
+    architecture: { theme: 'enterprise', view: 'detail', density: 'auto' },
+    lanes: [
+      { id: 'users', label: '用户', axis: 'horizontal', start: 40, size: 150 },
+      { id: 'products', label: '产品', axis: 'horizontal', start: 210, size: 570 },
+      { id: 'infra', label: '底座', axis: 'horizontal', start: 800, size: 220 },
+    ],
+    elements: [
+      ...elements,
+      { type: 'node', id: 'user', text: '用户', x: 80, y: 90, width: 150, height: 70, laneId: 'users' },
+      { type: 'node', id: 'infra', text: '基础设施', x: 80, y: 865, width: 150, height: 70, laneId: 'infra' },
+    ],
+  }
+  const quality = assessCanvasVisualQuality(scene)
+  assert.ok(quality.needsRevision)
+  for (const code of ['decorative-architecture-lanes', 'isolated-architecture-hubs', 'repetitive-card-grid']) {
+    assert.ok(quality.issues.some((issue) => issue.code === code), code)
+  }
+  assert.equal(quality.metrics.crossLaneRelations, 0)
+  assert.equal(quality.metrics.isolatedHubs, 3)
+  assert.equal(quality.metrics.repeatedCards, 18)
+})
+
 test('中英文、人工位置与独立连线固定样例的标签不遮挡节点或互相重叠', () => {
   for (const name of ['chinese-relations', 'english-relations', 'manual-reservation']) {
     const scene: CanvasScene = JSON.parse(readFileSync(new URL(`./fixtures/canvas-labels/${name}.diagram.json`, import.meta.url), 'utf8'))

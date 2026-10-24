@@ -3,7 +3,7 @@ import lockfile from 'proper-lockfile'
 import { createHash, randomUUID } from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
-import { createCanvasSource, type CanvasWorkbenchMode } from './canvas.js'
+import { createCanvasSource, parseCanvasScene, type CanvasWorkbenchMode } from './canvas.js'
 import { createTemplate, detectDiagramType } from './templates.js'
 import type { DiagramCanvasWorkbench, DiagramDocument, DiagramRevision, DiagramSummary, DiagramType, MermaidDiagramType } from './types.js'
 
@@ -76,6 +76,20 @@ export class DiagramStore {
       const target = await nextAvailablePath(directory, base, type === 'canvas' ? '.diagram.json' : '.mmd')
       const source = type === 'canvas' ? createCanvasSource(title, canvasWorkbench) : createTemplate(type as MermaidDiagramType, title)
       await writeFile(target, source, { encoding: 'utf8', flag: 'wx' })
+      const info = await stat(target)
+      return this.document(relativePathFromRoot(this.workspacePath, target), source, info.mtime)
+    })
+  }
+
+  async createComposedArchitecture(title: string, source: string): Promise<DiagramDocument> {
+    const scene = parseCanvasScene(source)
+    if (scene.workbench !== 'architecture' || !scene.architecture || scene.title !== title) {
+      throw new Error('只允许保存与标题一致的系统架构 Canvas 文档。')
+    }
+    return withWorkspaceMutation(this.workspacePath, async () => {
+      const directory = await this.prepareDirectory(['docs', 'diagrams'])
+      const target = await nextAvailablePath(directory, slugify(title) || 'architecture', '.diagram.json')
+      await writeFile(target, normalizeSource(source), { encoding: 'utf8', flag: 'wx' })
       const info = await stat(target)
       return this.document(relativePathFromRoot(this.workspacePath, target), source, info.mtime)
     })

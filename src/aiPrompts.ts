@@ -19,6 +19,24 @@ export function buildGenerationPrompt(workspacePath: string, request: DiagramGen
   if (request.type === 'canvas') {
     const architecture = request.canvasWorkbench === 'architecture' || (!request.canvasWorkbench && isArchitectureIntent(`${request.title} ${instructions}`))
     const workbench = request.canvasWorkbench ?? (architecture ? 'architecture' : 'freeform')
+    const faithfulReference = /(参考(?:图片|图)|根据(?:图片|原图)|按原图|照原图|忠实复刻|还原原图|一比一|保持.{0,8}布局)/.test(`${request.title} ${instructions}`)
+    if (architecture && !faithfulReference) {
+      return [
+        '为当前项目绘制一张专业且可编辑的系统架构图。先确定语义，再由 Diagram 引擎自动布局。',
+        `工作空间：${workspacePath}`,
+        `标题：${request.title.trim()}`,
+        scope ? `优先分析范围：${scope}` : '优先分析对话中指定的模块/源码，未指定时定位最相关实现。',
+        instructions ? `额外要求：${instructions}` : '',
+        '',
+        '执行要求：',
+        '1. 阅读真实代码、配置或用户提供的资料，整理节点 id/text/职责/角色和已确认的依赖关系。未知依赖不要凭空创造；用户信息不足时宁可留白。',
+        '2. 调用 diagram.designGuide（type=canvas，intent=系统架构）选择构图方式；优先主业务路径、系统边界、关键依赖，避免等权矩阵和装饰性泳道。',
+        '3. 只调用一次 diagram.composeArchitecture：传入 title、nodes、relations 和必要 theme；无需再额外创建文件或整图更新，也不要手动编写 x/y/width/height、line routing、重复颜色或整份 Canvas JSON。',
+        '4. 由插件自动处理 layered、hub-spoke、event-driven 等架构布局、语义分区与正交连线，提供设计质量检查。节点标签使用短标题，技术栈只有确认后才使用 stencil。',
+        '5. 读取返回的 quality（已经执行 diagram.inspectQuality 同级质量检查）。若存在问题，诚实说明缺少的事实或设计缺陷；不要为了过关发明跨域边或反复全量重画。',
+        '6. 给用户图表路径和极简结果摘要，不输出冗长 JSON。',
+      ].filter(Boolean).join('\n')
+    }
     const workbenchRule = workbench === 'architecture'
       ? '画布默认 1600x1000。按从左到右或从上到下的主要阅读方向布置，节点不要明显重叠。普通系统架构默认用紧贴内容的 kind=boundary 命名容器，不主动添加 software-system/container C4 元数据；只有用户明确要求 C4，或源码/已有图明确存在 C4 层级时才使用 C4。技术组件只在事实明确时填写 stencil 和真实 sourcePaths。已确认的云组件应保持角色语义与云图标一致，例如 Lambda/Functions/Cloud Functions 使用 worker 角色、RDS/SQL Database/Cloud SQL 使用 database 角色。'
       : workbench === 'flowchart'
