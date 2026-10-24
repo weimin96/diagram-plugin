@@ -90,6 +90,10 @@ function nudgeArchitectureCorridors(scene: CanvasScene, arrowId: string): Canvas
   if (!from || !to) return []
   const route = canvasArrowBoxRoute(from, to, arrow)
   const candidates: CanvasScene[] = []
+  const localShortRoute = from.groupId && from.groupId === to.groupId && route.length <= 5
+  const offsets = localShortRoute
+    ? [-96, 96, -48, -32, -20, -12, 12, 20, 32, 48]
+    : [-48, -32, -20, -12, 12, 20, 32, 48]
   // For a segment to slide, the segments immediately before and after must
   // be perpendicular; endpoints stay anchored to their original nodes.
   for (let index = 1; index < route.length - 2 && candidates.length < 16; index += 1) {
@@ -100,7 +104,7 @@ function nudgeArchitectureCorridors(scene: CanvasScene, arrowId: string): Canvas
     const previous = route[index - 1], next = route[index + 2]
     if (vertical && (previous.y !== a.y || next.y !== b.y)) continue
     if (horizontal && (previous.x !== a.x || next.x !== b.x)) continue
-    for (const offset of [-48, -32, -20, -12, 12, 20, 32, 48]) {
+    for (const offset of offsets) {
       const displaced = route.map((point) => ({ ...point }))
       if (vertical) {
         displaced[index].x += offset
