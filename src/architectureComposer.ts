@@ -1,4 +1,4 @@
-import { beautifyArchitectureScene, inferArchitectureComposition, type ArchitectureComposition, type ArchitectureTheme } from './architectureDesign.js'
+import { beautifyArchitectureScene, inferArchitectureComposition, routeArchitectureArrowIds, type ArchitectureComposition, type ArchitectureTheme } from './architectureDesign.js'
 import { assessCanvasVisualQuality, type CanvasVisualQualityAssessment } from './canvasQuality.js'
 import type { DiagramVisualStyle } from './diagramVisualStyles.js'
 import { canvasArrowBoxRoute, type CanvasArchitectureDensity, type CanvasIcon, type CanvasNode, type CanvasScene, type CanvasStencil } from './canvas.js'
@@ -74,6 +74,45 @@ function evaluateArchitectureLayout(scene: CanvasScene, quality: CanvasVisualQua
   return { structuralScore, layout: composition, density, issueCount: quality.issues.length, aspectRatio: Math.round(ratio * 100) / 100, ...detours }
 }
 
+/** Only reroute implicated edges, and accept strictly improving results; never move authored nodes. */
+function refineArchitectureRoutes(
+  initialScene: CanvasScene,
+  composition: ArchitectureComposition,
+  density: Exclude<CanvasArchitectureDensity, 'auto'>,
+) {
+  let scene = initialScene
+  let quality = assessCanvasVisualQuality(scene)
+  let evaluation = evaluateArchitectureLayout(scene, quality, composition, density)
+  let reroutedEdges = 0
+  const issueCodes = new Set(['edge-crossing', 'edge-overlap', 'edge-through-node', 'excessive-edge-detour'])
+  // Bounded local search: not an extra AI pass and no repeated full-scene relayout.
+  for (let round = 0; round < 3; round += 1) {
+    const affectedIds = [...new Set(quality.issues
+      .filter((issue) => issueCodes.has(issue.code))
+      .flatMap((issue) => issue.elementIds))].filter((id) => scene.elements.some((item) => item.type === 'arrow' && item.id === id)).slice(0, 8)
+    if (!affectedIds.length) break
+    let best: { scene: CanvasScene; quality: CanvasVisualQualityAssessment; evaluation: ArchitectureLayoutAssessment } | undefined
+    for (const id of affectedIds) {
+      const candidate = routeArchitectureArrowIds(scene, [id])
+      const nextQuality = assessCanvasVisualQuality(candidate)
+      if (nextQuality.metrics.edgeNodeIntersections > quality.metrics.edgeNodeIntersections
+        || nextQuality.metrics.nodeOverlaps > quality.metrics.nodeOverlaps) continue
+      const nextEvaluation = evaluateArchitectureLayout(candidate, nextQuality, composition, density)
+      const previous = best?.evaluation ?? evaluation
+      if (nextEvaluation.structuralScore > previous.structuralScore
+        || (nextEvaluation.structuralScore === previous.structuralScore && nextQuality.issues.length < (best?.quality.issues.length ?? quality.issues.length))) {
+        best = { scene: candidate, quality: nextQuality, evaluation: nextEvaluation }
+      }
+    }
+    if (!best) break
+    scene = best.scene
+    quality = best.quality
+    evaluation = best.evaluation
+    reroutedEdges += 1
+  }
+  return { scene, quality, evaluation, reroutedEdges }
+}
+
 export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
   const ids = new Set<string>()
   for (const node of intent.nodes) {
@@ -131,5 +170,9 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
     || a.quality.issues.length - b.quality.issues.length
     || a.summary.composition.localeCompare(b.summary.composition))
   const { selectionScore: _selectionScore, ...selected } = candidates[0]
-  return { ...selected, candidates: candidates.map(({ evaluation }) => evaluation) }
+  const refined = refineArchitectureRoutes(selected.scene, selected.summary.composition, selected.summary.resolvedDensity)
+  return {
+    ...selected, ...refined,
+    candidates: candidates.map(({ evaluation }, index) => index === 0 ? refined.evaluation : evaluation),
+  }
 }

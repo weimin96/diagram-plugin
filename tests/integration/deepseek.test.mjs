@@ -87,6 +87,7 @@ test('架构语义图通过真实 MCP 一次生成、保存和质量评估', asy
     assert.equal(created.structuredContent.quality.metrics.nodeOverlaps, 0)
     assert.ok(created.structuredContent.architectureEvaluation.candidates.length >= 2)
     assert.ok(created.structuredContent.architectureEvaluation.selected.structuralScore <= 90)
+    assert.ok(created.structuredContent.architectureEvaluation.reroutedEdges >= 0)
     assert.equal((await readFile(path.join(root, created.structuredContent.diagram.path), 'utf8')).includes('arch-application'), true)
     assert.ok(JSON.stringify(await call(client, root, 'architecture-session', 'diagram.threadState')).includes(created.structuredContent.diagram.path))
     const wrong = await call(client, root, 'architecture-session', 'diagram.composeArchitecture', {

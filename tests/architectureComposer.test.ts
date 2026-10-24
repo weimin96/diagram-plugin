@@ -50,6 +50,37 @@ test('fixed density limits candidates and keeps deterministic layout', () => {
   assert.equal(result.summary.resolvedDensity, 'compact')
 })
 
+test('多区域候选局部重排减少交叉且不改动节点与语义关系', () => {
+  const nodes = [
+    ['audience', '业务用户', 'user'], ['portal', '业务门户', 'web'],
+    ['gateway', 'API 网关', 'gateway'], ['auth', '认证服务', 'auth'],
+    ['business', '核心业务服务', 'service'], ['search', '检索服务', 'search'],
+    ['job', '任务调度', 'scheduler'], ['worker', '异步处理', 'worker'],
+    ['queue', '消息队列', 'queue'], ['pg', 'PostgreSQL', 'database'],
+    ['redis', 'Redis', 'cache'], ['minio', '对象存储', 'file'],
+  ] as const
+  const relations = [
+    ['audience', 'portal'], ['portal', 'gateway'], ['gateway', 'auth'],
+    ['gateway', 'business'], ['business', 'pg'], ['business', 'redis'],
+    ['business', 'search'], ['business', 'queue'], ['queue', 'worker'],
+    ['job', 'worker'], ['worker', 'minio'],
+  ] as const
+  const graph: ArchitectureIntentGraph = {
+    title: '多区域业务架构',
+    nodes: nodes.map(([id, text, icon]) => ({ id, text, icon })),
+    relations: relations.map(([from, to]) => ({ from, to })),
+  }
+  const composed = composeArchitectureGraph(graph)
+  const arrows = composed.scene.elements.filter((item) => item.type === 'arrow')
+  assert.equal(composed.quality.metrics.edgeCrossings, 0)
+  assert.ok(composed.quality.metrics.edgeOverlaps <= 1)
+  assert.equal(composed.quality.metrics.edgeNodeIntersections, 0)
+  assert.ok(composed.reroutedEdges >= 1 && composed.reroutedEdges <= 3)
+  assert.deepEqual(arrows.map((arrow) => [arrow.from, arrow.to]), relations.map(([from, to]) => [from, to]))
+  assert.deepEqual(composed.scene.elements.filter((item) => item.type === 'node').map((node) => node.id), nodes.map(([id]) => id))
+  assert.deepEqual(composeArchitectureGraph(graph).scene, composed.scene)
+})
+
 test('invalid semantic relations are rejected before any write', async () => {
   assert.throws(() => composeArchitectureGraph({ ...input, nodes: [...input.nodes, input.nodes[0]] }), /重复/)
   assert.throws(() => composeArchitectureGraph({ ...input, relations: [{ from: 'person', to: 'missing' }] }), /不存在/)
