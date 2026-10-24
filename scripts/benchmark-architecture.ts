@@ -3,11 +3,17 @@ import path from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { canvasSceneToSvg, serializeCanvasScene } from '../src/canvas.js'
-import { architectureCases } from '../tests/fixtures/architecture/cases.js'
+import { architectureBenchmarkCases } from './architecture-benchmark-cases.js'
 
 const outputFlag = process.argv.indexOf('--out')
 if (outputFlag >= 0 && !process.argv[outputFlag + 1]) throw new Error('--out expects a destination directory')
-const output = path.resolve(outputFlag < 0 ? 'test-results/architecture-benchmark' : process.argv[outputFlag + 1])
+const suiteFlag = process.argv.find((arg) => arg.startsWith('--suite='))
+const suiteName = suiteFlag?.slice('--suite='.length) ?? 'core'
+if (!['core', 'extended', 'stress'].includes(suiteName)) throw new Error('Unknown benchmark suite')
+const suite = suiteName as 'core' | 'extended' | 'stress'
+const output = path.resolve(outputFlag < 0
+  ? `test-results/architecture-benchmark${suite === 'core' ? '' : '-' + suite}`
+  : process.argv[outputFlag + 1])
 await mkdir(output, { recursive: true })
 
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => (
@@ -15,7 +21,7 @@ const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => (
 ))
 
 const results = []
-for (const example of architectureCases) {
+for (const example of architectureBenchmarkCases(suite)) {
   const started = performance.now()
   const composed = composeArchitectureGraph(example.intent)
   const elapsedMs = Math.round(performance.now() - started)
@@ -26,6 +32,7 @@ for (const example of architectureCases) {
     id: example.id,
     title: example.intent.title,
     description: example.description,
+    source: example.source,
     nodes: example.intent.nodes.length,
     relations: example.intent.relations.length,
     composition: composed.summary.composition,
@@ -40,7 +47,7 @@ for (const example of architectureCases) {
   })
 }
 
-await writeFile(path.join(output, 'report.json'), JSON.stringify({ version: 1, source: 'deterministic fictional reference graphs', results }, null, 2) + '\n')
+await writeFile(path.join(output, 'report.json'), JSON.stringify({ version: 2, suite, source: 'deterministic fictional reference and synthetic graphs', results }, null, 2) + '\n')
 await writeFile(path.join(output, 'index.html'), `<!doctype html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Architecture Generation Benchmark</title>
