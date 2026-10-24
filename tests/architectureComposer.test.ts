@@ -55,7 +55,7 @@ test('layout candidate selection penalizes small fit text and unrelated region i
   const route = {
     totalRouteLength: 1000, crossPartitionRouteLength: 500, crossPartitionDirectDistance: 400,
     crossPartitionRelations: 2, backwardCrossPartitionRelations: 0, frameOverlaps: 0,
-    frameOverlapArea: 0, unrelatedFrameIntrusionLength: 0, worstFrameIntrusions: [],
+    frameOverlapArea: 0, worstFrameOverlaps: [], unrelatedFrameIntrusionLength: 0, worstFrameIntrusions: [],
   }
   assert.equal(architecturePresentationSelectionPenalty(presentation, route), 0)
   assert.ok(architecturePresentationSelectionPenalty({ ...presentation, estimatedTitlePxAtFit: 8.5 }, route) > 0)

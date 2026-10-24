@@ -17,6 +17,7 @@ test('跨区指标独立于图表存储与原始节点关系，重复计算确�
   assert.ok(result.backwardCrossPartitionRelations <= result.crossPartitionRelations)
   assert.deepEqual(assessArchitectureRouteDiagnostics(graph), result)
   assert.ok(result.worstFrameIntrusions.every((item) => item.length > 0))
+  assert.ok(result.worstFrameOverlaps.every((item) => item.area > 0))
   assert.equal(JSON.stringify(graph), before)
 })
 
@@ -36,12 +37,15 @@ test('只将无关分区的几何交叠作为错误，不将父子包含误报',
   const collided = assessArchitectureRouteDiagnostics(scene)
   assert.equal(collided.frameOverlaps, 1)
   assert.ok(collided.frameOverlapArea > 0)
+  assert.deepEqual(collided.worstFrameOverlaps.map(({ firstGroupId, secondGroupId, area }) =>
+    [firstGroupId, secondGroupId, area]), [['root', 'other', collided.frameOverlapArea]])
   const other = scene.elements[1]
   if (other.type !== 'node') throw new Error('Expected a node')
   scene.elements[1] = { ...other, x: 650 }
   const separated = assessArchitectureRouteDiagnostics(scene)
   assert.equal(separated.frameOverlaps, 0)
   assert.equal(separated.frameOverlapArea, 0)
+  assert.deepEqual(separated.worstFrameOverlaps, [])
 })
 
 test('路由长度及逆向依赖的分区诊断与路径一致', () => {

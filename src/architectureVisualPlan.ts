@@ -172,10 +172,13 @@ export function planArchitectureVisual(
     elementIds: [],
     action: '检查适配后的字号和画布宽高；优先采用总览及分区下钻，不直接缩小字体或删除数据',
   })
-  if (concerns.includes('frame-overlap')) repairTargets.push({
-    concern: 'frame-overlap', elementIds: [],
-    action: '检查无关同级分区边界的交叠及分区内节点；先调整分区构图再评估线路',
-  })
+  for (const overlap of geometry.worstFrameOverlaps.slice(0, 2)) {
+    if (!existingGroups.has(overlap.firstGroupId) || !existingGroups.has(overlap.secondGroupId)) continue
+    repairTargets.push({
+      concern: 'frame-overlap', elementIds: [overlap.firstGroupId, overlap.secondGroupId],
+      action: `两个无关分区重叠 ${overlap.area}px²；需联合调整分区布局和关联路线，不能简单平移或缩小节点`,
+    })
+  }
   // The five-target budget must not hide an unreadable wide diagram behind
   // several local corridor conflicts. Preserve both diagnosis dimensions.
   const reviewPriority: Partial<Record<ArchitectureVisualConcernCode, number>> = {
@@ -184,7 +187,7 @@ export function planArchitectureVisual(
     'weak-main-path': 2,
     'cross-boundary-intrusion': 3,
     'overlapping-relationships': 4,
-    'frame-overlap': 5,
+    'frame-overlap': 3,
   }
   repairTargets.sort((a, b) => (reviewPriority[a.concern] ?? 10) - (reviewPriority[b.concern] ?? 10))
   return {
@@ -194,7 +197,10 @@ export function planArchitectureVisual(
     review: {
       readyForVisualReview: quality.metrics.nodeOverlaps === 0
         && quality.metrics.edgeNodeIntersections === 0
-        && quality.metrics.labelNodeIntersections === 0,
+        && quality.metrics.labelNodeIntersections === 0
+        // Tiny frame intersections can still be visually reviewed; broad
+        // overlapping regions need layout repair before meaningful review.
+        && geometry.frameOverlapArea < scene.width * scene.height * 0.1,
       concerns,
       repairTargets: repairTargets.slice(0, 5),
     },

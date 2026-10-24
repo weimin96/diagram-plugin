@@ -10,6 +10,8 @@ export interface ArchitectureRouteDiagnostics {
   frameOverlaps: number
   /** Pixel area of overlapping, unrelated sibling frames. */
   frameOverlapArea: number
+  /** Largest unrelated frame collisions, with the two actual group IDs. */
+  worstFrameOverlaps: Array<{ firstGroupId: string; secondGroupId: string; area: number }>
   /** Total length of route segments passing inside unrelated partition frames. */
   unrelatedFrameIntrusionLength: number
   /** Top offending edge/frame pairs for targeted route review (not a visual score). */
@@ -38,6 +40,7 @@ export function assessArchitectureRouteDiagnostics(scene: CanvasScene): Architec
   const frames = canvasGroupFrames(scene).filter((frame) => !frame.collapsed)
   let frameOverlaps = 0
   let frameOverlapArea = 0
+  const frameCollisions: ArchitectureRouteDiagnostics['worstFrameOverlaps'] = []
   for (let i = 0; i < frames.length; i += 1) {
     for (let j = i + 1; j < frames.length; j += 1) {
       const a = frames[i], b = frames[j]
@@ -49,7 +52,9 @@ export function assessArchitectureRouteDiagnostics(scene: CanvasScene): Architec
       const height = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y)
       if (width <= 5 || height <= 5) continue
       frameOverlaps += 1
-      frameOverlapArea += width * height
+      const area = Math.round(width * height)
+      frameOverlapArea += area
+      frameCollisions.push({ firstGroupId: a.id, secondGroupId: b.id, area })
     }
   }
   let totalRouteLength = 0
@@ -97,6 +102,9 @@ export function assessArchitectureRouteDiagnostics(scene: CanvasScene): Architec
     backwardCrossPartitionRelations,
     frameOverlaps,
     frameOverlapArea: Math.round(frameOverlapArea),
+    worstFrameOverlaps: frameCollisions.sort((a, b) => b.area - a.area
+      || a.firstGroupId.localeCompare(b.firstGroupId)
+      || a.secondGroupId.localeCompare(b.secondGroupId)).slice(0, 5),
     unrelatedFrameIntrusionLength: Math.round(unrelatedFrameIntrusionLength),
     worstFrameIntrusions: intrusions.sort((a, b) => b.length - a.length
       || a.edgeId.localeCompare(b.edgeId) || a.frameId.localeCompare(b.frameId)).slice(0, 5),

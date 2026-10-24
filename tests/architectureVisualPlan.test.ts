@@ -58,6 +58,15 @@ test('高扇出重叠给出真实关系 ID 的定向修复目标，而不是虚�
   assert.ok(targets.every((item) => item.elementIds.length === 2
     && item.elementIds.every((id) => arrowIds.has(id))
     && item.action.includes('不得伪造共享主干')))
+  const frameTargets = output.visualPlan.review.repairTargets.filter((item) => item.concern === 'frame-overlap')
+  const groupIds = new Set(output.scene.groups?.map((group) => group.id))
+  assert.ok(output.routeDiagnostics.frameOverlaps > 0)
+  assert.equal(output.visualPlan.review.readyForVisualReview, false,
+    'overlapping partition frames are not ready for professional visual review')
+  assert.ok(frameTargets.length >= 1 && frameTargets.length <= 2)
+  assert.ok(frameTargets.every((target) => target.elementIds.length === 2
+    && target.elementIds.every((id) => groupIds.has(id))
+    && target.action.includes('不能简单平移')))
   assert.ok(output.visualPlan.review.repairTargets.length <= 5)
 })
 
