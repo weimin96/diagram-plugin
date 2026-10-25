@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { resolveCanvasRelationshipFocus } from '../src/canvasRelationshipFocus.js'
+import { canvasNodeRelations, resolveCanvasRelationshipFocus } from '../src/canvasRelationshipFocus.js'
 import { projectArchitectureCase } from '../scripts/architecture-project-cases.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { serializeCanvasScene } from '../src/canvas.js'
@@ -21,6 +21,28 @@ test('exact edge focus keeps the true source, target and direction without broad
   assert.equal(resolveCanvasRelationshipFocus(edges, ['a', 'b'], null, false), null)
   assert.equal(resolveCanvasRelationshipFocus(edges, [], 'missing', false), null)
   assert.equal(resolveCanvasRelationshipFocus(edges, [], null, false), null)
+})
+
+test('node relationship navigator keeps all actual incoming and outgoing edges, including parallel relations', () => {
+  const nodes = [
+    { id: 'api', text: 'API' }, { id: 'canvas', text: 'Canvas' },
+    { id: 'routing', text: 'Routing' },
+  ]
+  const edges = [
+    { id: 'b', from: 'routing', to: 'canvas', label: 'sync' },
+    { id: 'a', from: 'api', to: 'canvas' },
+    { id: 'c', from: 'canvas', to: 'api' },
+    { id: 'd', from: 'routing', to: 'canvas', label: 'types' },
+    { id: 'orphan', from: 'missing', to: 'canvas' },
+  ]
+  const original = JSON.stringify(edges)
+  const relations = canvasNodeRelations('canvas', nodes, edges)
+  assert.deepEqual(relations.incoming.map((edge) => [edge.id, edge.oppositeId, edge.label]), [
+    ['a', 'api', undefined], ['b', 'routing', 'sync'], ['d', 'routing', 'types'],
+  ])
+  assert.deepEqual(relations.outgoing.map((edge) => [edge.id, edge.oppositeId]), [['c', 'api']])
+  assert.equal(JSON.stringify(edges), original, 'navigator must not mutate or infer graph edges')
+  assert.deepEqual(canvasNodeRelations('missing', nodes, edges), { incoming: [], outgoing: [] })
 })
 
 test('real source-module arrows focus only their actual direction and never mutate Canvas', async () => {

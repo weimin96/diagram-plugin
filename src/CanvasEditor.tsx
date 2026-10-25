@@ -1,7 +1,7 @@
 import { routeArchitectureArrowIds, routeArchitectureEdges, routeArchitectureEdgesIncremental } from './architectureRouting.js'
 import { canvasVisualSkin, canvasStyledBox, canvasFillTextColor, diagramVisualStyles, type DiagramVisualStyle } from './diagramVisualStyles.js'
 import { canvasArrowLabelText } from './canvasLabelText.js'
-import { resolveCanvasRelationshipFocus } from './canvasRelationshipFocus.js'
+import { canvasNodeRelations, resolveCanvasRelationshipFocus } from './canvasRelationshipFocus.js'
 import { canvasKeyDependencyLens } from './canvasDependencyLens.js'
 import { canvasArchitecturePlainTitleLines } from './canvasNodeTitleLayout.js'
 import { CanvasRectIndex } from './canvasRectIndex.js'
@@ -914,6 +914,9 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   }, [architectureScope, lodScene, lodLevel, lodSelection])
   const sourceBoxes = useMemo(() => parsed.scene?.elements.filter((item): item is CanvasNode | CanvasNote => item.type !== 'arrow') ?? [], [parsed.scene])
   const sourceArrows = useMemo(() => parsed.scene?.elements.filter((item): item is CanvasArrow => item.type === 'arrow') ?? [], [parsed.scene])
+  const selectedNodeRelations = useMemo(() => selectedIds.length === 1 && sourceBoxes.some((node) => node.id === selectedIds[0])
+    ? canvasNodeRelations(selectedIds[0], sourceBoxes, sourceArrows) : null,
+  [selectedIds, sourceBoxes, sourceArrows])
   const sourceCollisionIndex = useMemo(() => selectedIds.length > 3 ? new CanvasRectIndex(sourceBoxes) : null, [selectedIds.length > 3, sourceBoxes])
   const staticRenderItems = useMemo(() => {
     const scene = staticSemanticLodProjection?.scene
@@ -2041,7 +2044,11 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
     editorRef.current?.focus({ preventScroll: true })
     const live = currentScene()
     let ids = selectedIds
-    const groupIds = !event.altKey && item.groupId
+    // Auto-generated architecture partitions are semantic boundaries, not
+    // manually grouped nodes. Selecting one module must preserve its
+    // one-hop relationship inspector instead of selecting the whole region.
+    const selectAuthoredGroup = !event.altKey && item.groupId && !item.groupId.startsWith('arch-')
+    const groupIds = selectAuthoredGroup
       ? currentScene().elements.filter((candidate): candidate is CanvasNode | CanvasNote => candidate.type !== 'arrow' && candidate.groupId === item.groupId).map((candidate) => candidate.id)
       : [item.id]
     if (event.shiftKey && ids.includes(item.id)) {
@@ -2052,7 +2059,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
     if (!ids.includes(item.id)) {
       ids = event.shiftKey ? [...new Set([...ids, ...groupIds])] : groupIds
       setSelectedIds(ids)
-    } else if (!event.altKey && item.groupId) {
+    } else if (selectAuthoredGroup) {
       ids = [...new Set([...ids, ...groupIds])]
       setSelectedIds(ids)
     }
@@ -3724,6 +3731,29 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
               </div>
             </div>
             {traceResult ? <div className="freeform-inspector-trace-status">依赖追踪 · {traceResult.nodeIds.length} 节点 · {traceResult.arrowIds.length} 关系 <button type="button" onClick={() => setTraceDirection(null)}>清除</button></div> : null}
+            {scene.architecture && selectedBox && selectedNodeRelations
+              && (selectedNodeRelations.incoming.length > 0 || selectedNodeRelations.outgoing.length > 0) ? (
+              <section className="freeform-node-relations" aria-label="节点真实依赖">
+                <div className="freeform-section-caption">真实依赖 · 入 {selectedNodeRelations.incoming.length} / 出 {selectedNodeRelations.outgoing.length}</div>
+                {([
+                  ['incoming', '被引用', selectedNodeRelations.incoming],
+                  ['outgoing', '引用', selectedNodeRelations.outgoing],
+                ] as const).map(([direction, title, relations]) => relations.length ? (
+                  <div key={direction} className="freeform-node-relations-group">
+                    <strong>{title} · {relations.length}</strong>
+                    {relations.map((relation) => (
+                      <button type="button" key={relation.id} className="freeform-node-relation"
+                        title={`${relation.oppositeLabel}${direction === 'incoming' ? ' → ' : ' ← '}${selectedBox.text}${relation.label ? ` · ${relation.label}` : ''}`}
+                        onClick={() => { setSelectedIds([relation.id]); setHoveredRelationId(null) }}>
+                        <span aria-hidden="true">{direction === 'incoming' ? '←' : '→'}</span>
+                        <span>{relation.oppositeLabel}</span>
+                        {relation.label ? <small>{relation.label}</small> : null}
+                      </button>
+                    ))}
+                  </div>
+                ) : null)}
+              </section>
+            ) : null}
             {selectedSingle?.type === 'arrow' ? (
               <>
                 <label>

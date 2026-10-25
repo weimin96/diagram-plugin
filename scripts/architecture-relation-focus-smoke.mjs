@@ -21,10 +21,11 @@ try {
   const scene = {
     type: 'diagram-plugin-canvas', version: 1, title: 'Relationship lens', width: 900, height: 550,
     architecture: { theme: 'technical', view: 'detail', density: 'compact' },
+    groups: [{ id: 'arch-application', label: '核心应用', kind: 'boundary' }],
     elements: [
-      { type: 'node', id: 'moduleA', text: 'Module A', x: 80, y: 190, width: 180, height: 80, emphasis: 'primary' },
-      { type: 'node', id: 'moduleB', text: 'Module B', x: 440, y: 90, width: 180, height: 80, emphasis: 'primary' },
-      { type: 'node', id: 'moduleC', text: 'Module C', x: 440, y: 310, width: 180, height: 80 },
+      { type: 'node', id: 'moduleA', text: 'Module A', x: 80, y: 190, width: 180, height: 80, emphasis: 'primary', groupId: 'arch-application' },
+      { type: 'node', id: 'moduleB', text: 'Module B', x: 440, y: 90, width: 180, height: 80, emphasis: 'primary', groupId: 'arch-application' },
+      { type: 'node', id: 'moduleC', text: 'Module C', x: 440, y: 310, width: 180, height: 80, groupId: 'arch-application' },
       { type: 'arrow', id: 'edgeA', from: 'moduleA', to: 'moduleB', routing: 'orthogonal', emphasis: 'primary' },
       { type: 'arrow', id: 'edgeB', from: 'moduleA', to: 'moduleC', routing: 'orthogonal' },
     ],
@@ -85,7 +86,22 @@ setTimeout(() => {
                 setTimeout(() => {
                   result.keyReset = !editor?.classList.contains('has-key-dependency-lens')
                   result.allEdgesRetained = document.querySelectorAll('.freeform-arrow[data-element-id]').length === 2
-                  document.getElementById('result').textContent = JSON.stringify(result)
+                  const node = document.querySelector('[data-element-id="moduleA"].freeform-box')
+                  node?.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true, pointerId: 6, button: 0, clientX: 110, clientY: 220}))
+                  node?.dispatchEvent(new PointerEvent('pointerup', {bubbles: true, pointerId: 6, button: 0, clientX: 110, clientY: 220}))
+                  setTimeout(() => {
+                    const navigator = document.querySelector('[aria-label="节点真实依赖"]')
+                    const relationButtons = [...(navigator?.querySelectorAll('.freeform-node-relation') ?? [])]
+                    result.nodeRelationCounts = navigator?.textContent?.includes('入 0 / 出 2')
+                    result.nodeRelationNames = relationButtons.map((button) => button.textContent?.trim())
+                    relationButtons.find((button) => button.textContent?.includes('Module C'))?.click()
+                    setTimeout(() => {
+                      result.navigatorSelectsExactEdge = document.querySelector('[data-element-id="edgeB"].freeform-arrow')?.classList.contains('is-selected')
+                        && document.querySelector('[data-element-id="edgeA"].freeform-arrow')?.classList.contains('is-relation-dimmed')
+                      result.navigatorPreservesEdges = document.querySelectorAll('.freeform-arrow[data-element-id]').length === 2
+                      document.getElementById('result').textContent = JSON.stringify(result)
+                    }, 100)
+                  }, 100)
                 }, 110)
               }, 110)
             }, 110)
@@ -119,7 +135,9 @@ setTimeout(() => {
     || Number(result.dimOpacity) > .2 || !result.clearOnLeave || !result.selectionPersists
     || !result.keyMode || !result.keyArrow || !result.keyDimmed
     || !result.keyCount?.includes('1/2') || Number(result.keyDimOpacity) > .2
-    || !result.focusOverridesKey || !result.keyResumes || !result.keyReset || !result.allEdgesRetained) {
+    || !result.focusOverridesKey || !result.keyResumes || !result.keyReset || !result.allEdgesRetained
+    || !result.nodeRelationCounts || result.nodeRelationNames?.length !== 2
+    || !result.navigatorSelectsExactEdge || !result.navigatorPreservesEdges) {
     throw new Error('The real React Canvas relationship lens failed visual/state interaction checks')
   }
 } finally {
