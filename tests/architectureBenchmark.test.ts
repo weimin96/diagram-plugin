@@ -112,6 +112,36 @@ test('P2 分区优先候选以完整几何质量解锁部署扇出审查，保�
   assert.equal(repeated.layoutOrderingStrategy, result.layoutOrderingStrategy)
 })
 
+test('分区相互吞并的反向微服务图优先解除视觉阻断，不以隐藏关系或降低字号换取通过', () => {
+  const intent = architectureBenchmarkCases('extended').find((item) => item.id === 'microservices-reversed')!.intent
+  const original = JSON.stringify(intent)
+  const result = composeArchitectureGraph(intent)
+  assert.equal(result.layoutOrderingStrategy, 'partition-first')
+  assert.equal(result.routeDiagnostics.frameOverlapArea, 0)
+  assert.equal(result.quality.metrics.nodeOverlaps, 0)
+  assert.equal(result.quality.metrics.edgeNodeIntersections, 0)
+  assert.equal(result.quality.metrics.edgeCrossings, 0)
+  assert.equal(result.quality.metrics.labelNodeIntersections, 0)
+  assert.equal(result.quality.metrics.labelOverflows, 0)
+  assert.equal(result.quality.metrics.labelOverlaps, 0)
+  assert.equal(result.quality.metrics.edgeOverlaps, 2,
+    'bounded two-edge overlap is a documented trade-off, not a zero-overlap claim')
+  assert.ok(result.presentation.estimatedTitlePxAtFit >= 12.5)
+  assert.ok(result.routeDiagnostics.totalRouteLength <= 5280)
+  assert.equal(result.visualPlan.review.readyForVisualReview, true)
+  assert.ok(result.visualPlan.review.concerns.includes('overlapping-relationships'),
+    'remain explicit about unresolved overlapping corridors')
+  assert.deepEqual(result.scene.elements.filter((item) => item.type === 'arrow').map((item) => [item.from, item.to]),
+    intent.relations.map((item) => [item.from, item.to]))
+  assert.deepEqual(result.scene.elements.filter((item) => item.type === 'arrow').map((item) => item.id),
+    intent.relations.map((_, index) => `__relation-${index + 1}`))
+  assert.deepEqual(parseCanvasScene(serializeCanvasScene(result.scene)).elements
+    .filter((item) => item.type === 'arrow').map((item) => [item.from, item.to]),
+  intent.relations.map((item) => [item.from, item.to]))
+  assert.deepEqual(composeArchitectureGraph(intent).scene, result.scene)
+  assert.equal(JSON.stringify(intent), original)
+})
+
 test('分区预留仅处理自动生成的无锁节点，已锁定位置沿用原几何约束', () => {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas', version: 1, title: 'Reserved functional regions',

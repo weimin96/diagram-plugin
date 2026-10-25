@@ -631,10 +631,9 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
   const original = composeArchitectureGraphExisting(intent)
   if (intent.primaryPath?.length || intent.nodes.length > 26
     || original.routeDiagnostics.frameOverlapArea < original.scene.width * original.scene.height * 0.1
-    // With no edge overlaps, this bounded candidate cannot strictly improve
-    // routing. Severe fan-out needs a real multi-edge solver, not repeated
-    // full-scene trials of the same single-edge repair.
-    || original.quality.metrics.edgeOverlaps === 0 || original.quality.metrics.edgeOverlaps > 4) return original
+    // Severe fan-out needs a real multi-edge solver, not repeated full-scene
+    // trials of the same single-edge repair.
+    || original.quality.metrics.edgeOverlaps > 4) return original
   const layout = composeArchitectureGraphCandidate(intent, 'semantic', undefined, false, false, true)
   const candidate = improveCongestedPorts({
     ...layout, inputOrderStrategy: 'original' as const, layoutOrderingStrategy: 'semantic' as const,
@@ -647,6 +646,17 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
     - architecturePresentationSelectionPenalty(original.presentation, original.routeDiagnostics)
   const candidateReviewScore = candidate.evaluation.structuralScore
     - architecturePresentationSelectionPenalty(candidate.presentation, candidate.routeDiagnostics)
+  // Structural score has no sibling-frame term. For an already blocked scene,
+  // an otherwise clean layout can legitimately exchange at most two minor
+  // relationship overlaps for removing a massive frame collision. Never make
+  // that trade when the original scene was already reviewable; and never trade
+  // a crossing, node intrusion, label issue or reduced fit text.
+  const canAcceptBoundedOverlapTrade = !original.visualPlan.review.readyForVisualReview
+    && candidate.visualPlan.review.readyForVisualReview
+    && after.edgeOverlaps <= before.edgeOverlaps + 2
+    && after.edgeOverlaps <= 2
+    && candidate.evaluation.structuralScore >= original.evaluation.structuralScore - 6
+  const strictlyImprovesOverlaps = after.edgeOverlaps < before.edgeOverlaps
   if (after.nodeOverlaps > before.nodeOverlaps || after.edgeNodeIntersections > before.edgeNodeIntersections
     || after.edgeCrossings > before.edgeCrossings
     || after.labelOverflows > before.labelOverflows || after.labelOverlaps > before.labelOverlaps
@@ -655,9 +665,9 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
     || candidate.routeDiagnostics.frameOverlapArea >= original.scene.width * original.scene.height * 0.1
     || candidate.routeDiagnostics.totalRouteLength > original.routeDiagnostics.totalRouteLength * 1.15
     || candidate.presentation.estimatedTitlePxAtFit < original.presentation.estimatedTitlePxAtFit
-    || after.edgeOverlaps >= before.edgeOverlaps
+    || (!strictlyImprovesOverlaps && !canAcceptBoundedOverlapTrade)
     || !candidate.visualPlan.review.readyForVisualReview
-    || candidateReviewScore <= originalReviewScore + 1) return original
+    || candidateReviewScore <= originalReviewScore + (strictlyImprovesOverlaps ? 1 : 0)) return original
   const inputIndex = new Map([
     ...intent.nodes.map((node, index) => [node.id, index] as const),
     ...intent.relations.map((_, index) => [`__relation-${index + 1}`, intent.nodes.length + index] as const),
