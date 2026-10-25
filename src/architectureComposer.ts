@@ -123,8 +123,17 @@ function refineArchitectureRoutes(
     if (!affectedIds.length) break
     let best: { scene: CanvasScene; quality: CanvasVisualQualityAssessment; evaluation: ArchitectureLayoutAssessment } | undefined
     for (const id of affectedIds) {
+      // Every local repair candidate edits just this relation. In dense
+      // layouts several corridor offsets resolve to the same serialized
+      // arrow (or to the unchanged one); re-scoring those complete scenes
+      // cannot produce a different winner.
+      const knownArrows = new Set<string>([JSON.stringify(scene.elements.find((item) => item.id === id))])
       const bypass = (blockers.get(id) ?? []).flatMap((blockerId) => bypassArchitectureBlockingNode(scene, id, blockerId))
       for (const candidate of [...bypass, routeArchitectureArrowIds(scene, [id]), ...nudgeArchitectureCorridors(scene, id)]) {
+        const candidateArrow = candidate.elements.find((item) => item.id === id)
+        const signature = JSON.stringify(candidateArrow)
+        if (knownArrows.has(signature)) continue
+        knownArrows.add(signature)
         const nextQuality = assessCanvasVisualQuality(candidate)
         if (nextQuality.metrics.edgeNodeIntersections > quality.metrics.edgeNodeIntersections
           || nextQuality.metrics.nodeOverlaps > quality.metrics.nodeOverlaps) continue
