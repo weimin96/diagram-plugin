@@ -61,7 +61,7 @@ export const ARCHITECTURE_VISUAL_REFERENCES: readonly ArchitectureVisualReferenc
 export type ArchitectureVisualConcernCode =
   | 'weak-main-path' | 'dense-detail' | 'tiny-overview-text'
   | 'wide-canvas' | 'cross-boundary-intrusion' | 'frame-overlap'
-  | 'overlapping-relationships'
+  | 'overlapping-relationships' | 'perimeter-detour'
 
 export interface ArchitectureVisualRepairTarget {
   concern: ArchitectureVisualConcernCode
@@ -179,6 +179,7 @@ export function planArchitectureVisual(
   if (geometry.unrelatedFrameIntrusionLength > 0) concerns.push('cross-boundary-intrusion')
   if (geometry.frameOverlaps > 0) concerns.push('frame-overlap')
   if (quality.metrics.edgeOverlaps >= 2) concerns.push('overlapping-relationships')
+  if (geometry.perimeterDetours > 0) concerns.push('perimeter-detour')
   const repairTargets: ArchitectureVisualRepairTarget[] = []
   const existingArrows = new Set(relations.map((edge) => edge.id))
   const existingGroups = new Set((scene.groups ?? []).map((group) => group.id))
@@ -188,6 +189,13 @@ export function planArchitectureVisual(
       concern: 'cross-boundary-intrusion',
       elementIds: [intrusion.edgeId, intrusion.frameId],
       action: `检查跨区线路经过无关分区 ${intrusion.length}px；应与关联线路联合检查，不能单独绕线造成新增交叉`,
+    })
+  }
+  for (const detour of geometry.worstPerimeterDetours.slice(0, 2)) {
+    if (!existingArrows.has(detour.edgeId)) continue
+    repairTargets.push({
+      concern: 'perimeter-detour', elementIds: [detour.edgeId],
+      action: `${detour.edgeId} 在同分区节点外侧绕行 ${detour.outsideDistance}px，额外线路长度 ${detour.excessLength}px；应联合检查核心节点位置、端口与共享通道，不能只缩短单根线`,
     })
   }
   // Expose actual conflicting arrows for a bounded, source-preserving review.
@@ -234,6 +242,7 @@ export function planArchitectureVisual(
     'weak-main-path': 2,
     'cross-boundary-intrusion': 3,
     'overlapping-relationships': 4,
+    'perimeter-detour': 4,
     'frame-overlap': 3,
   }
   repairTargets.sort((a, b) => (reviewPriority[a.concern] ?? 10) - (reviewPriority[b.concern] ?? 10))

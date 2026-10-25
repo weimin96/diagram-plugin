@@ -101,6 +101,13 @@ test('高扇出重叠给出真实关系 ID 的定向修复目标，而不是虚�
   assert.equal(output.routeDiagnostics.frameOverlaps, 0)
   assert.equal(frameTargets.length, 0,
     'do not keep obsolete region-overlap warnings once envelopes are truly separated')
+  assert.ok(output.routeDiagnostics.perimeterDetours >= 2)
+  assert.ok(output.visualPlan.review.concerns.includes('perimeter-detour'))
+  assert.ok(output.visualPlan.review.repairTargets.some((item) =>
+    item.concern === 'perimeter-detour' && item.elementIds.every((id) => arrowIds.has(id))),
+  'review must expose the genuine perimeter-detour relationship IDs despite passing automated eligibility')
+  assert.equal(output.visualPlan.review.readyForVisualReview, true,
+    'perimeter diagnostics are a human review signal, not a new hard rejection rule')
   assert.ok(output.visualPlan.review.repairTargets.length <= 5)
 })
 

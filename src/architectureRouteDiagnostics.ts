@@ -20,6 +20,12 @@ export interface ArchitectureRouteDiagnostics {
   unrelatedFrameIntrusionLength: number
   /** Top offending edge/frame pairs for targeted route review (not a visual score). */
   worstFrameIntrusions: Array<{ edgeId: string; frameId: string; length: number }>
+  /** Same-region routes that leave both endpoint node envelopes and add
+   * substantial distance. A review signal, not an automatic layout failure. */
+  perimeterDetours: number
+  worstPerimeterDetours: Array<{
+    edgeId: string; routeLength: number; excessLength: number; outsideDistance: number
+  }>
 }
 
 function segmentWithinRect(a: CanvasPoint, b: CanvasPoint, frame: {
@@ -84,6 +90,7 @@ export function assessArchitectureRouteDiagnostics(scene: CanvasScene): Architec
   let backwardCrossPartitionRelations = 0
   let unrelatedFrameIntrusionLength = 0
   const intrusions: ArchitectureRouteDiagnostics['worstFrameIntrusions'] = []
+  const perimeter: ArchitectureRouteDiagnostics['worstPerimeterDetours'] = []
   const frameById = new Map(frames.map((frame) => [frame.id, frame]))
   for (const arrow of scene.elements) {
     if (arrow.type !== 'arrow') continue
@@ -93,6 +100,27 @@ export function assessArchitectureRouteDiagnostics(scene: CanvasScene): Architec
     const length = points.slice(1).reduce((sum, point, index) =>
       sum + Math.abs(point.x - points[index].x) + Math.abs(point.y - points[index].y), 0)
     totalRouteLength += length
+    if (source.groupId && source.groupId === target.groupId && points.length >= 3) {
+      const first = points[0], last = points.at(-1)!
+      const direct = Math.abs(first.x - last.x) + Math.abs(first.y - last.y)
+      const excess = length - direct
+      const left = Math.min(source.x, target.x), top = Math.min(source.y, target.y)
+      const right = Math.max(source.x + source.width, target.x + target.width)
+      const bottom = Math.max(source.y + source.height, target.y + target.height)
+      const outside = Math.max(0, left - Math.min(...points.map((point) => point.x)))
+        + Math.max(0, Math.max(...points.map((point) => point.x)) - right)
+        + Math.max(0, top - Math.min(...points.map((point) => point.y)))
+        + Math.max(0, Math.max(...points.map((point) => point.y)) - bottom)
+      // Both conditions are required: a legitimate long lane inside a
+      // partition is not an exterior detour, and a tiny bend outside a
+      // rounded rectangle is not a significant rerouting problem.
+      if (excess >= 80 && outside >= 36) {
+        perimeter.push({
+          edgeId: arrow.id, routeLength: Math.round(length),
+          excessLength: Math.round(excess), outsideDistance: Math.round(outside),
+        })
+      }
+    }
     if (!source.groupId || !target.groupId || source.groupId === target.groupId) continue
     crossPartitionRelations += 1
     crossPartitionRouteLength += length
@@ -128,5 +156,8 @@ export function assessArchitectureRouteDiagnostics(scene: CanvasScene): Architec
     unrelatedFrameIntrusionLength: Math.round(unrelatedFrameIntrusionLength),
     worstFrameIntrusions: intrusions.sort((a, b) => b.length - a.length
       || a.edgeId.localeCompare(b.edgeId) || a.frameId.localeCompare(b.frameId)).slice(0, 5),
+    perimeterDetours: perimeter.length,
+    worstPerimeterDetours: perimeter.sort((a, b) => b.excessLength - a.excessLength
+      || b.outsideDistance - a.outsideDistance || a.edgeId.localeCompare(b.edgeId)).slice(0, 5),
   }
 }

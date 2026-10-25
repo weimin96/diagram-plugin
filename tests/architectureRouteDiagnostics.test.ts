@@ -71,3 +71,33 @@ test('路由长度及逆向依赖的分区诊断与路径一致', () => {
   assert.equal(result.unrelatedFrameIntrusionLength, 0)
   assert.deepEqual(result.worstFrameIntrusions, [])
 })
+
+test('同分区线路在节点包围范围外明显折返时提示具体关系，不把普通直连当成绕行', () => {
+  const scene: CanvasScene = {
+    type: 'diagram-plugin-canvas', version: 1, title: '外侧走廊', width: 800, height: 480,
+    groups: [{ id: 'arch-application', label: 'Application' }],
+    elements: [
+      { id: 'api', type: 'node', groupId: 'arch-application', text: 'API',
+        x: 100, y: 100, width: 120, height: 80 },
+      { id: 'service', type: 'node', groupId: 'arch-application', text: 'Service',
+        x: 480, y: 100, width: 120, height: 80 },
+      { id: 'detour', type: 'arrow', from: 'api', to: 'service',
+        routing: 'orthogonal', fromAnchor: 'right', toAnchor: 'left',
+        points: [{ x: 260, y: 140 }, { x: 260, y: 30 }, { x: 660, y: 30 }, { x: 660, y: 140 }] },
+    ],
+  }
+  const serialized = JSON.stringify(scene)
+  const detoured = assessArchitectureRouteDiagnostics(scene)
+  assert.equal(detoured.perimeterDetours, 1)
+  assert.deepEqual(detoured.worstPerimeterDetours, [
+    { edgeId: 'detour', routeLength: 840, excessLength: 580, outsideDistance: 130 },
+  ])
+  const straight = assessArchitectureRouteDiagnostics({
+    ...scene,
+    elements: scene.elements.map((item) => item.id === 'detour' && item.type === 'arrow'
+      ? { ...item, points: undefined } : item),
+  })
+  assert.equal(straight.perimeterDetours, 0)
+  assert.deepEqual(straight.worstPerimeterDetours, [])
+  assert.equal(JSON.stringify(scene), serialized, 'diagnostics must not modify the editable Canvas document')
+})
