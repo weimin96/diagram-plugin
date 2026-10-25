@@ -6,7 +6,7 @@ on:
       version:
         description: 发布版本，必须与 package.json 一致
         required: true
-        default: '0.20.1'
+        default: '0.21.0'
   push:
     tags:
       - 'diagram-plugin-v*'
