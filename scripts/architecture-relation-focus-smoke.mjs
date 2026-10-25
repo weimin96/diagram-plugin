@@ -22,10 +22,10 @@ try {
     type: 'diagram-plugin-canvas', version: 1, title: 'Relationship lens', width: 900, height: 550,
     architecture: { theme: 'technical', view: 'detail', density: 'compact' },
     elements: [
-      { type: 'node', id: 'moduleA', text: 'Module A', x: 80, y: 190, width: 180, height: 80 },
-      { type: 'node', id: 'moduleB', text: 'Module B', x: 440, y: 90, width: 180, height: 80 },
+      { type: 'node', id: 'moduleA', text: 'Module A', x: 80, y: 190, width: 180, height: 80, emphasis: 'primary' },
+      { type: 'node', id: 'moduleB', text: 'Module B', x: 440, y: 90, width: 180, height: 80, emphasis: 'primary' },
       { type: 'node', id: 'moduleC', text: 'Module C', x: 440, y: 310, width: 180, height: 80 },
-      { type: 'arrow', id: 'edgeA', from: 'moduleA', to: 'moduleB', routing: 'orthogonal' },
+      { type: 'arrow', id: 'edgeA', from: 'moduleA', to: 'moduleB', routing: 'orthogonal', emphasis: 'primary' },
       { type: 'arrow', id: 'edgeB', from: 'moduleA', to: 'moduleC', routing: 'orthogonal' },
     ],
   }
@@ -58,7 +58,39 @@ setTimeout(() => {
       arrow.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true, pointerId: 1}))
       setTimeout(() => {
         result.selectionPersists = editor?.classList.contains('has-relation-lens')
-        document.getElementById('result').textContent = JSON.stringify(result)
+        const layoutButton = [...document.querySelectorAll('button')].find((button) =>
+          button.title?.includes('详情视图') && button.textContent?.includes('布局'))
+        layoutButton?.click()
+        setTimeout(() => {
+          const keyButton = [...document.querySelectorAll('button')].find((button) =>
+            button.textContent?.trim() === '关键')
+          keyButton?.click()
+          setTimeout(() => {
+            result.keyMode = editor?.classList.contains('has-key-dependency-lens')
+            result.keyCount = document.querySelector('[aria-label="关键依赖阅读模式"]')?.textContent
+            result.keyArrow = document.querySelector('[data-element-id="edgeA"]')?.classList.contains('is-key-dependency')
+            result.keyDimmed = document.querySelector('[data-element-id="edgeB"]')?.classList.contains('is-key-dimmed')
+            result.keyDimOpacity = getComputedStyle(document.querySelector('[data-element-id="edgeB"]')).opacity
+            const secondary = document.querySelector('[data-element-id="edgeB"].freeform-arrow')
+            secondary?.dispatchEvent(new PointerEvent('pointerover', {bubbles: true}))
+            setTimeout(() => {
+              result.focusOverridesKey = editor?.classList.contains('has-relation-lens')
+                && !editor?.classList.contains('has-key-dependency-lens')
+              secondary?.dispatchEvent(new PointerEvent('pointerout', {bubbles: true}))
+              setTimeout(() => {
+                result.keyResumes = editor?.classList.contains('has-key-dependency-lens')
+                const allButton = [...document.querySelectorAll('button')].find((button) =>
+                  button.textContent?.trim() === '全部' && button.closest('.freeform-compact-control-row'))
+                allButton?.click()
+                setTimeout(() => {
+                  result.keyReset = !editor?.classList.contains('has-key-dependency-lens')
+                  result.allEdgesRetained = document.querySelectorAll('.freeform-arrow[data-element-id]').length === 2
+                  document.getElementById('result').textContent = JSON.stringify(result)
+                }, 110)
+              }, 110)
+            }, 110)
+          }, 110)
+        }, 110)
       }, 100)
     }, 100)
   }, 120)
@@ -84,7 +116,10 @@ setTimeout(() => {
   console.log('CHROME_RELATIONSHIP_LENS', JSON.stringify(result))
   if (!result.hoverFocus || !result.source || !result.target || !result.unrelated
     || !result.names?.includes('Module A→Module B')
-    || Number(result.dimOpacity) > .2 || !result.clearOnLeave || !result.selectionPersists) {
+    || Number(result.dimOpacity) > .2 || !result.clearOnLeave || !result.selectionPersists
+    || !result.keyMode || !result.keyArrow || !result.keyDimmed
+    || !result.keyCount?.includes('1/2') || Number(result.keyDimOpacity) > .2
+    || !result.focusOverridesKey || !result.keyResumes || !result.keyReset || !result.allEdgesRetained) {
     throw new Error('The real React Canvas relationship lens failed visual/state interaction checks')
   }
 } finally {

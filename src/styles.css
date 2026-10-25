@@ -672,6 +672,11 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .freeform-arrow:not(.is-selected):not(.is-trace-dimmed):hover .freeform-arrow-line { stroke: color-mix(in srgb, var(--accent) 58%, var(--border-strong)); stroke-width: 2.9; }
 .freeform-arrow.is-selected .freeform-arrow-line { stroke: var(--accent) !important; stroke-width: 3px !important; opacity: 1 !important; }
 .freeform-editor.has-relation-lens .freeform-arrow.is-relation-dimmed { opacity: .16 !important; }
+.freeform-editor.has-key-dependency-lens .freeform-arrow.is-key-dimmed { opacity: .16 !important; }
+.freeform-editor.has-key-dependency-lens .freeform-box.is-key-dimmed { opacity: .46 !important; }
+.freeform-editor.has-key-dependency-lens .freeform-arrow.is-key-dependency .freeform-arrow-line {
+  stroke: var(--accent) !important; stroke-width: 3px !important; opacity: 1 !important;
+}
 .freeform-editor.has-relation-lens .freeform-box.is-relation-dimmed { opacity: .54 !important; }
 .freeform-editor.has-relation-lens .freeform-arrow.is-relation-focused { opacity: 1 !important; }
 .freeform-editor.has-relation-lens .freeform-arrow.is-relation-focused .freeform-arrow-line {
