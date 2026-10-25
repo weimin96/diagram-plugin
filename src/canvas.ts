@@ -533,9 +533,12 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
         // empty dashed boundaries used around expanded architecture regions.
         return `<g><rect x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" rx="12" fill="${fill}" fill-opacity="0.96" stroke="${escapeXml(palette.stroke)}" stroke-opacity="0.88" stroke-width="1.7"/><rect x="${group.x}" y="${group.y + 9}" width="4" height="${Math.max(12, group.height - 18)}" rx="2" fill="${escapeXml(palette.stroke)}"/><text x="${group.x + 16}" y="${group.y + 35}" font-size="14" font-weight="730" fill="${escapeXml(text)}">${escapeXml(truncateCanvasText(group.label || group.id, 12))}</text><text x="${group.x + group.width - 14}" y="${group.y + 35}" font-size="11" font-weight="600" text-anchor="end" fill="${escapeXml(palette.stroke)}">${group.memberIds.length} 个组件</text></g>`
       }
-      const groupStrokeOpacity = softwareSystem ? 0.55 : 0.78
+      // Expanded functional regions must survive fit-to-width export. Keep
+      // system-level frames quieter and collapsed summaries independently
+      // styled, but strengthen the actual region outlines.
+      const groupStrokeOpacity = softwareSystem ? 0.55 : 0.92
       const frameFillOpacity = group.collapsed ? fillOpacity : '0.07'
-      return `<g><rect x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" rx="${architectureProfile.groupRadius}" fill="${fill}" fill-opacity="${frameFillOpacity}" stroke="${escapeXml(softwareSystem ? architectureBorder : palette.stroke)}" stroke-opacity="${groupStrokeOpacity}" stroke-width="${Math.max(1.35, strokeWidth)}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>${group.label ? `<text x="${group.x + 10}" y="${group.y + 18}" font-size="11.5" font-weight="650" fill="${escapeXml(text)}" opacity="0.90">${escapeXml(`${group.label}${collapsed}`)}</text>` : ''}</g>`
+      return `<g><rect x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" rx="${architectureProfile.groupRadius}" fill="${fill}" fill-opacity="${frameFillOpacity}" stroke="${escapeXml(softwareSystem ? architectureBorder : palette.stroke)}" stroke-opacity="${groupStrokeOpacity}" stroke-width="${Math.max(softwareSystem ? 1.35 : 1.65, strokeWidth)}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>${group.label ? `<text x="${group.x + 10}" y="${group.y + 18}" font-size="11.5" font-weight="650" fill="${escapeXml(text)}" opacity="0.90">${escapeXml(`${group.label}${collapsed}`)}</text>` : ''}</g>`
     }
     const c4 = group.c4Type ? ` · ${c4Label(group.c4Type)}` : ''
     const header = group.label && softwareSystem

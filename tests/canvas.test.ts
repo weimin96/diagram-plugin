@@ -302,6 +302,9 @@ test('architecture themes produce distinct SVG treatments without changing node 
   assert.match(engineering, /Spring API/)
   assert.match(cloud, /Spring API/)
   assert.match(sketch, /font-family="ui-rounded, system-ui, sans-serif"/)
+  assert.match(engineering, /stroke-opacity="0\.92" stroke-width="1\.65" stroke-dasharray="6 5"/,
+    'expanded architecture region frames remain visible in the exported SVG at fit-to-width')
+  assert.match(cloud, /stroke-opacity="0\.92" stroke-width="1\.65"/)
   for (const output of [engineering, cloud, sketch]) {
     assert.equal((output.match(/fill-opacity="0\.94"/g) ?? []).length, 2, 'every technology node has a solid-enough card')
     assert.match(output, /markerUnits="userSpaceOnUse" markerWidth="12"/)

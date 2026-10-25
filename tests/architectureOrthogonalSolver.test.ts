@@ -64,4 +64,13 @@ test('optional visibility fallback resolves an obstacle maze that bounded dogleg
     obstacles.every((rect) => !segmentIntersectsRect({ a: recovered[i], b: point }, rect))))
   assert.deepEqual(findOrthogonalRoute(start, end, obstacles, [], undefined, 'bottom', 'top'), before,
     'opt-in fallback must not change ordinary routing calls')
+  const occupied: RouteSegment[] = [
+    { a: { x: 608, y: 280 }, b: { x: 608, y: 684 } },
+  ]
+  const withOccupation = findOrthogonalRoute(start, end, obstacles, occupied,
+    undefined, 'bottom', 'top', undefined, true)
+  assert.ok(scoreRoute(withOccupation, obstacles, occupied) < 100_000,
+    'search-local segment costs must include the current occupied-corridor set')
+  assert.deepEqual(findOrthogonalRoute(start, end, obstacles, [], undefined, 'bottom', 'top', undefined, true),
+    recovered, 'no computed corridor cost may leak between separate searches')
 })

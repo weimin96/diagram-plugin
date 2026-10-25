@@ -205,6 +205,11 @@ function findObstacleFreeVisibilityRoute(
     { dx: 1, dy: 0 }, { dx: -1, dy: 0 },
     { dx: 0, dy: 1 }, { dx: 0, dy: -1 },
   ] as const
+  // Dijkstra visits a grid segment with up to four incoming directions.
+  // Obstacle intersection and occupied-lane cost depend only on the segment,
+  // not on the incoming direction. Cache those values for this search only;
+  // bend cost and anchor constraints remain state-dependent.
+  const segmentCosts = new Float64Array(width * height * steps.length).fill(Number.NaN)
   let resolved = -1
   while (heap.length) {
     const current = pop()!
@@ -222,10 +227,16 @@ function findObstacleFreeVisibilityRoute(
       if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue
       const next = pointId(nx, ny)
       if (next === endNode && nextDir !== targetDir) continue
-      const a = { x: xs[x], y: ys[y] }, b = { x: xs[nx], y: ys[ny] }
-      const segment = { a, b }
-      if (obstacles.some((rect) => segmentIntersectsRect(segment, rect))) continue
-      const segmentCost = scoreRoute([a, b], [], occupied, bundleKey)
+      const segmentId = node * steps.length + nextDir
+      let segmentCost = segmentCosts[segmentId]
+      if (Number.isNaN(segmentCost)) {
+        const a = { x: xs[x], y: ys[y] }, b = { x: xs[nx], y: ys[ny] }
+        const segment = { a, b }
+        segmentCost = obstacles.some((rect) => segmentIntersectsRect(segment, rect))
+          ? Infinity : scoreRoute([a, b], [], occupied, bundleKey)
+        segmentCosts[segmentId] = segmentCost
+      }
+      if (!Number.isFinite(segmentCost)) continue
       const nextDistance = current.distance + segmentCost + (direction !== 4 && direction !== nextDir ? 22 : 0)
       const nextState = indexId(next, nextDir)
       if (nextDistance >= distances[nextState]) continue
