@@ -163,7 +163,12 @@ export function planArchitectureVisual(
   const primaryNodeIds = nodes.filter((node) => node.emphasis === 'primary').map((node) => node.id)
   const primaryRelationIds = relations.filter((edge) => edge.emphasis === 'primary').map((edge) => edge.id)
   // Width and relation count signal cognitive load, not missing semantics.
-  const recommendedView = nodes.length >= 22 || relations.length >= 30
+  // When unrelated functional frames significantly overlap, the detail view
+  // is not a readable entry point even for a medium-sized graph. Keep all
+  // authored geometry; the existing overview can summarize actual regions.
+  const severeFrameCongestion = nodes.length >= 16 && geometry.frameOverlaps >= 2
+    && geometry.frameOverlapArea >= scene.width * scene.height * 0.12
+  const recommendedView = severeFrameCongestion || nodes.length >= 22 || relations.length >= 30
     || (nodes.length >= 17 && presentation.estimatedTitlePxAtFit < 10)
     ? 'overview' : 'detail'
   const concerns: ArchitectureVisualConcernCode[] = []

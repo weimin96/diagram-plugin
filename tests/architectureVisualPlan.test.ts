@@ -4,7 +4,7 @@ import { architectureCases } from './fixtures/architecture/cases.js'
 import { architectureBenchmarkCases } from '../scripts/architecture-benchmark-cases.js'
 import { ARCHITECTURE_VISUAL_REFERENCES, planArchitectureVisual } from '../src/architectureVisualPlan.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
-import { canvasArchitectureProjection, serializeCanvasScene } from '../src/canvas.js'
+import { canvasArchitectureProjection, canvasCollapsedConnections, canvasGroupFrames, canvasSceneToSvg, serializeCanvasScene } from '../src/canvas.js'
 
 test('专业构图参考规则明确描述阅读路径，而不是虚构审美分数', () => {
   assert.equal(new Set(ARCHITECTURE_VISUAL_REFERENCES.map((item) => item.scenario)).size, 5)
@@ -51,6 +51,32 @@ test('复杂宽图默认总览但完整节点与关系仍在原始场景，详�
 test('高扇出重叠给出真实关系 ID 的定向修复目标，而不是虚构共享主干', () => {
   const sample = architectureBenchmarkCases('extended').find((item) => item.id === 'microservices-fanout')!
   const output = composeArchitectureGraph(sample.intent)
+  assert.equal(output.visualPlan.recommendedView, 'overview',
+    'severe functional-region overlap should not open in unreadable detail mode')
+  assert.equal(output.scene.architecture?.view, 'overview')
+  const source = serializeCanvasScene(output.scene)
+  const projection = canvasArchitectureProjection(output.scene)
+  const collapsed = projection.scene.groups?.filter((group) => group.collapsed).map((group) => group.id) ?? []
+  assert.deepEqual(collapsed.sort(), ['arch-application', 'arch-data', 'arch-processing'])
+  assert.ok(canvasCollapsedConnections(projection.scene).some((connection) => connection.count > 1),
+    'summarized cross-region arrows must still represent actual source relations')
+  const svg = canvasSceneToSvg(projection.scene)
+  assert.match(svg, /核心应用<\/text>/)
+  assert.match(svg, /9 个组件<\/text>/)
+  assert.match(svg, /fill-opacity="0\.96" stroke=/)
+  assert.doesNotMatch(svg, / · collapsed/)
+  const frames = canvasGroupFrames(projection.scene)
+  for (let i = 0; i < frames.length; i++) for (let j = i + 1; j < frames.length; j++) {
+    const a = frames[i], b = frames[j]
+    assert.ok(Math.min(a.x + a.width, b.x + b.width) <= Math.max(a.x, b.x)
+      || Math.min(a.y + a.height, b.y + b.height) <= Math.max(a.y, b.y),
+    `overview summaries ${a.id} and ${b.id} should be visually separate`)
+  }
+  const restored = canvasArchitectureProjection({ ...output.scene,
+    architecture: { ...output.scene.architecture!, view: 'detail' } })
+  assert.equal(restored.scene.elements.length, output.scene.elements.length,
+    'all original nodes and relationships remain available after drill down')
+  assert.equal(serializeCanvasScene(output.scene), source, 'display projection must be read-only')
   const targets = output.visualPlan.review.repairTargets.filter((item) => item.concern === 'overlapping-relationships')
   const arrowIds = new Set(output.scene.elements.filter((item) => item.type === 'arrow').map((item) => item.id))
   assert.equal(output.visualPlan.review.concerns.includes('overlapping-relationships'), true)

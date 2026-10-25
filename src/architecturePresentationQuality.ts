@@ -78,7 +78,8 @@ export function recommendArchitectureInitialReadingViewport(
 ): { x: number; y: number; zoom: number } | null {
   if (!scene.architecture || scene.architecture.view !== 'overview'
     || scene.elements.filter((item) => item.type === 'node').length < 17
-    || assessArchitecturePresentation(scene).estimatedTitlePxAtFit >= 11
+    || (assessArchitecturePresentation(scene).estimatedTitlePxAtFit >= 11
+      && !visibleScene.groups?.some((group) => group.collapsed && group.id.startsWith('arch-')))
     || viewportWidth <= 0 || viewportHeight <= 0) return null
   return recommendArchitectureReadingViewport(visibleScene, viewportWidth, viewportHeight, 1)
 }

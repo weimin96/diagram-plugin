@@ -522,9 +522,14 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
     const fillOpacity = architectureMode
       ? group.collapsed ? '0.34' : String(architectureProfile.groupFillOpacity)
       : group.collapsed ? '0.5' : softwareSystem ? '0.10' : container ? '0.05' : '0'
-    const collapsed = group.collapsed ? ' · collapsed' : ''
+    const collapsed = group.collapsed ? ' · 已折叠' : ''
     const fill = architectureMode || group.collapsed || softwareSystem || container ? escapeXml(palette.fill) : 'none'
     if (architectureMode) {
+      if (group.collapsed && group.id.startsWith('arch-')) {
+        // Generated overview summaries are readable cards, not the faded,
+        // empty dashed boundaries used around expanded architecture regions.
+        return `<g><rect x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" rx="12" fill="${fill}" fill-opacity="0.96" stroke="${escapeXml(palette.stroke)}" stroke-opacity="0.88" stroke-width="1.7"/><rect x="${group.x}" y="${group.y + 9}" width="4" height="${Math.max(12, group.height - 18)}" rx="2" fill="${escapeXml(palette.stroke)}"/><text x="${group.x + 16}" y="${group.y + 35}" font-size="14" font-weight="730" fill="${escapeXml(text)}">${escapeXml(truncateCanvasText(group.label || group.id, 12))}</text><text x="${group.x + group.width - 14}" y="${group.y + 35}" font-size="11" font-weight="600" text-anchor="end" fill="${escapeXml(palette.stroke)}">${group.memberIds.length} 个组件</text></g>`
+      }
       const groupStrokeOpacity = softwareSystem ? 0.55 : 0.78
       const frameFillOpacity = group.collapsed ? fillOpacity : '0.07'
       return `<g><rect x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" rx="${architectureProfile.groupRadius}" fill="${fill}" fill-opacity="${frameFillOpacity}" stroke="${escapeXml(softwareSystem ? architectureBorder : palette.stroke)}" stroke-opacity="${groupStrokeOpacity}" stroke-width="${Math.max(1.35, strokeWidth)}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>${group.label ? `<text x="${group.x + 10}" y="${group.y + 18}" font-size="11.5" font-weight="650" fill="${escapeXml(text)}" opacity="0.90">${escapeXml(`${group.label}${collapsed}`)}</text>` : ''}</g>`
@@ -751,11 +756,32 @@ function architectureOverviewGroups(scene: CanvasScene, boxes: Array<CanvasNode 
   const groups = scene.groups
   if (!groups?.length) return groups
   const frames = canvasGroupFrames(scene)
+  const severeOverlapGroups = new Set<string>()
+  if (scene.architecture && boxes.length >= 16) {
+    let totalArea = 0
+    const overlaps: Array<[string, string]> = []
+    for (let i = 0; i < frames.length; i += 1) for (let j = i + 1; j < frames.length; j += 1) {
+      const a = frames[i], b = frames[j]
+      if (!/^arch-(external|experience|application|processing|data)$/.test(a.id)
+        || !/^arch-(external|experience|application|processing|data)$/.test(b.id)) continue
+      const width = Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x))
+      const height = Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y))
+      if (width <= 5 || height <= 5) continue
+      totalArea += width * height
+      overlaps.push([a.id, b.id])
+    }
+    if (overlaps.length >= 2 && totalArea >= scene.width * scene.height * 0.12) {
+      for (const [a, b] of overlaps) { severeOverlapGroups.add(a); severeOverlapGroups.add(b) }
+    }
+  }
   const eligible = new Set(frames.flatMap((frame) => {
     const group = groups.find((item) => item.id === frame.id)
     if (!group || group.collapsed || group.c4Type === 'software-system') return []
     if (group.kind !== 'boundary' && group.c4Type !== 'container') return []
-    if (frame.memberIds.length < 5) return []
+    // Preserve the usual 5-node threshold. Only a severely overlapped,
+    // generated region may collapse with two members, so its long bounding
+    // rectangle doesn't dominate the initial overview.
+    if (frame.memberIds.length < (severeOverlapGroups.has(frame.id) ? 2 : 5)) return []
     if (groups.length === 1 && frame.memberIds.length >= boxes.length * 0.8) return []
     return [group.id]
   }))

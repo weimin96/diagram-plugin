@@ -132,6 +132,22 @@ test('过宽架构总览初次打开自动聚焦可读区域，其他画布和�
   assert.equal(JSON.stringify(overview), original)
 })
 
+test('严重分区冲突的折叠总览即使原始标题字号正常，也会首次放大阅读', () => {
+  const source = twoNodes(1250, Array.from({ length: 19 }, (_, index) => 40 + index * 45))
+  source.height = 1120
+  source.architecture!.view = 'overview'
+  const projection: CanvasScene = { ...source,
+    groups: [{ id: 'arch-application', kind: 'boundary', label: '应用', collapsed: true }],
+    elements: source.elements.map((item, index) => item.type === 'node' && index > 2
+      ? { ...item, groupId: 'arch-application' } : item),
+  }
+  assert.ok(assessArchitecturePresentation(source).estimatedTitlePxAtFit >= 11)
+  const original = JSON.stringify(source)
+  const view = recommendArchitectureInitialReadingViewport(source, projection, 900, 600)
+  assert.ok(view && view.zoom > 1)
+  assert.equal(JSON.stringify(source), original)
+})
+
 test('聚焦镜头不选择被折叠边界隐藏的主链节点', () => {
   const scene: CanvasScene = {
     ...twoNodes(2200, []),

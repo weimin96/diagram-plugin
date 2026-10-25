@@ -3306,7 +3306,12 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                   }}
                 />
               ) : null}
-              {group.label ? <text x={group.x + 14} y={group.y + 22}>{truncate(group.label, 28)}{autoCollapsedGroupIds.has(group.id) ? ` · ${group.memberIds.length} 节点` : !scene.architecture && group.c4Type ? ` · ${c4Label(group.c4Type)}` : ''}{group.collapsed ? scene.architecture ? ' · 双击下钻' : autoCollapsedGroupIds.has(group.id) ? ' · 双击进入' : ' · 双击展开' : ''}</text> : null}
+              {group.label ? group.collapsed && scene.architecture && group.id.startsWith('arch-') ? (
+                <>
+                  <text x={group.x + 16} y={group.y + 35}>{truncate(group.label, 12)}</text>
+                  <text className="freeform-group-member-count" x={group.x + group.width - 14} y={group.y + 35} textAnchor="end">{group.memberIds.length} 个组件</text>
+                </>
+              ) : <text x={group.x + 14} y={group.y + 22}>{truncate(group.label, 28)}{autoCollapsedGroupIds.has(group.id) ? ` · ${group.memberIds.length} 节点` : !scene.architecture && group.c4Type ? ` · ${c4Label(group.c4Type)}` : ''}{group.collapsed ? scene.architecture ? ' · 双击下钻' : autoCollapsedGroupIds.has(group.id) ? ' · 双击进入' : ' · 双击展开' : ''}</text> : null}
             </g>
           ))}
           {relationBundleTrunks.map((bundle) => (
