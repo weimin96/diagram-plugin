@@ -3,7 +3,7 @@ import { annotateSourceFanoutTrunks, routeArchitectureArrowIds, routeArchitectur
 import { beautifyArchitectureScene, inferArchitectureComposition, type ArchitectureComposition, type ArchitecturePartition, type ArchitectureTheme } from './architectureDesign.js'
 import { assessCanvasVisualQuality, type CanvasVisualQualityAssessment } from './canvasQuality.js'
 import type { DiagramVisualStyle } from './diagramVisualStyles.js'
-import { canvasArrowBoxRoute, canvasSharedSourceStem, type CanvasArchitectureDensity, type CanvasArchitectureScenario, type CanvasArrow, type CanvasIcon, type CanvasNode, type CanvasScene, type CanvasStencil } from './canvas.js'
+import { canvasArrowBoxRoute, canvasBundleTrunks, canvasSharedSourceStem, type CanvasArchitectureDensity, type CanvasArchitectureScenario, type CanvasArrow, type CanvasIcon, type CanvasNode, type CanvasScene, type CanvasStencil } from './canvas.js'
 import { assessArchitecturePresentation, recommendArchitectureTitleScale } from './architecturePresentationQuality.js'
 import { assessArchitectureRouteDiagnostics } from './architectureRouteDiagnostics.js'
 import { planArchitectureVisual, rankArchitectureOverlapHotspots } from './architectureVisualPlan.js'
@@ -646,6 +646,70 @@ function composeArchitectureGraphExisting(intent: ArchitectureIntentGraph) {
 /** Full candidate for seriously overlapping sibling regions. Allocation of
  * partition envelopes precedes edge routing, and the normal end-to-end gates
  * decide whether it is safe to replace the historical layout. */
+function negotiateDenseCorridors(result: ReturnType<typeof composeArchitectureGraphCandidate>) {
+  let scene = result.scene
+  let quality = result.quality
+  let evaluation = result.evaluation
+  const minimumTrunks = canvasBundleTrunks(scene).length
+  const initial = quality.metrics
+  const initialRoute = result.routeDiagnostics
+  let changes = 0
+  // Rip up one contested relation and re-evaluate its route against all the
+  // others. A bounded negotiation, not another router or invented edge.
+  const maxRounds = 4
+  const maxAffectedEdges = 14
+  for (let round = 0; round < maxRounds; round++) {
+    const affected = [...new Set(quality.issues
+      .filter((issue) => issue.code === 'edge-crossing' || issue.code === 'edge-overlap')
+      .flatMap((issue) => issue.elementIds))].slice(0, maxAffectedEdges)
+    let best: { scene: CanvasScene; quality: CanvasVisualQualityAssessment; evaluation: ArchitectureLayoutAssessment } | undefined
+    for (const id of affected) {
+      if (!scene.elements.some((item) => item.id === id && item.type === 'arrow')) continue
+      const seen = new Set<string>()
+      for (const spacedPorts of [true, false]) {
+        const candidate = routeArchitectureArrowIds(scene, [id], spacedPorts)
+        const arrow = candidate.elements.find((item) => item.id === id)
+        const signature = JSON.stringify(arrow)
+        if (seen.has(signature)) continue
+        seen.add(signature)
+        const proposed = assessCanvasVisualQuality(candidate)
+        const m = proposed.metrics, prev = quality.metrics
+        if (m.nodeOverlaps > prev.nodeOverlaps
+          || m.edgeNodeIntersections > prev.edgeNodeIntersections
+          || m.labelNodeIntersections > prev.labelNodeIntersections
+          || m.labelOverlaps > prev.labelOverlaps || m.labelOverflows > prev.labelOverflows
+          || m.edgeCrossings > prev.edgeCrossings || m.edgeOverlaps > initial.edgeOverlaps + 2) continue
+        const next = evaluateArchitectureLayout(candidate, proposed, evaluation.layout, evaluation.density)
+        if (next.rawSelectionScore <= (best?.evaluation.rawSelectionScore ?? evaluation.rawSelectionScore)) continue
+        if (canvasBundleTrunks(candidate).length < minimumTrunks) continue
+        const diagnostics = assessArchitectureRouteDiagnostics(candidate)
+        if (diagnostics.frameOverlapArea > initialRoute.frameOverlapArea
+          || diagnostics.unrelatedFrameIntrusionLength > initialRoute.unrelatedFrameIntrusionLength
+          || diagnostics.totalRouteLength > initialRoute.totalRouteLength * 1.1) continue
+        best = { scene: candidate, quality: proposed, evaluation: next }
+      }
+    }
+    if (!best) break
+    scene = best.scene
+    quality = best.quality
+    evaluation = best.evaluation
+    changes++
+  }
+  if (!changes) return result
+  scene = annotateSourceFanoutTrunks(scene)
+  quality = assessCanvasVisualQuality(scene)
+  evaluation = evaluateArchitectureLayout(scene, quality, evaluation.layout, evaluation.density)
+  const routeDiagnostics = assessArchitectureRouteDiagnostics(scene)
+  const presentation = assessArchitecturePresentation(scene)
+  return {
+    ...result, scene, quality, evaluation, routeDiagnostics, presentation,
+    visualPlan: planArchitectureVisual(scene, result.semanticComposition, quality, presentation, routeDiagnostics),
+    candidates: result.candidates.map((item) =>
+      item.layout === evaluation.layout && item.density === evaluation.density ? evaluation : item),
+    reroutedEdges: result.reroutedEdges + changes,
+  }
+}
+
 export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
   const original = composeArchitectureGraphExisting(intent)
   const originalMetrics = original.quality.metrics
@@ -658,8 +722,8 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
     && intent.relations.length >= intent.nodes.length * 1.5 && intent.relations.length <= 48
     && original.evaluation.structuralScore === 0 && originalMetrics.edgeCrossings >= 3
     && regions.size === 1 && !original.scene.elements.some((item) => item.type === 'node' && item.locked)) {
-    const candidate = composeArchitectureGraphCandidate(intent, 'semantic',
-      undefined, false, false, false, false, true)
+    const candidate = negotiateDenseCorridors(composeArchitectureGraphCandidate(intent, 'semantic',
+      undefined, false, false, false, false, true))
     const next = candidate.quality.metrics
     if (next.nodeOverlaps <= originalMetrics.nodeOverlaps
       && next.edgeNodeIntersections <= originalMetrics.edgeNodeIntersections

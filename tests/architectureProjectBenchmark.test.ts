@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises'
 import ts from 'typescript'
 import { projectArchitectureCase, coreArchitectureModules } from '../scripts/architecture-project-cases.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
-import { parseCanvasScene, serializeCanvasScene } from '../src/canvas.js'
+import { canvasBundleTrunks, parseCanvasScene, serializeCanvasScene } from '../src/canvas.js'
 
 test('真实架构基准的每条关系必须来自仓库源码的实际 TS import', async () => {
   const sample = await projectArchitectureCase()
@@ -37,16 +37,25 @@ test('真实依赖密集图不能因不穿节点就获得错误的自动审查�
   const composed = composeArchitectureGraph(sample.intent)
   const q = composed.quality.metrics
   assert.equal(q.edgeNodeIntersections, 0)
-  assert.ok(q.edgeCrossings <= 4,
-    'bounded unclamped-score recovery must reduce severe crossings without changing real source dependencies')
-  assert.ok(q.edgeOverlaps <= 25,
+  assert.ok(q.edgeCrossings <= 3,
+    'bounded negotiated corridors must resolve more severe crossings without changing real source dependencies')
+  assert.ok(q.edgeOverlaps <= 21,
     'improving crossings must not be achieved by unbounded independent corridor overlap')
+  assert.ok(canvasBundleTrunks(composed.scene).length >= 2,
+    'negotiating independent corridors must not erase genuine shared source trunks')
+  assert.ok(composed.candidates.some((candidate) =>
+    candidate.layout === composed.evaluation.layout
+    && candidate.density === composed.evaluation.density
+    && candidate.rawSelectionScore === composed.evaluation.rawSelectionScore),
+  'candidate evaluation exposed to hosts must match the negotiated editable scene')
   assert.equal(composed.presentation.estimatedTitlePxAtFit, 12.5)
   assert.ok(composed.evaluation.structuralScore >= 0 && composed.evaluation.structuralScore <= 90)
   assert.ok(composed.evaluation.rawSelectionScore <= composed.evaluation.structuralScore,
     'display-score clipping must not conceal worse raw geometry in candidate selection')
   assert.deepEqual(composeArchitectureGraph(sample.intent).scene, composed.scene,
     'saturated-score recovery remains deterministic across repeated generations')
+  assert.ok(composed.evaluation.rawSelectionScore >= composed.evaluation.structuralScore,
+    'successful dense-corridor negotiation must not rely on hiding a negative raw score')
   // The source topology changes with the repository. Improving its routing
   // should make this test pass, not force a permanent failing benchmark.
   if (q.edgeCrossings >= 3) {
