@@ -1,6 +1,7 @@
 import { routeArchitectureArrowIds, routeArchitectureEdges, routeArchitectureEdgesIncremental } from './architectureRouting.js'
 import { canvasVisualSkin, canvasStyledBox, canvasFillTextColor, diagramVisualStyles, type DiagramVisualStyle } from './diagramVisualStyles.js'
 import { canvasArrowLabelText } from './canvasLabelText.js'
+import { resolveCanvasRelationshipFocus } from './canvasRelationshipFocus.js'
 import { canvasArchitecturePlainTitleLines } from './canvasNodeTitleLayout.js'
 import { CanvasRectIndex } from './canvasRectIndex.js'
 import { canvasArrowCrossesViewport } from './canvasViewport.js'
@@ -402,6 +403,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   const [architectureDensity, setArchitectureDensity] = useState<CanvasArchitectureDensity>(parsed.scene?.architecture?.density ?? 'auto')
   const [architectureScope, setArchitectureScope] = useState<CanvasArchitectureScope | null>(null)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [hoveredRelationId, setHoveredRelationId] = useState<string | null>(null)
   const [connectFrom, setConnectFrom] = useState<string | null>(null)
   const [connectFromAnchor, setConnectFromAnchor] = useState<CanvasAnchor>('auto')
   const [connectPreviewPoint, setConnectPreviewPoint] = useState<CanvasPoint | null>(null)
@@ -1187,6 +1189,12 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   const tracedNodeIds = new Set(traceResult?.nodeIds ?? [])
   const tracedArrowIds = new Set(traceResult?.arrowIds ?? [])
   const projectedBoxLookup = new Map<string, CanvasNode | CanvasNote>(projectedBoxes.map((item) => [item.id, item]))
+  const relationFocus = scene.architecture && tool === 'select' && !gesturePositionOverrides
+    && !arrowPointDraft && !arrowEndpointPreview
+    ? resolveCanvasRelationshipFocus(visibleRenderArrows, selectedIds, hoveredRelationId, Boolean(traceResult))
+    : null
+  const relationshipFocusFrom = relationFocus ? projectedBoxLookup.get(relationFocus.from) : undefined
+  const relationshipFocusTo = relationFocus ? projectedBoxLookup.get(relationFocus.to) : undefined
   const minimapVisible = minimapOpen ?? largeSceneViewportCulling
   const compactMinimap = renderBoxes.length > 420
   const minimapNodeCloudPath = compactMinimap
@@ -2992,7 +3000,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   </>
 
   return (
-    <div ref={editorRef} className={`freeform-editor workbench-${workbench} architecture-view-${architectureProjection.view} architecture-density-${architectureProjection.density} architecture-theme-${architectureTheme} lod-${semanticLodLevel}${scene.architecture ? ' is-architecture-mode' : ''}${architectureScope ? ' has-architecture-scope' : ''}`} tabIndex={0} inert={!active || undefined} aria-label="自由画布编辑器" aria-busy={imageImporting || undefined} onPaste={handleEditorPaste}>
+    <div ref={editorRef} className={`freeform-editor workbench-${workbench} architecture-view-${architectureProjection.view} architecture-density-${architectureProjection.density} architecture-theme-${architectureTheme} lod-${semanticLodLevel}${scene.architecture ? ' is-architecture-mode' : ''}${relationFocus ? ' has-relation-lens' : ''}${architectureScope ? ' has-architecture-scope' : ''}`} tabIndex={0} inert={!active || undefined} aria-label="自由画布编辑器" aria-busy={imageImporting || undefined} onPaste={handleEditorPaste}>
       <div ref={surfaceRef} className="freeform-surface">
         <input
           ref={imageInputRef}
@@ -3007,6 +3015,16 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
           }}
         />
         {imageImportError ? <div className="freeform-image-error" role="alert">{imageImportError}<button type="button" onClick={() => setImageImportError(null)}>关闭</button></div> : null}
+        {relationFocus && relationshipFocusFrom && relationshipFocusTo ? (
+          <div className="freeform-relation-lens" aria-label="当前关系路径">
+            <span title={relationshipFocusFrom.text}>{relationshipFocusFrom.text}</span>
+            <span aria-hidden="true">→</span>
+            <span title={relationshipFocusTo.text}>{relationshipFocusTo.text}</span>
+            {selectedIds.length === 1 && selectedIds[0] === relationFocus.id
+              ? <button type="button" aria-label="取消关系聚焦"
+                  onClick={() => { setSelectedIds([]); setHoveredRelationId(null) }}>×</button> : null}
+          </div>
+        ) : null}
         <div className="freeform-floating-toolbar" role="toolbar" aria-label="画布工具">
           <div className="freeform-tools">
           <ToolButton active={tool === 'select'} title="选择 (V)" onClick={() => { setTool('select'); setConnectFrom(null) }}><ToolbarGlyph icon={MousePointer2} /></ToolButton>
@@ -3361,8 +3379,8 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                   y: ((fromMove ? fromMove.y - fromOrigin!.y : 0) + (toMove ? toMove.y - toOrigin!.y : 0)) / 2 }
               : null
             return (
-              <g key={arrow.id} data-element-id={arrow.id} className={`freeform-arrow emphasis-${displayArrow.emphasis ?? 'secondary'}${standalone ? ' is-free-line' : ''}${displayArrow.freehand ? ' is-freehand' : ''}${displayArrow.bundleKey ? ' is-bundled' : ''}${displayArrow.bundleKey?.startsWith('group:') ? ' is-group-bundle' : ''}${selectedIds.includes(arrow.id) ? ' is-selected' : ''}${insertTarget?.arrowId === arrow.id ? ' is-insert-target' : ''}${displayArrow.lineStyle === 'dashed' ? ' is-dashed' : displayArrow.lineStyle === 'dotted' ? ' is-dotted' : ''}${traceResult ? tracedArrowIds.has(arrow.id) ? ' is-traced' : ' is-trace-dimmed' : ''}${highlightedIds.has(arrow.id) ? ' is-updated' : ''}`} style={displayArrow.opacity !== undefined ? { opacity: displayArrow.opacity } : undefined} onContextMenu={(event) => openContextMenu(event, arrow.id)} onPointerDown={(event) => { event.stopPropagation(); setContextMenu(null); setSelectedGroupTarget(null); editorRef.current?.focus({ preventScroll: true }); setSelectedIds(event.shiftKey ? toggleId(selectedIds, arrow.id) : [arrow.id]) }}>
-                <CanvasArrowInk label={displayArrow.label} path={path} markerEnd={displayArrow.markerEnd === 'none' ? undefined : 'url(#canvas-arrow)'} strokeColor={displayArrow.strokeColor || visualSkin ? displayArrow.strokeColor ?? visualSkin?.edge : undefined} strokeWidth={displayArrow.strokeWidth} />
+              <g key={arrow.id} data-element-id={arrow.id} className={`freeform-arrow emphasis-${displayArrow.emphasis ?? 'secondary'}${standalone ? ' is-free-line' : ''}${displayArrow.freehand ? ' is-freehand' : ''}${displayArrow.bundleKey ? ' is-bundled' : ''}${displayArrow.bundleKey?.startsWith('group:') ? ' is-group-bundle' : ''}${relationFocus ? relationFocus.id === arrow.id ? ' is-relation-focused' : ' is-relation-dimmed' : ''}${selectedIds.includes(arrow.id) ? ' is-selected' : ''}${insertTarget?.arrowId === arrow.id ? ' is-insert-target' : ''}${displayArrow.lineStyle === 'dashed' ? ' is-dashed' : displayArrow.lineStyle === 'dotted' ? ' is-dotted' : ''}${traceResult ? tracedArrowIds.has(arrow.id) ? ' is-traced' : ' is-trace-dimmed' : ''}${highlightedIds.has(arrow.id) ? ' is-updated' : ''}`} style={displayArrow.opacity !== undefined ? { opacity: displayArrow.opacity } : undefined} onPointerEnter={() => { if (scene.architecture && tool === 'select') setHoveredRelationId(arrow.id) }} onPointerLeave={() => setHoveredRelationId((current) => current === arrow.id ? null : current)} onContextMenu={(event) => openContextMenu(event, arrow.id)} onPointerDown={(event) => { event.stopPropagation(); setContextMenu(null); setSelectedGroupTarget(null); editorRef.current?.focus({ preventScroll: true }); setSelectedIds(event.shiftKey ? toggleId(selectedIds, arrow.id) : [arrow.id]) }}>
+                <CanvasArrowInk label={displayArrow.label ?? (scene.architecture && from && to ? `${from.text} → ${to.text}` : undefined)} path={path} markerEnd={displayArrow.markerEnd === 'none' ? undefined : 'url(#canvas-arrow)'} strokeColor={displayArrow.strokeColor || visualSkin ? displayArrow.strokeColor ?? visualSkin?.edge : undefined} strokeWidth={displayArrow.strokeWidth} />
                 {displayArrow.label && labelLayout ? (
                   <g
                     className={`freeform-arrow-label${displayArrow.labelPosition || arrowLabelDraft?.id === arrow.id ? ' is-manual' : ''}`}
@@ -3461,7 +3479,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
             <g
               key={item.id}
               data-element-id={item.id}
-              className={`freeform-box freeform-${displayItem.type} tone-${displayItem.tone ?? 'default'} shape-${displayItem.shape ?? 'rounded'} emphasis-${displayItem.emphasis ?? 'secondary'}${displayItem.type === 'note' && displayItem.textOnly ? ' is-text-only' : ''}${imagePath ? ' is-image' : ''}${architectureCard ? ` is-architecture-card card-kind-${cardTemplate.kind}` : ''}${architectureMark ? ' is-architecture-mark' : ''}${displayItem.iconRef ? ' has-icon-ref' : displayItem.stencil ? ' has-stencil-logo' : ''}${displayItem.fillColor ? ' has-custom-fill' : ''}${displayItem.strokeColor ? ' has-custom-stroke' : ''}${displayItem.strokeWidth ? ' has-custom-stroke-width' : ''}${displayItem.locked ? ' is-locked' : ''}${selectedIds.includes(item.id) ? ' is-selected' : ''}${dragCollisionIds.has(item.id) ? ' is-collision' : ''}${connectFrom === item.id ? ' is-connect-source' : ''}${arrowEndpointPreview?.targetId === item.id ? ' is-reconnect-target' : ''}${traceResult ? tracedNodeIds.has(item.id) ? ` is-traced trace-depth-${Math.min(3, traceResult.distanceById[item.id] ?? 0)}` : ' is-trace-dimmed' : ''}${highlightedIds.has(item.id) ? ' is-updated' : ''}`}
+              className={`freeform-box freeform-${displayItem.type} tone-${displayItem.tone ?? 'default'} shape-${displayItem.shape ?? 'rounded'} emphasis-${displayItem.emphasis ?? 'secondary'}${displayItem.type === 'note' && displayItem.textOnly ? ' is-text-only' : ''}${imagePath ? ' is-image' : ''}${architectureCard ? ` is-architecture-card card-kind-${cardTemplate.kind}` : ''}${architectureMark ? ' is-architecture-mark' : ''}${displayItem.iconRef ? ' has-icon-ref' : displayItem.stencil ? ' has-stencil-logo' : ''}${displayItem.fillColor ? ' has-custom-fill' : ''}${displayItem.strokeColor ? ' has-custom-stroke' : ''}${displayItem.strokeWidth ? ' has-custom-stroke-width' : ''}${displayItem.locked ? ' is-locked' : ''}${selectedIds.includes(item.id) ? ' is-selected' : ''}${dragCollisionIds.has(item.id) ? ' is-collision' : ''}${connectFrom === item.id ? ' is-connect-source' : ''}${arrowEndpointPreview?.targetId === item.id ? ' is-reconnect-target' : ''}${relationFocus ? item.id === relationFocus.from ? ' is-relation-source' : item.id === relationFocus.to ? ' is-relation-target' : ' is-relation-dimmed' : ''}${traceResult ? tracedNodeIds.has(item.id) ? ` is-traced trace-depth-${Math.min(3, traceResult.distanceById[item.id] ?? 0)}` : ' is-trace-dimmed' : ''}${highlightedIds.has(item.id) ? ' is-updated' : ''}`}
               style={{ ...canvasBoxVisualStyle(displayItem), ...(skin && displayItem.type === 'node' ? { filter: skin.shadow, ...(selectedIds.includes(item.id) ? { '--canvas-box-stroke': 'var(--accent)' } : {}) } : {}) }}
               transform={`translate(${displayX} ${displayY})${displayItem.rotation ? ` rotate(${displayItem.rotation} ${displayItem.width / 2} ${displayItem.height / 2})` : ''}`}
               onContextMenu={(event) => openContextMenu(event, item.id)}

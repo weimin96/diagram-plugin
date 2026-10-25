@@ -671,6 +671,30 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .freeform-arrow .freeform-arrow-line { transition: stroke .12s ease, stroke-width .12s ease, opacity .12s ease; }
 .freeform-arrow:not(.is-selected):not(.is-trace-dimmed):hover .freeform-arrow-line { stroke: color-mix(in srgb, var(--accent) 58%, var(--border-strong)); stroke-width: 2.9; }
 .freeform-arrow.is-selected .freeform-arrow-line { stroke: var(--accent) !important; stroke-width: 3px !important; opacity: 1 !important; }
+.freeform-editor.has-relation-lens .freeform-arrow.is-relation-dimmed { opacity: .16 !important; }
+.freeform-editor.has-relation-lens .freeform-box.is-relation-dimmed { opacity: .54 !important; }
+.freeform-editor.has-relation-lens .freeform-arrow.is-relation-focused { opacity: 1 !important; }
+.freeform-editor.has-relation-lens .freeform-arrow.is-relation-focused .freeform-arrow-line {
+  stroke: var(--accent) !important; stroke-width: 3.2px !important; opacity: 1 !important;
+}
+.freeform-editor.has-relation-lens .freeform-box.is-relation-source > rect:first-of-type,
+.freeform-editor.has-relation-lens .freeform-box.is-relation-target > rect:first-of-type {
+  stroke: var(--accent) !important; stroke-width: 2.6px !important; opacity: 1 !important;
+}
+.freeform-relation-lens {
+  position: absolute; z-index: 6; bottom: 18px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 8px; max-width: min(680px, calc(100% - 32px));
+  padding: 6px 10px; border: 1px solid color-mix(in srgb, var(--accent) 27%, var(--border));
+  border-radius: 9px; background: color-mix(in srgb, var(--surface-panel) 97%, transparent);
+  color: var(--text-primary); font-size: 11px; font-weight: 620;
+  box-shadow: 0 3px 15px rgba(0,0,0,.09);
+}
+.freeform-relation-lens span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.freeform-relation-lens span:nth-child(2) { color: var(--accent); flex: none; }
+.freeform-relation-lens button {
+  flex: none; border: none; background: transparent; color: var(--text-secondary);
+  font: inherit; cursor: pointer; padding: 0 3px;
+}
 .freeform-arrow.is-free-line.emphasis-secondary { opacity: 1; }
 .freeform-arrow-endpoint { fill: var(--surface-panel); stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: none; }
 .freeform-arrow.is-selected .freeform-arrow-endpoint { pointer-events: all; cursor: crosshair; }
