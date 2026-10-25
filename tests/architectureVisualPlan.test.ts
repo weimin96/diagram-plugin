@@ -51,13 +51,19 @@ test('复杂宽图默认总览但完整节点与关系仍在原始场景，详�
 test('高扇出重叠给出真实关系 ID 的定向修复目标，而不是虚构共享主干', () => {
   const sample = architectureBenchmarkCases('extended').find((item) => item.id === 'microservices-fanout')!
   const output = composeArchitectureGraph(sample.intent)
-  assert.equal(output.visualPlan.recommendedView, 'overview',
-    'severe functional-region overlap should not open in unreadable detail mode')
-  assert.equal(output.scene.architecture?.view, 'overview')
+  assert.equal(output.routeDiagnostics.frameOverlapArea, 0)
+  assert.equal(output.visualPlan.review.readyForVisualReview, true,
+    'joint region and corridor planning now removes the previous hard frame blocker')
+  assert.equal(output.visualPlan.recommendedView, 'detail',
+    'unobstructed functional regions no longer force a collapsed overview')
+  assert.equal(output.scene.architecture?.view, 'detail')
   const source = serializeCanvasScene(output.scene)
-  const projection = canvasArchitectureProjection(output.scene)
+  const overview: typeof output.scene = { ...output.scene,
+    architecture: { ...output.scene.architecture!, view: 'overview' } }
+  const projection = canvasArchitectureProjection(overview)
   const collapsed = projection.scene.groups?.filter((group) => group.collapsed).map((group) => group.id) ?? []
-  assert.deepEqual(collapsed.sort(), ['arch-application', 'arch-data', 'arch-processing'])
+  assert.deepEqual(collapsed.sort(), ['arch-application', 'arch-data'],
+    'only dense regions are summarized; compact processing region stays directly readable')
   assert.ok(canvasCollapsedConnections(projection.scene).some((connection) => connection.count > 1),
     'summarized cross-region arrows must still represent actual source relations')
   const svg = canvasSceneToSvg(projection.scene)
@@ -86,21 +92,15 @@ test('高扇出重叠给出真实关系 ID 的定向修复目标，而不是虚�
     && item.action.includes('不得伪造共享主干')))
   const hotspots = output.visualPlan.review.overlapHotspots
   assert.ok(hotspots.length > 0 && hotspots.length <= 5)
-  assert.equal(hotspots[0].edgeId, '__relation-10', 'the payment-external connection is the actual congestion hotspot')
-  assert.ok(hotspots[0].conflictingEdgeIds.length >= 3)
+  assert.ok(hotspots[0].conflictingEdgeIds.length >= 1)
   assert.ok(hotspots.every((hotspot) => arrowIds.has(hotspot.edgeId)
     && hotspot.conflictingEdgeIds.every((id) => arrowIds.has(id) && id !== hotspot.edgeId)))
-  assert.ok(targets.some((item) => item.action.includes('__relation-10')))
+  assert.ok(targets.every((item) => item.action.includes(item.elementIds[0])
+    || item.action.includes(item.elementIds[1])))
   const frameTargets = output.visualPlan.review.repairTargets.filter((item) => item.concern === 'frame-overlap')
-  const groupIds = new Set(output.scene.groups?.map((group) => group.id))
-  assert.ok(output.routeDiagnostics.frameOverlaps > 0)
-  assert.equal(output.visualPlan.review.readyForVisualReview, false,
-    'overlapping partition frames are not ready for professional visual review')
-  assert.ok(frameTargets.length >= 1 && frameTargets.length <= 2)
-  assert.ok(frameTargets.every((target) => target.elementIds.length === 2
-    && target.elementIds.every((id) => groupIds.has(id))
-    && target.action.includes('不能简单平移')))
-  assert.ok(frameTargets.some((target) => target.action.includes('进入对方边界的节点')))
+  assert.equal(output.routeDiagnostics.frameOverlaps, 0)
+  assert.equal(frameTargets.length, 0,
+    'do not keep obsolete region-overlap warnings once envelopes are truly separated')
   assert.ok(output.visualPlan.review.repairTargets.length <= 5)
 })
 

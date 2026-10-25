@@ -21,6 +21,7 @@ export function findOrthogonalRoute(
   fromAnchor: 'top' | 'right' | 'bottom' | 'left',
   toAnchor: 'top' | 'right' | 'bottom' | 'left',
   hints?: RouteCorridorHints,
+  visibilityFallback = false,
 ): CanvasPoint[] {
   const margin = 24
   const xCandidates = uniqueNumbers([
@@ -128,7 +129,118 @@ export function findOrthogonalRoute(
       }
     }
   }
+  if (visibilityFallback && bestScore >= 100_000) {
+    const detour = findObstacleFreeVisibilityRoute(
+      start, end, obstacles, occupied, bundleKey, fromAnchor, toAnchor, hints,
+    )
+    if (detour) {
+      const score = scoreRoute(detour, obstacles, occupied, bundleKey, bestScore)
+      if (score < bestScore) best = detour
+    }
+  }
   return best
+}
+
+/** Exact obstacle-free fallback over rectilinear visibility corridors.
+ * Invoked only after bounded doglegs fail. This is the same geometric solver,
+ * not a second layout policy. Direction is part of the search state so bends,
+ * source and target port normals are enforced during traversal.
+ */
+function findObstacleFreeVisibilityRoute(
+  start: CanvasPoint, end: CanvasPoint, obstacles: RouteRect[],
+  occupied: RouteSegment[], bundleKey: string | undefined,
+  fromAnchor: 'top' | 'right' | 'bottom' | 'left',
+  toAnchor: 'top' | 'right' | 'bottom' | 'left',
+  hints?: RouteCorridorHints,
+): CanvasPoint[] | undefined {
+  const xs = [...new Set([
+    start.x, end.x, ...(hints?.x ?? []),
+    ...obstacles.flatMap((r) => [r.x - 12, r.x, r.x + r.width, r.x + r.width + 12]),
+  ])].filter(Number.isFinite).sort((a, b) => a - b)
+  const ys = [...new Set([
+    start.y, end.y, ...(hints?.y ?? []),
+    ...obstacles.flatMap((r) => [r.y - 12, r.y, r.y + r.height, r.y + r.height + 12]),
+  ])].filter(Number.isFinite).sort((a, b) => a - b)
+  const width = xs.length, height = ys.length
+  if (!width || !height || width * height > 14_000) return undefined
+  const pointId = (x: number, y: number) => y * width + x
+  const indexId = (node: number, direction: number) => node * 5 + direction
+  const startNode = pointId(xs.indexOf(start.x), ys.indexOf(start.y))
+  const endNode = pointId(xs.indexOf(end.x), ys.indexOf(end.y))
+  const sourceDir = { right: 0, left: 1, bottom: 2, top: 3 }[fromAnchor]
+  const targetDir = { right: 1, left: 0, bottom: 3, top: 2 }[toAnchor]
+  const sourceState = indexId(startNode, 4)
+  const distances = new Float64Array(width * height * 5).fill(Infinity)
+  const previous = new Int32Array(distances.length).fill(-1)
+  distances[sourceState] = 0
+  type Entry = { state: number; distance: number }
+  const heap: Entry[] = [{ state: sourceState, distance: 0 }]
+  const push = (entry: Entry) => {
+    let i = heap.length
+    heap.push(entry)
+    while (i > 0) {
+      const parent = Math.floor((i - 1) / 2)
+      if (heap[parent].distance <= entry.distance) break
+      heap[i] = heap[parent]
+      i = parent
+    }
+    heap[i] = entry
+  }
+  const pop = (): Entry | undefined => {
+    const first = heap[0]
+    const last = heap.pop()
+    if (!heap.length || !last) return first
+    let i = 0
+    while (2 * i + 1 < heap.length) {
+      let child = 2 * i + 1
+      if (child + 1 < heap.length && heap[child + 1].distance < heap[child].distance) child++
+      if (heap[child].distance >= last.distance) break
+      heap[i] = heap[child]
+      i = child
+    }
+    heap[i] = last
+    return first
+  }
+  const steps = [
+    { dx: 1, dy: 0 }, { dx: -1, dy: 0 },
+    { dx: 0, dy: 1 }, { dx: 0, dy: -1 },
+  ] as const
+  let resolved = -1
+  while (heap.length) {
+    const current = pop()!
+    if (current.distance !== distances[current.state]) continue
+    const node = Math.floor(current.state / 5), direction = current.state % 5
+    if (node === endNode && direction === targetDir) {
+      resolved = current.state
+      break
+    }
+    const x = node % width, y = Math.floor(node / width)
+    for (let nextDir = 0; nextDir < steps.length; nextDir++) {
+      if (direction === 4 && nextDir !== sourceDir) continue
+      if (nextDir === (direction ^ 1)) continue // Avoid immediate backtracking.
+      const nx = x + steps[nextDir].dx, ny = y + steps[nextDir].dy
+      if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue
+      const next = pointId(nx, ny)
+      if (next === endNode && nextDir !== targetDir) continue
+      const a = { x: xs[x], y: ys[y] }, b = { x: xs[nx], y: ys[ny] }
+      const segment = { a, b }
+      if (obstacles.some((rect) => segmentIntersectsRect(segment, rect))) continue
+      const segmentCost = scoreRoute([a, b], [], occupied, bundleKey)
+      const nextDistance = current.distance + segmentCost + (direction !== 4 && direction !== nextDir ? 22 : 0)
+      const nextState = indexId(next, nextDir)
+      if (nextDistance >= distances[nextState]) continue
+      distances[nextState] = nextDistance
+      previous[nextState] = current.state
+      push({ state: nextState, distance: nextDistance })
+    }
+  }
+  if (resolved < 0) return undefined
+  const path: CanvasPoint[] = []
+  for (let state = resolved; state >= 0; state = previous[state]) {
+    const node = Math.floor(state / 5)
+    path.push({ x: xs[node % width], y: ys[Math.floor(node / width)] })
+  }
+  return simplifyRoute(path.reverse())
 }
 
 function routeRespectsAnchors(

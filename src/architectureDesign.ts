@@ -37,6 +37,8 @@ export interface ArchitectureBeautifyOptions {
   spatialOrder?: boolean
   /** Opt-in complete-candidate geometry: reserve sibling group envelopes before routing. */
   partitionFirst?: boolean
+  /** Candidate-only last-resort visibility search when ordinary doglegs cannot clear nodes. */
+  obstacleFreeFallback?: boolean
   /** Verified semantic intent takes priority over label-based role inference. */
   partitionOverrides?: ReadonlyMap<string, ArchitecturePartition>
   /** An explicitly confirmed directed business path, not an inferred longest path. */
@@ -248,7 +250,7 @@ export function beautifyArchitectureScene(scene: CanvasScene, options: Architect
   )
   next = applyArchitectureTheme(next, theme, partitionById)
   next = applyArchitectureEmphasis(next, partitionById, options.primaryPath)
-  if (reroute) next = routeArchitectureEdges(next)
+  if (reroute) next = routeArchitectureEdges(next, options.obstacleFreeFallback === true)
 
   // Keep locked boxes exactly where the author placed them, even when the rest
   // of the architecture is re-partitioned.

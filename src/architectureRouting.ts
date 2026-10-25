@@ -11,16 +11,18 @@ import {
 import type { CanvasArrow, CanvasGroup, CanvasGroupFrame, CanvasNode, CanvasNote, CanvasPoint, CanvasScene } from './canvas.js'
 import { anchorPoint, canvasArrowBoxRoute, canvasGroupFrames, canvasSharedSourceStem } from './canvas.js'
 
-export function routeArchitectureEdges(scene: CanvasScene): CanvasScene {
-  return routeArchitectureEdgeSubset(scene)
+export function routeArchitectureEdges(scene: CanvasScene, visibilityFallback = false): CanvasScene {
+  return routeArchitectureEdgeSubset(scene, undefined, false, visibilityFallback)
 }
 
-export function routeArchitectureArrowIds(scene: CanvasScene, arrowIds: Iterable<string>, nodePorts = false): CanvasScene {
+export function routeArchitectureArrowIds(
+  scene: CanvasScene, arrowIds: Iterable<string>, nodePorts = false, visibilityFallback = false,
+): CanvasScene {
   const only = new Set(arrowIds)
   if (!only.size) return scene
   const arrowCount = scene.elements.filter((item) => item.type === 'arrow').length
-  if (only.size > Math.max(48, arrowCount * 0.45)) return routeArchitectureEdgeSubset(scene)
-  return routeArchitectureEdgeSubset(scene, only, nodePorts)
+  if (only.size > Math.max(48, arrowCount * 0.45)) return routeArchitectureEdgeSubset(scene, undefined, false, visibilityFallback)
+  return routeArchitectureEdgeSubset(scene, only, nodePorts, visibilityFallback)
 }
 
 export function routeArchitectureEdgesIncremental(scene: CanvasScene, changedNodeIds: Iterable<string>): CanvasScene {
@@ -54,7 +56,9 @@ export function routeArchitectureEdgesIncremental(scene: CanvasScene, changedNod
   return routeArchitectureEdgeSubset(scene, affected)
 }
 
-function routeArchitectureEdgeSubset(scene: CanvasScene, only?: Set<string>, nodePorts = false): CanvasScene {
+function routeArchitectureEdgeSubset(
+  scene: CanvasScene, only?: Set<string>, nodePorts = false, visibilityFallback = false,
+): CanvasScene {
   const boxes = new Map(scene.elements.filter((item): item is CanvasNode | CanvasNote => item.type !== 'arrow').map((item) => [item.id, item]))
   const arrows = scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow')
   const groupFrames = new Map(canvasGroupFrames(scene).map((frame) => [frame.id, frame]))
@@ -87,7 +91,7 @@ function routeArchitectureEdgeSubset(scene: CanvasScene, only?: Set<string>, nod
   const remainingRouteOrder = only || !highDensityRouting ? routeOrder : routeOrder.filter((arrow) => !isIntraGroupArrow(arrow, boxes))
 
   for (const arrow of localRouteOrder) {
-    const result = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts, portReservations)
+    const result = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts, portReservations, visibilityFallback)
     if (result) routed.set(arrow.id, result)
   }
 
@@ -103,13 +107,13 @@ function routeArchitectureEdgeSubset(scene: CanvasScene, only?: Set<string>, nod
     for (const [id, arrow] of bundled) routed.set(id, arrow)
     for (const arrow of arrows) {
       if (!crossGroupBundleIds.has(arrow.id) || routed.has(arrow.id)) continue
-      const fallback = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts, portReservations)
+      const fallback = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts, portReservations, visibilityFallback)
       if (fallback) routed.set(arrow.id, fallback)
     }
   }
 
   for (const arrow of remainingRouteOrder) {
-    const result = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts, portReservations)
+    const result = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts, portReservations, visibilityFallback)
     if (result) routed.set(arrow.id, result)
   }
 
@@ -118,7 +122,7 @@ function routeArchitectureEdgeSubset(scene: CanvasScene, only?: Set<string>, nod
     for (const [id, arrow] of bundled) routed.set(id, arrow)
     for (const arrow of arrows) {
       if (!groupedFanoutIds.has(arrow.id) || routed.has(arrow.id)) continue
-      const fallback = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts, portReservations)
+      const fallback = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts, portReservations, visibilityFallback)
       if (fallback) routed.set(arrow.id, fallback)
     }
   }
@@ -145,6 +149,7 @@ function routeArchitectureArrow(
   groups: Map<string, CanvasGroup>,
   nodePorts = false,
   portReservations?: PortReservations,
+  visibilityFallback = false,
 ): CanvasArrow | undefined {
   const from = boxes.get(arrow.from)
   const to = boxes.get(arrow.to)
@@ -180,7 +185,7 @@ function routeArchitectureArrow(
           : anchorPoint(from, fromAnchor, toCenter, fromRatio)
         const end = toRatio === 0.5 ? fixedAnchorPoint(to, toAnchor)
           : anchorPoint(to, toAnchor, fromCenter, toRatio)
-        const route = findOrthogonalRoute(start, end, obstacles, occupied, bundleKey, fromAnchor, toAnchor)
+        const route = findOrthogonalRoute(start, end, obstacles, occupied, bundleKey, fromAnchor, toAnchor, undefined, visibilityFallback)
         const score = scoreRoute(route, obstacles, occupied, bundleKey)
           + (fromAnchor === pairs[0][0] && toAnchor === pairs[0][1] ? 0 : 42)
           + (independentPortRepair ? portSpacingPenalty(from, fromAnchor, fromRatio, portReservations)
@@ -216,7 +221,7 @@ function routeArchitectureArrow(
     for (const [fromAnchor, toAnchor] of pairs) {
       const start = fixedAnchorPoint(from, fromAnchor)
       const end = fixedAnchorPoint(to, toAnchor)
-      const route = findOrthogonalRoute(start, end, nodeObstacles, occupied, bundleKey, fromAnchor, toAnchor)
+      const route = findOrthogonalRoute(start, end, nodeObstacles, occupied, bundleKey, fromAnchor, toAnchor, undefined, visibilityFallback)
       if (countRouteObstacleCollisions(route, nodeObstacles) > 0) continue
       const boundaries = countRouteObstacleCollisions(route, groupObstacles)
       if (boundaries > 1 || lengthOf(route) >= originalLength * .72) continue

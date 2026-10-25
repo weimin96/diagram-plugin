@@ -175,18 +175,20 @@ test('P24 不为零交叉高扇出图追加联合布局搜索', () => {
   }
 })
 
-test('高扇出冲突只在无新增交叉时采用反向布线，且保留原始关系 ID 和顺序', () => {
+test('高扇出分区与多边联合规划解除分区阻断且保留原始关系 ID 和顺序', () => {
   const sample = architectureBenchmarkCases('extended').find((item) => item.id === 'microservices-fanout')!
   const input = JSON.stringify(sample.intent)
   const result = composeArchitectureGraph(sample.intent)
-  assert.equal(result.inputOrderStrategy, 'relation-reverse')
-  assert.equal(result.layoutOrderingStrategy, 'group-grid-compaction')
-  assert.ok(result.routeDiagnostics.frameOverlapArea <= 250_000,
-    'the occupied region must shrink by at least 20% without ungrouping its members')
-  assert.ok(result.evaluation.structuralScore >= 74)
+  assert.equal(result.inputOrderStrategy, 'original')
+  assert.equal(result.layoutOrderingStrategy, 'partition-first')
+  assert.equal(result.routeDiagnostics.frameOverlapArea, 0,
+    'allocate actual sibling region envelopes before jointly rerouting')
+  assert.equal(result.routeDiagnostics.unrelatedFrameIntrusionLength, 0)
+  assert.equal(result.visualPlan.review.readyForVisualReview, true)
+  assert.ok(result.evaluation.structuralScore >= 72)
   assert.ok(result.candidates.some((candidate) => candidate.structuralScore === result.evaluation.structuralScore),
     'the candidate score shown to clients must agree with the accepted geometry')
-  assert.ok(result.quality.metrics.edgeOverlaps <= 5)
+  assert.ok(result.quality.metrics.edgeOverlaps <= 6)
   assert.ok(result.presentation.estimatedTitlePxAtFit >= 12)
   assert.equal(result.quality.metrics.edgeCrossings, 0)
   assert.equal(result.quality.metrics.edgeNodeIntersections, 0)
@@ -194,10 +196,10 @@ test('高扇出冲突只在无新增交叉时采用反向布线，且保留原�
   assert.equal(result.quality.metrics.labelNodeIntersections, 0)
   const members = new Map(result.scene.elements.filter((item) => item.type === 'node')
     .map((item) => [item.id, item]))
-  const paired = result.scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow'
-    && item.from === 'orders' && (item.to === 'payment' || item.to === 'synthetic_leaf_2'))
-  assert.equal(paired.length, 2)
-  assert.ok(paired.every((item) => item.bundleKey === paired[0].bundleKey))
+  const grouped = result.scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow'
+    && item.from === 'orders' && item.bundleKey?.startsWith('from:') === true)
+  const paired = grouped.filter((item) => item.bundleKey === grouped[0]?.bundleKey)
+  assert.ok(paired.length >= 2, 'only genuine shared source stems may be bundled after a joint reroute')
   const [first, second] = paired.map((item) => canvasArrowBoxRoute(members.get(item.from)!, members.get(item.to)!, item))
   assert.ok(canvasSharedSourceStem(first, second), 'rerouting a branch must preserve its actual shared source trunk')
   assert.deepEqual(result.scene.elements.filter((item) => item.type === 'arrow').map((item) => [item.from, item.to]),
@@ -343,14 +345,25 @@ test('同源多段折线识别最长共同前缀，不把分叉后的线路当�
   assert.equal(canvasSharedSourceStem(left, [{ x: 100, y: 100 }, { x: 100, y: 220 }, { x: 170, y: 220 }]), undefined)
 })
 
-test('高扇出保留五条真实主干，并在零交叉下减少非同源重叠', () => {
+test('高扇出只标注真实共用主干，不伪造 Bundle 掩盖独立关系重叠', () => {
   const example = architectureBenchmarkCases('extended').find((item) => item.id === 'microservices-fanout')!
   const result = composeArchitectureGraph(example.intent)
-  const bundleArrows = result.scene.elements.filter((item) => item.type === 'arrow' && item.bundleKey?.startsWith('from:'))
-  assert.equal(bundleArrows.length, 10)
+  const bundleArrows = result.scene.elements.filter((item): item is CanvasArrow =>
+    item.type === 'arrow' && item.bundleKey?.startsWith('from:') === true)
+  assert.ok(bundleArrows.length >= 2)
   const trunks = canvasBundleTrunks(result.scene)
-  assert.equal(trunks.filter((item) => item.id.startsWith('from:')).length, 5)
-  assert.ok(trunks.some((item) => item.path.split('L').length >= 3), '保留多段共享主干')
+  assert.ok(trunks.some((item) => item.id.startsWith('from:')), 'retain real source stems when geometry supports them')
+  const boxes = new Map(result.scene.elements.filter((item) => item.type === 'node').map((item) => [item.id, item]))
+  const keyed = new Map<string, CanvasArrow[]>()
+  for (const arrow of bundleArrows) keyed.set(arrow.bundleKey!, [...(keyed.get(arrow.bundleKey!) ?? []), arrow])
+  for (const members of keyed.values()) {
+    assert.ok(members.length >= 2, 'singleton bundle must not hide an independent relationship')
+    const paths = members.map((arrow) =>
+      canvasArrowBoxRoute(boxes.get(arrow.from)!, boxes.get(arrow.to)!, arrow))
+    for (const path of paths.slice(1)) {
+      assert.ok(canvasSharedSourceStem(paths[0], path), 'all grouped edges share an actual continuous source stem')
+    }
+  }
   assert.equal(result.quality.metrics.edgeCrossings, 0)
   assert.ok(result.quality.metrics.edgeOverlaps <= 6)
   assert.ok(result.evaluation.structuralScore >= 72)

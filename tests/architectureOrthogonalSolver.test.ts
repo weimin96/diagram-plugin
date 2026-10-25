@@ -37,3 +37,31 @@ test('orthogonal geometry weighs unrelated occupied corridors but permits named 
     { x: 140, y: 0 }, { x: 140, y: 80 },
   ]), [{ x: 0, y: 0 }, { x: 140, y: 0 }, { x: 140, y: 80 }])
 })
+
+test('optional visibility fallback resolves an obstacle maze that bounded doglegs cannot clear', () => {
+  const start = { x: 711, y: 274 }, end = { x: 899, y: 702 }
+  const obstacles: RouteRect[] = [
+    { x: 608, y: 84, width: 206, height: 110 },
+    { x: 984, y: 84, width: 206, height: 110 },
+    { x: 796, y: 182, width: 206, height: 110 },
+    { x: 890, y: 482, width: 206, height: 110 },
+    { x: 702, y: 482, width: 206, height: 110 },
+    { x: 420, y: 684, width: 206, height: 110 },
+    { x: 60, y: 182, width: 206, height: 110 },
+    { x: 608, y: 280, width: 206, height: 110 },
+  ]
+  const before = findOrthogonalRoute(start, end, obstacles, [], undefined, 'bottom', 'top')
+  const recovered = findOrthogonalRoute(start, end, obstacles, [], undefined, 'bottom', 'top', undefined, true)
+  assert.ok(scoreRoute(before, obstacles, []) >= 100_000,
+    'the bounded search cannot escape this interlocking corridor')
+  assert.ok(scoreRoute(recovered, obstacles, []) < 100_000)
+  assert.deepEqual(recovered[0], start)
+  assert.deepEqual(recovered.at(-1), end)
+  assert.ok(recovered[1].y >= start.y, 'respect bottom source port')
+  assert.ok(recovered.at(-2)!.y <= end.y, 'respect top target port')
+  assert.ok(recovered.slice(1).every((point, i) => point.x === recovered[i].x || point.y === recovered[i].y))
+  assert.ok(recovered.slice(1).every((point, i) =>
+    obstacles.every((rect) => !segmentIntersectsRect({ a: recovered[i], b: point }, rect))))
+  assert.deepEqual(findOrthogonalRoute(start, end, obstacles, [], undefined, 'bottom', 'top'), before,
+    'opt-in fallback must not change ordinary routing calls')
+})

@@ -103,6 +103,7 @@ function refineArchitectureRoutes(
   initialScene: CanvasScene,
   composition: ArchitectureComposition,
   density: Exclude<CanvasArchitectureDensity, 'auto'>,
+  visibilityFallback = false,
 ) {
   let scene = initialScene
   let quality = assessCanvasVisualQuality(scene)
@@ -129,7 +130,7 @@ function refineArchitectureRoutes(
       // cannot produce a different winner.
       const knownArrows = new Set<string>([JSON.stringify(scene.elements.find((item) => item.id === id))])
       const bypass = (blockers.get(id) ?? []).flatMap((blockerId) => bypassArchitectureBlockingNode(scene, id, blockerId))
-      for (const candidate of [...bypass, routeArchitectureArrowIds(scene, [id]), ...nudgeArchitectureCorridors(scene, id)]) {
+      for (const candidate of [...bypass, routeArchitectureArrowIds(scene, [id], false, visibilityFallback), ...nudgeArchitectureCorridors(scene, id)]) {
         const candidateArrow = candidate.elements.find((item) => item.id === id)
         const signature = JSON.stringify(candidateArrow)
         if (knownArrows.has(signature)) continue
@@ -160,6 +161,7 @@ function refineArchitectureNodeOrder(
   composition: ArchitectureComposition,
   density: Exclude<CanvasArchitectureDensity, 'auto'>,
   protectedNodes: ReadonlySet<string> = new Set(),
+  visibilityFallback = false,
 ) {
   let best = initial
   let reorderedPairs = 0
@@ -214,7 +216,7 @@ function refineArchitectureNodeOrder(
           return element
         }),
       }
-      const routed = routeArchitectureEdges(swapped)
+      const routed = routeArchitectureEdges(swapped, visibilityFallback)
       const quality = assessCanvasVisualQuality(routed)
       if (quality.metrics.nodeOverlaps || quality.metrics.edgeNodeIntersections
         || quality.metrics.labelNodeIntersections) continue
@@ -235,6 +237,7 @@ function composeArchitectureGraphCandidate(
   alignedSpacing = false,
   spatialOrder = false,
   partitionFirst = false,
+  obstacleFreeFallback = false,
 ) {
   const ids = new Set<string>()
   for (const node of intent.nodes) {
@@ -305,7 +308,7 @@ function composeArchitectureGraphCandidate(
     const result = beautifyArchitectureScene(scene, {
       theme: intent.theme, density, composition, peerOrder,
       partitionOverrides, primaryPath: intent.primaryPath, alignedSpacing, spatialOrder,
-      partitionFirst,
+      partitionFirst, obstacleFreeFallback,
     })
     const quality = assessCanvasVisualQuality(result.scene)
     const evaluation = evaluateArchitectureLayout(result.scene, quality, composition, density)
@@ -325,7 +328,9 @@ function composeArchitectureGraphCandidate(
       other.summary.composition === candidate.summary.composition) === index)
     .slice(0, 3)
   const refined = shortlisted.map((candidate) => {
-    const result = refineArchitectureRoutes(candidate.scene, candidate.summary.composition, candidate.summary.resolvedDensity)
+    const result = refineArchitectureRoutes(
+      candidate.scene, candidate.summary.composition, candidate.summary.resolvedDensity, obstacleFreeFallback,
+    )
     const visualPenalty = architecturePresentationSelectionPenalty(
       assessArchitecturePresentation(result.scene),
       assessArchitectureRouteDiagnostics(result.scene),
@@ -350,11 +355,11 @@ function composeArchitectureGraphCandidate(
     || a.summary.composition.localeCompare(b.summary.composition))
   const { selectionScore: _selectionScore, structuralSelectionScore: _structuralSelectionScore, visualPenalty: _visualPenalty, ...selected } = eligible[0]
   const ordered = refineArchitectureNodeOrder(selected, selected.summary.composition, selected.summary.resolvedDensity,
-    peerOrder === 'main-path' ? new Set(intent.primaryPath) : undefined)
+    peerOrder === 'main-path' ? new Set(intent.primaryPath) : undefined, obstacleFreeFallback)
   // Reordering can reintroduce node intersections after the first routing
   // pass. Repair only those hard geometry failures, not the whole graph again.
   const postOrderRepair = ordered.quality.metrics.edgeNodeIntersections > 0
-    ? refineArchitectureRoutes(ordered.scene, selected.summary.composition, selected.summary.resolvedDensity)
+    ? refineArchitectureRoutes(ordered.scene, selected.summary.composition, selected.summary.resolvedDensity, obstacleFreeFallback)
     : undefined
   const repaired = postOrderRepair
     ? { ...ordered, ...postOrderRepair, reroutedEdges: ordered.reroutedEdges + postOrderRepair.reroutedEdges }
@@ -631,13 +636,22 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
   const original = composeArchitectureGraphExisting(intent)
   if (intent.primaryPath?.length || intent.nodes.length > 26
     || original.routeDiagnostics.frameOverlapArea < original.scene.width * original.scene.height * 0.1
-    // Severe fan-out needs a real multi-edge solver, not repeated full-scene
-    // trials of the same single-edge repair.
-    || original.quality.metrics.edgeOverlaps > 4) return original
-  const layout = composeArchitectureGraphCandidate(intent, 'semantic', undefined, false, false, true)
-  const candidate = improveCongestedPorts({
-    ...layout, inputOrderStrategy: 'original' as const, layoutOrderingStrategy: 'semantic' as const,
-  }, true)
+    || original.quality.metrics.edgeOverlaps > 10) return original
+  const normal = composeArchitectureGraphCandidate(intent, 'semantic', undefined, false, false, true)
+  // The visibility graph is expensive and can alter healthy trunk routes.
+  // Only retry the same partition layout when the ordinary geometric solver
+  // actually produced a route cutting through a nonendpoint node.
+  const needsVisibility = normal.quality.metrics.edgeNodeIntersections > 0
+  const layout = needsVisibility
+    ? composeArchitectureGraphCandidate(intent, 'semantic', undefined, false, false, true, true)
+    : normal
+  const joint = needsVisibility ? repairPartitionCorridors(layout) : layout
+  const routed = {
+    ...joint, inputOrderStrategy: 'original' as const, layoutOrderingStrategy: 'semantic' as const,
+  }
+  // Joint repair has already compared the conflicting complete routes; do
+  // not repeat the older per-port optimization on the same repaired scene.
+  const candidate = needsVisibility ? routed : improveCongestedPorts(routed, true)
   const before = original.quality.metrics, after = candidate.quality.metrics
   // Structural score deliberately does not count sibling frame intersections.
   // Use the existing presentation penalty rather than weakening geometry
@@ -654,7 +668,7 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
   const canAcceptBoundedOverlapTrade = !original.visualPlan.review.readyForVisualReview
     && candidate.visualPlan.review.readyForVisualReview
     && after.edgeOverlaps <= before.edgeOverlaps + 2
-    && after.edgeOverlaps <= 2
+    && after.edgeOverlaps <= Math.max(2, Math.min(6, before.edgeOverlaps + 1))
     && candidate.evaluation.structuralScore >= original.evaluation.structuralScore - 6
   const strictlyImprovesOverlaps = after.edgeOverlaps < before.edgeOverlaps
   if (after.nodeOverlaps > before.nodeOverlaps || after.edgeNodeIntersections > before.edgeNodeIntersections
@@ -672,11 +686,92 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
     ...intent.nodes.map((node, index) => [node.id, index] as const),
     ...intent.relations.map((_, index) => [`__relation-${index + 1}`, intent.nodes.length + index] as const),
   ])
+  // A joint repair is a genuine additional evaluated candidate. Expose its
+  // final score to MCP/UI clients rather than presenting only the obsolete
+  // pre-repair layout scores.
+  const hasSelectedEvaluation = candidate.candidates.some((item) =>
+    item.layout === candidate.evaluation.layout && item.density === candidate.evaluation.density
+    && item.structuralScore === candidate.evaluation.structuralScore
+    && item.issueCount === candidate.evaluation.issueCount)
   return { ...candidate,
     scene: { ...candidate.scene, elements: candidate.scene.elements.slice().sort((a, b) =>
       (inputIndex.get(a.id) ?? Infinity) - (inputIndex.get(b.id) ?? Infinity)) },
     inputOrderStrategy: 'original' as const,
     layoutOrderingStrategy: 'partition-first' as const,
+    candidates: hasSelectedEvaluation ? candidate.candidates : [candidate.evaluation, ...candidate.candidates],
+  }
+}
+
+/** A single bounded search over all implicated relationships after partition
+ * allocation. The first phase removes hard crossings without moving any
+ * nodes. The second phase jointly reroutes competing independent corridors
+ * while preserving every real relationship and re-deriving genuine trunks.
+ * This remains an optional Composer candidate, not a new default router.
+ */
+function repairPartitionCorridors(result: ReturnType<typeof composeArchitectureGraphCandidate>) {
+  let scene = result.scene
+  let quality = result.quality
+  if (quality.metrics.edgeNodeIntersections || quality.metrics.nodeOverlaps
+    || !result.scene.architecture || !result.scene.groups?.length) return result
+  let changes = 0
+  for (let round = 0; round < 4 && quality.metrics.edgeCrossings > 0; round++) {
+    const ids = [...new Set(quality.issues.filter((issue) => issue.code === 'edge-crossing')
+      .flatMap((issue) => issue.elementIds))].slice(0, 10)
+    let best: { scene: CanvasScene; quality: CanvasVisualQualityAssessment } | undefined
+    for (const id of ids) for (const proposed of nudgeArchitectureCorridors(scene, id)) {
+      const assessed = assessCanvasVisualQuality(proposed)
+      const current = quality.metrics, next = assessed.metrics
+      if (next.nodeOverlaps || next.edgeNodeIntersections || next.labelNodeIntersections
+        || next.labelOverlaps > current.labelOverlaps || next.labelOverflows > current.labelOverflows
+        || next.edgeCrossings >= current.edgeCrossings) continue
+      if (!best || next.edgeCrossings < best.quality.metrics.edgeCrossings
+        || (next.edgeCrossings === best.quality.metrics.edgeCrossings
+          && next.edgeOverlaps < best.quality.metrics.edgeOverlaps)) {
+        best = { scene: proposed, quality: assessed }
+      }
+    }
+    if (!best) break
+    scene = best.scene
+    quality = best.quality
+    changes++
+  }
+  if (quality.metrics.edgeCrossings || quality.metrics.edgeNodeIntersections) return result
+  for (let round = 0; round < 10 && quality.metrics.edgeOverlaps > 0; round++) {
+    const ids = [...new Set(quality.issues.filter((issue) => issue.code === 'edge-overlap')
+      .flatMap((issue) => issue.elementIds))].slice(0, 12)
+    let best: { scene: CanvasScene; quality: CanvasVisualQualityAssessment } | undefined
+    for (const id of ids) {
+      for (const proposed of [
+        routeArchitectureArrowIds(scene, [id], false, true),
+        routeArchitectureArrowIds(scene, [id], true, true),
+      ]) {
+        const assessed = assessCanvasVisualQuality(proposed)
+        const current = quality.metrics, next = assessed.metrics
+        if (next.nodeOverlaps || next.edgeNodeIntersections
+          || next.edgeCrossings > current.edgeCrossings
+          || next.labelNodeIntersections || next.labelOverlaps > current.labelOverlaps
+          || next.labelOverflows > current.labelOverflows
+          || next.edgeOverlaps >= current.edgeOverlaps) continue
+        if (!best || next.edgeOverlaps < best.quality.metrics.edgeOverlaps) {
+          best = { scene: proposed, quality: assessed }
+        }
+      }
+    }
+    if (!best) break
+    scene = best.scene
+    quality = best.quality
+    changes++
+  }
+  if (!changes) return result
+  scene = annotateSourceFanoutTrunks(scene)
+  quality = assessCanvasVisualQuality(scene)
+  const diagnostics = assessArchitectureRouteDiagnostics(scene)
+  const presentation = assessArchitecturePresentation(scene)
+  const evaluation = evaluateArchitectureLayout(scene, quality, result.evaluation.layout, result.evaluation.density)
+  return {
+    ...result, scene, quality, evaluation, routeDiagnostics: diagnostics, presentation,
+    visualPlan: planArchitectureVisual(scene, result.semanticComposition, quality, presentation, diagnostics),
+    reroutedEdges: result.reroutedEdges + changes,
   }
 }
 
