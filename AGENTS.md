@@ -85,3 +85,8 @@
 
 - Codex 额度不足时**不要指定 `--provider=codex`**。本机 DeepSeek Harness 0.2.1-rc.2 的 `dsh headless` 虽未提供 `--image` 参数，但实测具备 `read_image` 图像工具；命令 `pnpm benchmark:architecture:visual:blind --provider=dsh --manifest=... --case=...` 默认使用该工具。执行必须核验 JSONL 中真正的 `tool_call(read_image)` 与匹配的成功图像 `tool_result`，只允许读取临时隔离目录里的单张 PNG，严格验证六项评价后才能评分，不能把文本评审冒充图片评审。图形质量门禁和人工批准仍必须独立。
 - 架构画布“全部 / 关键”是临时阅读强调，不是两套持久化的结构数据。关键关系仅指已标记 primary 的真实箭头，或两个已标记 primary 的真实节点之间存在的箭头；其余依赖永远保留，且提供保留数量提示。单边悬停/选中与显式上/下游 trace 优先级更高。按 Esc、切换文档或切回全部后恢复；无显式主次证据则禁用关键入口，禁止猜测依赖或隐藏关系。
+
+### 视觉评分多次采样准则（2026-10-25）
+
+- 不能把一次模型视觉得分当作可交付的设计质量信号。`pnpm benchmark:architecture:visual:repeat --manifest=<manifest> --case=<id> --samples=3` 对同一 Chrome 截图、Canvas 和 SVG 哈希，以独立的 DeepSeek Harness `read_image` 会话进行 2–5 次评审，输出中位数、均值、实际分数区间和各维度分散情况。原有读图事件与像素证据检查仍每次执行；不会修改画布或人工批准状态。
+- 无固定示例得分暗示；极差超过 10 分只提示“不稳定”，不足以保证低于 10 分的结果绝对可信。跨版本仅比较同一案例、相同 Provider 和评分合同的重复取样；范围重叠时标记不确定，即使不重叠仍需要 Chrome/几何/人工证据。模型底层版本未必完全一致，不能把这种统计视为严格的模型科学测量。

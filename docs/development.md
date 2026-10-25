@@ -349,3 +349,11 @@ ELK 0.12.0 当前只作为 devDependency 引入。其许可标识为 `EPL-2.0 OR
 真实 Chrome + React 端到端命令：pnpm benchmark:architecture:relation-lens。已验证关键按钮可点、重要边突出、非关键边 computed opacity 为 0.16、1/2 实例的关键数显示、完整两条关系持续在 DOM、单边焦点覆盖后恢复，以及全部模式的正确恢复。该工具为真实宿主 DOM 渲染检查，不会消耗模型配额；并不声称静态图交叉/重叠已消失。
 
 历史说明：本轮之前，用户 Codex 额度耗尽，我们仅用 DeepSeek Harness 做过只读文本方案评审；那一次不能算像素审查。本轮进一步验证 `dsh headless` 真实具备 `read_image` 工具，且 JSONL 可记录实际工具成功事件。因此现在可以让 DSH 直接审查 Chrome PNG，但仍需独立于软件几何验收和人工批准。
+
+### DSH 图片评分重复校准（2026-10-25）
+
+新命令 `pnpm benchmark:architecture:visual:repeat --manifest=test-results/architecture-design-project/manifest.json --case=diagram-plugin-source-imports --samples=3`，移除原 DSH JSON 示例中可能造成锚定的固定 2.5 分，每轮在独立 DSH headless 进程中使用 `read_image` 读取同一 Chrome 截图，经完全一致的六维评分合同验收。最多 5 次，至少 2 次。生成 `<case>.visual-repeat.json` 与可读 Markdown 报告；每次独立的完整 JSON 保存在 `.visual-repeat-samples/<case>/sample-N.json`。采用 `--baseline=<旧重复评分.json>` 可以得到相同案例/Provider 的趋势提示：仅当当前与基线分数区间相隔超过 5 分才视为有方向，重叠或跨 Provider 一律归类“不确定”；`--fail-on-unstable` 只会对同次分数极差超过 10 分发出错误，不代表交付门禁。
+
+固定 12 模块/26 关系 Chrome 图的首次重复评审：45.5、40.0、46.5，总均值 44.0，中位数 45.5，极差 6.5，三个独立评价的关系可追踪性均为 1.5/5。这比之前 55.5 单次评分更能揭示不确定性，两者不同提示词版本、不可直接作为效果提升或下降对照。底层 DSH 实际服务模型可能更换，仍必须用固定截图、算法几何指标及人工视觉批准判断成品。重复评审改善的是 QA 可信度，并未改变布局/布线、Canvas 数据或现有 2 交叉/16 重叠的真实问题。
+
+后续验收补充：重复评分的原始审查记录改为随机唯一的 `.visual-repeat-samples/<case>/<run-id>/sample-N.json`，不再覆盖旧报告所引用的单次样本。若 `--baseline` 路径与 `--out` 完全相同，命令拒绝覆盖旧基线。真实 Chrome 图的再次两次读图为 45.5、46.5，比较原两次评分 42.5、40.0 得到 `inconclusive`；新旧运行的原始样本目录已逐一确认不同，且完整 Markdown 可生成。该结果显示分数存在随机波动、且视觉依赖追踪仍弱，不应以当前评分机制更完善推断静态图视觉更好。

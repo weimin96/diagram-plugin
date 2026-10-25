@@ -152,3 +152,78 @@ export function compareArchitectureVisualScores(current: ArchitectureVisualScore
       delta: Math.round((row.perceptualScore - old.perceptualScore) * 10) / 10 }]
   })
 }
+
+export interface ArchitectureVisualSample {
+  id: string
+  screenshotSha256: string
+  canvasSha256: string
+  svgSha256: string
+  provider: string
+  score: number
+  ratings: ArchitectureVisualRatings
+}
+
+export interface ArchitectureVisualSampleSummary {
+  id: string
+  provider: string
+  screenshotSha256: string
+  canvasSha256: string
+  svgSha256: string
+  sampleCount: number
+  mean: number
+  median: number
+  minimum: number
+  maximum: number
+  range: number
+  /** A score spread exceeding 10 points needs re-evaluation; not approval. */
+  unstable: boolean
+  criteria: Record<ArchitectureVisualCriterion, { median: number; minimum: number; maximum: number }>
+}
+
+/** Aggregates actual independent image reviews, never geometric scores. */
+export function summarizeArchitectureVisualSamples(
+  samples: readonly ArchitectureVisualSample[],
+): ArchitectureVisualSampleSummary {
+  if (samples.length < 2 || samples.length > 5) throw new Error('Pixel calibration requires 2–5 genuine samples')
+  const [first] = samples
+  if (!first.provider || samples.some((sample) => sample.id !== first.id
+    || sample.provider !== first.provider || sample.screenshotSha256 !== first.screenshotSha256
+    || sample.canvasSha256 !== first.canvasSha256 || sample.svgSha256 !== first.svgSha256)) {
+    throw new Error('Pixel samples must share one case, provider, PNG, SVG and Canvas evidence')
+  }
+  const sorted = (numbers: number[]) => numbers.sort((a, b) => a - b)
+  const median = (numbers: number[]) => {
+    const values = sorted(numbers)
+    return (values[Math.floor((values.length - 1) / 2)] + values[Math.floor(values.length / 2)]) / 2
+  }
+  const values = sorted(samples.map((sample) => sample.score))
+  if (values.some((value) => !Number.isFinite(value) || value < 0 || value > 100))
+    throw new Error('Invalid sample score')
+  const criterionNames = Object.keys(architectureVisualCriteria) as ArchitectureVisualCriterion[]
+  const criteria = Object.fromEntries(criterionNames.map((name) => {
+    const value = sorted(samples.map((sample) => sample.ratings[name]?.score as number))
+    if (value.some((score) => !Number.isFinite(score) || score < 0 || score > 5))
+      throw new Error(`Invalid sampled criterion ${name}`)
+    return [name, { median: median(value), minimum: value[0], maximum: value[value.length - 1] }]
+  })) as ArchitectureVisualSampleSummary['criteria']
+  const round = (value: number) => Math.round(value * 10) / 10
+  return {
+    id: first.id, provider: first.provider, screenshotSha256: first.screenshotSha256,
+    canvasSha256: first.canvasSha256, svgSha256: first.svgSha256,
+    sampleCount: values.length, mean: round(values.reduce((sum, value) => sum + value, 0) / values.length),
+    median: round(median(values)), minimum: values[0], maximum: values[values.length - 1],
+    range: round(values[values.length - 1] - values[0]),
+    unstable: values[values.length - 1] - values[0] > 10, criteria,
+  }
+}
+
+/** Require separation of observed sample ranges; never compare unlike providers. */
+export function compareArchitectureVisualSampleSummaries(
+  current: ArchitectureVisualSampleSummary, previous: ArchitectureVisualSampleSummary,
+): 'improved' | 'regressed' | 'inconclusive' {
+  if (current.id !== previous.id || current.provider !== previous.provider
+    || current.sampleCount < 2 || previous.sampleCount < 2) return 'inconclusive'
+  if (current.minimum > previous.maximum + 5) return 'improved'
+  if (current.maximum < previous.minimum - 5) return 'regressed'
+  return 'inconclusive'
+}

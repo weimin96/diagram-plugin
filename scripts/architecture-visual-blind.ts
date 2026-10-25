@@ -86,8 +86,11 @@ try {
 只有 read_image 实际读取成功后才进行像素评价，不能只凭文件名或提示猜测。不要打开源码、过去评审或基线。
 ${prompt}
 请严格输出一个 JSON 对象，无 Markdown 和额外说明：
-{"ratings":{${required.map((key) => `"${key}":{"score":2.5,"evidence":"请根据当前真实像素描述至少12字的具体优缺点"}`).join(',')}},"summary":"请基于当前真实像素概述主要可读性问题至少12字","issues":[{"observation":"截图中可见的具体问题至少8字","suggestedFix":"针对该问题的具体改善建议至少8字"}]}
-JSON 中每个 score 允许 0 至 5，每次递增 0.5。分数须各自独立判断，不要全部机械给 2.5。不要更改图表文件。`)
+顶层字段为 ratings、summary、issues。
+ratings 必须是对象，且仅包含 ${required.join('、')} 六个字段。
+每个 ratings 字段都是对象，包含 score（数值）和 evidence（至少12字的截图具体观察）。
+summary 是至少12字的截图评价；issues 是数组，每项包含 observation 和 suggestedFix 两个至少8字的字符串。
+JSON 中每个 score 允许 0 至 5，每次递增 0.5。分数须根据各维度真实像素独立判断，不要机械使用相同数值。不要更改图表文件。`)
   } else {
     const args = ['exec', '--skip-git-repo-check', '--ignore-user-config', '--ephemeral',
       '--sandbox', 'read-only', '--image', 'anonymous.png', '--output-schema', 'schema.json',
