@@ -1,4 +1,4 @@
-import { routeArchitectureArrowIds, routeArchitectureEdgesIncremental } from './architectureDesign.js'
+import { routeArchitectureArrowIds, routeArchitectureEdgesIncremental } from './architectureRouting.js'
 import { parseCanvasScene, serializeCanvasScene, type CanvasArrow, type CanvasElement, type CanvasNode, type CanvasNote, type CanvasPoint, type CanvasScene } from './canvas.js'
 import { layoutCanvasNeighborhood } from './canvasOperations.js'
 import { isCanvasIconRef } from './iconRegistry.js'
