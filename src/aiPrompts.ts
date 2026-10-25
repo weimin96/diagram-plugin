@@ -33,7 +33,7 @@ export function buildGenerationPrompt(workspacePath: string, request: DiagramGen
         '2. 调用 diagram.designGuide（type=canvas，intent=系统架构）选择构图方式；优先主业务路径、系统边界、关键依赖，避免等权矩阵和装饰性泳道。',
         '3. 只调用一次 diagram.composeArchitecture：传入 title、nodes、relations 和必要 theme；如果可以从真实有向依赖确认主要业务链路，按入口到结果填写 primaryPath，必须逐段对应已有关系，不要为凑主链造边。无需再额外创建文件或整图更新，也不要手动编写 x/y/width/height、line routing、重复颜色或整份 Canvas JSON。',
         '4. 由插件自动处理 layered、hub-spoke、event-driven 等架构布局、语义分区与正交连线，提供设计质量检查。节点标签使用短标题，技术栈只有确认后才使用 stencil。',
-        '5. 读取返回的 quality（已经执行 diagram.inspectQuality 同级质量检查）。若存在问题，诚实说明缺少的事实或设计缺陷；不要为了过关发明跨域边或反复全量重画。',
+        '5. 同时检查 quality（已执行 diagram.inspectQuality 同级检查）和 visualPlan.review.readyForVisualReview：基础几何检查合格不代表视觉合格，review=false 表示布局仍存在阻断问题，只能称为待整改草稿；review=true 也只代表待人工视觉审查。诚实说明具体缺陷，不得为过关发明跨域边、降低检查阈值或反复全量重画。',
         '6. 给用户图表路径和极简结果摘要，不输出冗长 JSON。',
       ].filter(Boolean).join('\n')
     }

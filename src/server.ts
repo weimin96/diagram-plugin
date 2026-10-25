@@ -905,8 +905,14 @@ server.registerTool('diagram.composeArchitecture', {
   const store = await resolveStore(workspacePath, toolThreadId(extra._meta))
   const diagram = await store.createComposedArchitecture(title, serializeCanvasScene(composed.scene))
   markThreadDiagram(extra._meta, diagram.path, undefined, undefined, 'create', diagram.modifiedAt)
+  const geometryStatus = composed.quality.needsRevision
+    ? `${composed.quality.issues.length} geometry/structure issue(s) require inspection`
+    : 'basic geometry checks passed'
+  const visualReviewStatus = composed.visualPlan.review.readyForVisualReview
+    ? 'eligible for human visual review, NOT visually approved'
+    : `BLOCKED from visual review (${composed.visualPlan.review.concerns.join(', ') || 'unresolved geometry'}); editable draft only, NOT a finished layout`
   return {
-    content: [{ type: 'text', text: `Created architecture ${diagram.path} with ${nodes.length} semantic nodes, ${relations.length} evidence-backed relations and ${composed.summary.composition} composition. Quality: ${composed.quality.needsRevision ? `${composed.quality.issues.length} issue(s) to inspect` : 'passed'}.` }],
+    content: [{ type: 'text', text: `Created architecture ${diagram.path} with ${nodes.length} semantic nodes, ${relations.length} evidence-backed relations and ${composed.summary.composition} composition. Geometry: ${geometryStatus}. Visual review: ${visualReviewStatus}.` }],
     structuredContent: {
       kind: 'diagram', workspacePath: store.workspacePath, diagram,
       architectureDesign: composed.summary,

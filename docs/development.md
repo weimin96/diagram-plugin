@@ -2,6 +2,8 @@
 
 面向维护者的开发、测试、构建与发布说明。用户安装和使用请看 [README](../README.md)。
 
+仓库级技术路线、禁止的布局反模式与质量分层见 [AGENTS.md](../AGENTS.md)。任何新布局修复都要先验证联合布局/布线根因，不能仅通过增加更多局部启发式规则来提高单一样例的评分。
+
 ## 项目结构
 
 ```text
@@ -237,6 +239,8 @@ P25 大图阅读：Desktop 缩放区的原“阅读”改为“主链”，保�
 
 - 快速基准：`pnpm benchmark:architecture`，5 个参考架构，会在生成节点重叠/穿节点时失败；已加入 npm 发布门禁。
 - 扩展基准：`pnpm benchmark:architecture --suite=extended`，20 个参考/合成场景，重点检查输入顺序、中文长标签和高扇出；合成用例并非用户生产拓扑。
+- 视觉审查资格门禁：`pnpm benchmark:architecture:review`，对扩展 20 例要求 `visualPlan.review.readyForVisualReview=true`；存在严重分区重叠等阻断场景时返回非零退出码，不能因基础几何检查通过而宣称可以交付。两种架构基准均在 `report.json.reviewReadiness` 中报告阻断案例。这个门禁只决定是否**可以进入人工视觉审查**，并不代替截图检查或人工批准。当前存在已知失败，修复前不得通过改阈值或删除失败场景使该命令变绿；为避免阻断无关版本修复，暂不放入既有 npm 发布工作流。
+- 专业交付复核：`pnpm benchmark:architecture:design --screenshots --extended` 会输出浏览器截图与人工检查清单，自动生成的截图不等于真实人工审核通过。
 - 压力样例：`pnpm benchmark:architecture --suite=stress`，30/50/80 节点，运行成本较高，不放到默认 CI。
 - 对比试验：`pnpm benchmark:architecture:engines`，或 `pnpm benchmark:architecture:engines --suite=extended`。输出 `test-results/architecture-engines/index.html`、`report.json` 及各候选的可编辑 Canvas JSON 与 SVG。支持 `--case=data-platform` 只跑单例。
 

@@ -12,6 +12,7 @@ const suiteFlag = process.argv.find((arg) => arg.startsWith('--suite='))
 const suiteName = suiteFlag?.slice('--suite='.length) ?? 'core'
 if (!['core', 'extended', 'stress'].includes(suiteName)) throw new Error('Unknown benchmark suite')
 const suite = suiteName as 'core' | 'extended' | 'stress'
+const requireReviewReady = process.argv.includes('--require-review-ready')
 const output = path.resolve(outputFlag < 0
   ? `test-results/architecture-benchmark${suite === 'core' ? '' : '-' + suite}`
   : process.argv[outputFlag + 1])
@@ -59,7 +60,18 @@ for (const example of architectureBenchmarkCases(suite)) {
   })
 }
 
-await writeFile(path.join(output, 'report.json'), JSON.stringify({ version: 2, suite, source: 'deterministic fictional reference and synthetic graphs', results }, null, 2) + '\n')
+const blockedReviewCases = results.filter((result) => !result.visualPlan.review.readyForVisualReview)
+await writeFile(path.join(output, 'report.json'), JSON.stringify({
+  version: 2,
+  suite,
+  source: 'deterministic fictional reference and synthetic graphs',
+  reviewReadiness: {
+    status: blockedReviewCases.length ? 'blocked' : 'awaiting-human-review',
+    blockedCases: blockedReviewCases.map((result) => result.id),
+    note: 'Eligibility for visual review is not human approval or delivery certification.',
+  },
+  results,
+}, null, 2) + '\n')
 await writeFile(path.join(output, 'index.html'), `<!doctype html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Architecture Generation Benchmark</title>
@@ -82,6 +94,7 @@ ${results.map((result) => `<section><header><div><h2>${escapeHtml(result.title)}
 <span>${escapeHtml(result.visualPlan.reference.label)} · ${result.visualPlan.recommendedView === 'overview' ? '先看总览' : '直接查看详情'}</span>
 <span>${result.nodes} 节点 / ${result.relations} 关系</span>
 <span>${result.structuralScore} / 90</span>
+<span>${result.visualPlan.review.readyForVisualReview ? '待人工视觉审查' : '阻断视觉审查'}</span>
 <span>适配字号约 ${result.presentation.estimatedTitlePxAtFit}px</span>
 <span>交叉 ${result.metrics.edgeCrossings} · 重叠 ${result.metrics.edgeOverlaps} · 穿节点 ${result.metrics.edgeNodeIntersections}</span>
 <span>跨分区 ${result.partitionFlow.crossPartitionRelations}</span>
@@ -96,7 +109,12 @@ console.table(results.map(({ id, nodes, relations, structuralScore, metrics, rer
   reroutes: reroutedEdges, elapsedMs,
 })))
 console.log(`Visual benchmark: ${path.join(output, 'index.html')}`)
+console.log(`Visual review eligibility: ${blockedReviewCases.length ? `blocked (${blockedReviewCases.map((result) => result.id).join(', ')})` : 'all cases awaiting human review'}`)
 if (results.some(({ metrics }) => metrics.nodeOverlaps || metrics.edgeNodeIntersections)) {
   process.exitCode = 1
   console.error('Architecture benchmark failed: at least one scenario has node overlaps or edges passing through nodes.')
+}
+if (requireReviewReady && blockedReviewCases.length) {
+  process.exitCode = 1
+  console.error('Architecture visual-review gate failed: unresolved diagram geometry prevents meaningful visual review. Do not waive defects by hiding detail or lowering thresholds.')
 }
