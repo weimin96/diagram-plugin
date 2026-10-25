@@ -30,6 +30,22 @@ P2 严重拥塞时的未裁剪候选排序（2026-10-25）：真实导入依赖�
 
 P2 高密度独立线路占用协商（2026-10-25）：在上面已经触发的严重要素候选上，沿用 `routeArchitectureArrowIds` 已有的增量布线与精确比例端口，最多 4 轮从真实 `edge-crossing` / `edge-overlap` 关系中选 14 条做单边通道释放与重新占用；对完整 Canvas 质量、已有未裁剪评分、分区诊断、线长预算、标签与实际共享前缀进行逐次验收，不移动节点、不修改真实关系或生成新持久化协议。此前试验一次做了近 400 个候选，虽把源图降至 3 处交叉、20 处重叠，却损失一条真正的共享主干，**未采用**；收紧到保持两条真实主干、4 轮/14 条/两类原有端口模式后，真实源码 12 节点/26 边的交叉 **4→3**、独立重叠 **25→21**，穿节点仍为 0，总线长约 **13870→14241px**，适配字号仍 12.5px，展示结构分由 0 提升至约 12.5。相对该任务开始时实际源码基线是交叉 **7→3**、重叠 **23→21**。对原有 20 例的最新扩展基准，结构指标与所有可编辑 JSON/SVG 均逐文件一致。Chrome 截图仍明显线缆密集，真实场景**仍被自动审查阻断且未完成人工视觉验收**；不要把本次通道协商视为最终全局布局引擎。将精确端口候选直接塞入原先所有候选细化阶段的实验反而得到 4 处交叉/25 处重叠并损失主干，故撤回，避免把重排决策分散到各阶段。
 
+P0/P4 真实像素视觉评分闭环（2026-10-25，参考 `codex-ppt` 的 `visualSnapshot`/视觉 Fingerprint/独立像素审查机制，但不直接复制 PPT 视觉权重）：现在明确三种相互独立的状态：① `canvasQuality` / `readyForVisualReview` 是确定性的结构与几何门禁；② 仅在真实 Chrome 截图存在且证据完全匹配时，才有可信的 **六维感知评价**（主次阅读路径 20、依赖可追踪 25、文字可读性 20、留白对齐 15、分区边界 10、视觉一致性 10，总和 100）；③ 最终交付必须获得一位真实人工评审的明确批准，模型评分即便 100 分也不能代替。评分来自六项 0–5 分且逐项有实际观察依据，不从启发式结构分自动换算；无人审查用 **null/unreviewed**，避免虚假的 0/100。
+
+工作流：
+```bash
+pnpm benchmark:architecture:design --screenshots --extended
+pnpm benchmark:architecture:project:visual  # 严重几何缺陷会如实返回非零码，但截图/manifest 已产生
+pnpm benchmark:architecture:visual:blind --manifest=test-results/architecture-design-project/manifest.json --case=diagram-plugin-source-imports
+pnpm benchmark:architecture:visual:score --manifest=test-results/architecture-design-project/manifest.json --review=test-results/architecture-design-project/diagram-plugin-source-imports.model-review.json --require-reviewed
+# 真实人工审核：将对应 review-draft.json 中所有评分、观察、reviewer、approval 填好；模型审核的 approval 必须是 pending。
+pnpm benchmark:architecture:visual:score --manifest=test-results/architecture-design-project/manifest.json --review=<人工评分JSON> --require-human-approval
+# 可选基线比较：--baseline=<之前已验证的visual-scores.json> --fail-on-regression；同一场景下降至少5分阻断
+```
+
+每个 manifest case 的 `evidence` 包含实际截图 / Canvas / SVG 内容 SHA-256，修改后必须重新截图并重审；手工编辑过的 `review-draft.json` 不会被下一次捕获覆盖，过期指纹也不会误认可复用。模型路径调用隔离、全新、只附 PNG 的 Codex CLI，模型不可看到源码、结构评分或历史基线；记录实际模型评分及问题，但不是盲测 A/B 的一致性证明。首次真实验收：Diagram Plugin 自身 12 模块/26 关系 PNG，由隔离 Codex 单次像素审查得到 **38/100**（分项主次 2、关系追踪 1、文字 2、排版 2、分区 2、统一性 3.5；按预设权重），**仍因3处实际交叉被几何门禁阻断**，且没有人工批准。这是当前截图的一次有来源的主观证据，不是可信普遍视觉评分或 100 分目标已达成。未来要做多轮真实模型/人工盲审 A/B 以校准一致性；此工具现阶段不会让 UI 直接自动发布。
+评分命令同时输出 `visual-scores.json`（供基线比较）和 `visual-scores.md`（含截图、六维依据、真实问题与门禁状态），放在同一次验收目录中。对未评分场景分数为 `null`，模型独立评分不会置为人工批准；需要交付时显式使用 `--require-human-approval` 阻断未批准或几何未合格的案例。
+
 性能：对 `microservices-fanout` 分阶段计时，原有选择约 10s、普通分区候选约 3s、可见路径完整候选约 6.2s、联合修复约 2.5s（仅一次环境样本）。尝试跳过第二次完整候选布局、直接用第一次分区位置全量重路由，约降至 13.2s，但退回不能接受的分区冲突布局，因此**撤销**。最终只在纯正交可见性 Dijkstra 单次搜索内复用同一相邻网格边的障碍测试和已占用线路代价，方向/拐角惩罚仍逐状态计算；不增加跨请求或跨场景缓存。重建当前 `main` 而非使用陈旧报告后，同机 20 例耗时一次测量约 **59.7s→58.0s**；20/20 的自动几何诊断、审查资格、可编辑 Canvas JSON 完全一致，20 份 SVG 仅因预期边框样式变化。该幅度不能证明稳定 P95 提升。
 
 扩展 20 例中，`microservices-fanout` 分区框重叠 **244276→0px²**，交叉/穿节点均 **0→0**，独立线路重叠 **5→6**，总线长 **9116→8027px**，字号 **12→12px**，结构评分 **74.1→73.2**。旧版 5 条可识别真实共享主干重新排布后剩 1 条（并非伪造或隐藏关系；节点 19、关系 18 均保留），这是待人工视觉审查的**明确代价**；回归校验必须逐条验证剩余 Bundle 的真实共有前缀，不能通过抑制告警来“提升”指标。其余默认架构生成保持原逻辑，`microservices-reversed` 仍沿用此前较大的 12.5px 字号及两处已声明的独立线路重叠。20 个合成案例的自动审查资格全部满足，但**尚未完成浏览器像素级和人眼交付验收**；本次不能据此宣称图表品质已达到满分。优化后的局部搜索存在额外 CPU 成本，需在后续阶段继续收敛候选预算而不能牺牲严格质量门禁。

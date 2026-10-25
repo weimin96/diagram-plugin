@@ -1,4 +1,5 @@
-import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
 import { performance } from 'node:perf_hooks'
@@ -10,6 +11,7 @@ import { architectureBenchmarkCases } from './architecture-benchmark-cases.js'
 import { projectArchitectureCase } from './architecture-project-cases.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { canvasSceneToSvg, serializeCanvasScene } from '../src/canvas.js'
+import { draftArchitectureVisualReview } from '../src/architectureVisualReview.js'
 
 /** Expert review template: none of the boxes are pre-checked or AI-scored. */
 const humanChecklist = [
@@ -45,6 +47,11 @@ for (const id of ids) {
   await writeFile(path.join(output, `${id}.diagram.json`), serializeCanvasScene(result.scene))
   const screenshot = captureScreenshots ? `${id}.png` : undefined
   if (screenshot && chrome) await captureDiagramScreenshot(chrome, output, file, screenshot)
+  const evidence = {
+    canvasSha256: sha256(await readFile(path.join(output, `${id}.diagram.json`))),
+    svgSha256: sha256(await readFile(path.join(output, file))),
+    ...(screenshot ? { screenshotSha256: sha256(await readFile(path.join(output, screenshot))) } : {}),
+  }
   cases.push({
     id,
     label: projectMode ? sample.intent.title
@@ -63,16 +70,34 @@ for (const id of ids) {
     presentation: result.presentation,
     quality: result.quality.metrics,
     elapsedMs,
+    evidence,
     svg: file,
     ...(screenshot ? { screenshot } : {}),
   })
 }
 await writeFile(path.join(output, 'manifest.json'), JSON.stringify({
-  version: 1, source: projectMode ? 'scoped-real-TypeScript-imports'
+  version: 2, source: projectMode ? 'scoped-real-TypeScript-imports'
     : extended ? 'fictional-reference-and-synthetic' : 'fictional-reference', rubric: humanChecklist,
   note: 'Browser screenshot capture is visual evidence, not an automatic aesthetic judgment. All human checkboxes are intentionally empty.',
   cases,
 }, null, 2) + '\n')
+const draftPath = path.join(output, 'review-draft.json')
+const existingDraft = await readFile(draftPath, 'utf8').then((value) => JSON.parse(value) as {
+  reviews?: Array<{ reviewer?: string; summary?: string; ratings?: Record<string, { score?: number | null }> }>
+}, () => null)
+// A recapture should invalidate old evidence, not silently erase reviews the
+// user has already started. The reviewer can copy the draft to a new path.
+const startedReview = existingDraft?.reviews?.some((entry) =>
+  Boolean(entry.reviewer?.trim() || entry.summary?.trim()
+    || Object.values(entry.ratings ?? {}).some((rating) => rating.score !== null && rating.score !== undefined)))
+if (!startedReview) await writeFile(draftPath, JSON.stringify({
+  kind: 'diagram-visual-review-draft', version: 1,
+  note: 'Unscored by design. Inspect the actual Chrome PNG, fill all six scores (0..5), each with concrete evidence, reviewer identity, summary and actual element-linked issues. Scores are not derived from structural metrics.',
+  reviews: cases.map((item) => draftArchitectureVisualReview({
+    id: item.id, ...item.evidence, readyForVisualReview: item.readyForVisualReview,
+  })),
+}, null, 2) + '\n')
+else console.warn('Existing edited review-draft.json preserved; old fingerprint may be stale. Copy or recapture before scoring.')
 await writeFile(path.join(output, 'index.html'), `<!doctype html><html lang="zh-CN"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>架构图视觉审查</title>
 <style>body{margin:0;background:#f4f6f8;color:#1d2732;font:14px/1.6 system-ui,sans-serif}main{max-width:1300px;margin:auto;padding:32px}h1{font-size:25px;margin:0 0 6px}p{color:#536474}section{background:white;border:1px solid #dce2e8;border-radius:12px;margin:24px 0;padding:22px}h2{font-size:19px;margin:0 0 5px}.preview{width:100%;height:auto;display:block}.metadata{font-size:12px;color:#536474;margin:10px 0}.questions{margin:12px 0 0;padding-left:20px}a{color:#135a9c}</style>
@@ -107,9 +132,14 @@ console.table(cases.map((item) => ({
 })))
 console.log(`Review report: ${path.join(output, 'review.md')}`)
 console.log(`Visual gallery: ${path.join(output, 'index.html')}`)
+console.log(`Unscored pixel review template: ${path.join(output, 'review-draft.json')}`)
 if (cases.some((item) => !item.readyForVisualReview)) {
   console.error('Hard geometry errors remain. Human visual sign-off is blocked.')
   process.exitCode = 1
+}
+
+function sha256(content: Buffer): string {
+  return createHash('sha256').update(content).digest('hex')
 }
 
 async function findChrome(): Promise<string | undefined> {

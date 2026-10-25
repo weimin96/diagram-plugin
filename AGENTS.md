@@ -51,6 +51,8 @@
 2. **可进入人工视觉审查**：以 `visualPlan.review.readyForVisualReview` 及其诊断为准，特别检查分区重叠、复杂关系和适配后的字号。运行 `pnpm benchmark:architecture:review`；有阻断场景就必须真实失败。现有复杂样例若未通过，应如实保留失败，不修改阈值来“修绿”。
 3. **视觉交付验收**：以 Chrome 渲染、可编辑性和人工对照为依据，检查五秒内阅读路径、主次层级、图组边界、箭头方向、密集关系、中文字体、真实场景。命令 `pnpm benchmark:architecture:design --screenshots --extended` 只**生成**证据和人工清单，不自动批准。
 
+分项视觉打分不得混入 `structuralScore`：`benchmark:architecture:design --screenshots` 会为当前真实 Chrome PNG、可编辑 Canvas JSON、SVG 生成 SHA-256 证据，输出全部空分数的 `review-draft.json`；`benchmark:architecture:visual:score` 校验当前证据与审查者、六项 0–5 分具体像素依据，独立汇总 0–100 感知分，缺少评审时保持 **null**，不是 0/100。截图/文档变化使旧评分立即无效。可选 `benchmark:architecture:visual:blind` 调用全新隔离的 Codex CLI 仅看 PNG 进行单次模型评分，**不声称人类审美审批**。正式交付需要几何门禁、当前像素评审及 `reviewMode=human` 的显式 `approval=approved`，模型不得自动批准；跨版本分数比较同一 case，默认下降 ≥5 分视为回退。永远不要把结构评分、模型一次性审美意见、截图存在三者互相代替。
+
 扩展基准 `pnpm benchmark:architecture --suite=extended`、外部引擎 `pnpm benchmark:architecture:engines` 和 D2 `pnpm benchmark:architecture:d2` 是不同目的的实验；报告必须注明是否是虚构合成数据、是否运行真实浏览器，以及评分/耗时统计的计算口径。合成样例不能替代真实项目拓扑。
 
 真实项目回归：`pnpm benchmark:architecture:project` 使用 TypeScript AST 从当前仓库固定选取的核心 12 个模块提取真实静态 import 关系（包含 type-only 导入，**不等于运行时调用或完整工程依赖**），生成可编辑 JSON、SVG、具体关系冲突与质量报告；`pnpm benchmark:architecture:project:visual` 会额外尝试 Chrome 截图及人工清单，若几何阻断仍存在则如实非零退出。为避免严重关系交叉在无穿节点时误报可审查，3 处及以上独立线交叉阻断自动审查资格；1–2 处交叉仍记录审查目标。不得为了维持 20/20 或真实案例全绿而放宽门禁、删除导入关系或强行虚构分区。
