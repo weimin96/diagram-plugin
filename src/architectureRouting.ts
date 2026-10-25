@@ -9,7 +9,7 @@ import {
  * move nodes, style cards, or import third-party layout engines.
  */
 import type { CanvasArrow, CanvasGroup, CanvasGroupFrame, CanvasNode, CanvasNote, CanvasPoint, CanvasScene } from './canvas.js'
-import { anchorPoint, canvasArrowBoxRoute, canvasGroupFrames, canvasSharedSourceStem } from './canvas.js'
+import { anchorPoint, canvasArrowBoxRoute, canvasBundleTrunks, canvasGroupFrames, canvasSharedSourceStem } from './canvas.js'
 
 export function routeArchitectureEdges(scene: CanvasScene, visibilityFallback = false): CanvasScene {
   return routeArchitectureEdgeSubset(scene, undefined, false, visibilityFallback)
@@ -23,6 +23,70 @@ export function routeArchitectureArrowIds(
   const arrowCount = scene.elements.filter((item) => item.type === 'arrow').length
   if (only.size > Math.max(48, arrowCount * 0.45)) return routeArchitectureEdgeSubset(scene, undefined, false, visibilityFallback)
   return routeArchitectureEdgeSubset(scene, only, nodePorts, visibilityFallback)
+}
+
+/** Restore one real pre-move shared source trunk after an incremental node
+ * reordering. This proposes geometry only; Composer evaluates the complete
+ * scene before accepting it. Never invent a bus for unrelated relationships.
+ */
+export function restoreArchitectureMovedSourceTrunk(
+  candidate: CanvasScene,
+  reference: CanvasScene,
+  movedNodeIds: ReadonlySet<string>,
+): CanvasScene | undefined {
+  const verifiedTrunks = new Set(canvasBundleTrunks(reference)
+    .filter((trunk) => trunk.id.startsWith('from:')).map((trunk) => trunk.id))
+  if (!verifiedTrunks.size) return undefined
+  const oldArrows = reference.elements.filter((item): item is CanvasArrow => item.type === 'arrow')
+  const arrows = candidate.elements.filter((item): item is CanvasArrow => item.type === 'arrow')
+  const boxes = new Map(candidate.elements.filter((item): item is CanvasNode | CanvasNote =>
+    item.type !== 'arrow').map((item) => [item.id, item]))
+  const frames = new Map(canvasGroupFrames(candidate).map((frame) => [frame.id, frame]))
+  const groups = new Map((candidate.groups ?? []).map((group) => [group.id, group]))
+  for (const old of oldArrows) {
+    if (!movedNodeIds.has(old.to) || movedNodeIds.has(old.from)
+      || !old.bundleKey || !verifiedTrunks.has(old.bundleKey)) continue
+    const updated = arrows.find((item) => item.id === old.id)
+    const source = boxes.get(old.from), target = boxes.get(old.to)
+    if (!updated || !source || !target || source.rotation || target.rotation
+      || !old.toAnchor || old.toAnchor === 'auto' || old.toPortRatio !== undefined) continue
+    const mate = arrows.find((item) => item.id !== old.id
+      && item.from === old.from && item.bundleKey === old.bundleKey)
+    if (!mate || !mate.fromAnchor || mate.fromAnchor === 'auto') continue
+    const mateRoute = currentArrowRoute(mate, boxes)
+    if (!mateRoute || mateRoute.length < 3) continue
+    const [start, stem] = mateRoute
+    if (start.x !== stem.x && start.y !== stem.y) continue
+    const newTarget = fixedAnchorPoint(target, old.toAnchor)
+    const obstacles = [
+      ...[...boxes.values()].filter((item) => item.id !== source.id && item.id !== target.id)
+        .map((item) => expandRect(item, 18)),
+      ...routingGroupObstacles(source, target, frames, groups),
+    ]
+    const occupied: RouteSegment[] = []
+    for (const other of arrows) {
+      if (other.id === updated.id) continue
+      const route = currentArrowRoute(other, boxes)
+      if (route) addOccupiedSegments(route, occupied, other.bundleKey)
+    }
+    const direction: FixedSide = stem.x > start.x ? 'right' : stem.x < start.x ? 'left'
+      : stem.y > start.y ? 'bottom' : 'top'
+    const continuation = findOrthogonalRoute(stem, newTarget, obstacles, occupied,
+      old.bundleKey, direction, old.toAnchor)
+    const path = simplifyRoute([start, stem, ...continuation.slice(1)])
+    // Preserving the original source stem may still be inferior to removing
+    // the bundle. Never decide that locally: the caller assesses whole-scene
+    // collisions, pair overlaps, fit, and readable route length.
+    const restored: CanvasArrow = {
+      ...updated, routing: 'orthogonal', fromAnchor: mate.fromAnchor,
+      toAnchor: old.toAnchor, fromPortRatio: mate.fromPortRatio,
+      toPortRatio: undefined, bundleKey: mate.bundleKey,
+      points: path.slice(1, -1),
+    }
+    return { ...candidate, elements: candidate.elements.map((item) =>
+      item.id === restored.id ? restored : item) }
+  }
+  return undefined
 }
 
 export function routeArchitectureEdgesIncremental(scene: CanvasScene, changedNodeIds: Iterable<string>): CanvasScene {

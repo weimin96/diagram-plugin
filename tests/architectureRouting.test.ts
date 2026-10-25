@@ -4,13 +4,16 @@ import {
   routeArchitectureArrowIds,
   routeArchitectureEdges,
   routeArchitectureEdgesIncremental,
+  restoreArchitectureMovedSourceTrunk,
 } from '../src/architectureRouting.js'
 import {
   routeArchitectureArrowIds as legacyRouteArrowIds,
   routeArchitectureEdges as legacyRouteEdges,
 } from '../src/architectureDesign.js'
-import { canvasArrowBoxRoute, parseCanvasScene, serializeCanvasScene, type CanvasArrow, type CanvasScene } from '../src/canvas.js'
+import { canvasArrowBoxRoute, canvasBundleTrunks, parseCanvasScene, serializeCanvasScene, type CanvasArrow, type CanvasScene } from '../src/canvas.js'
 import { assessCanvasVisualQuality } from '../src/canvasQuality.js'
+import { projectArchitectureCase } from '../scripts/architecture-project-cases.js'
+import { composeArchitectureGraph } from '../src/architectureComposer.js'
 
 function graph(): CanvasScene {
   return {
@@ -60,6 +63,35 @@ test('incremental reroute only changes incident edge geometry, preserving unrela
   assert.equal(rerouted.routing, 'orthogonal')
   assert.deepEqual(updated.elements.filter((item) => item.type !== 'arrow'),
     source.elements.filter((item) => item.type !== 'arrow'))
+})
+
+test('moved endpoint recovers a previously real source stem without inventing a bundle', async () => {
+  const reference = composeArchitectureGraph((await projectArchitectureCase()).intent).scene
+  const nodes = reference.elements.filter((item) => item.type === 'node')
+  const left = nodes.find((item) => item.id === 'architecturePartitionFlow')!
+  const right = nodes.find((item) => item.id === 'canvasQuality')!
+  const changed = new Set([left.id, right.id])
+  const reordered = {
+    ...reference, elements: reference.elements.map((item) =>
+      item.id === left.id ? { ...item, x: right.x, y: right.y }
+        : item.id === right.id ? { ...item, x: left.x, y: left.y } : item),
+  }
+  const candidate = routeArchitectureEdgesIncremental(reordered, changed)
+  const saved = serializeCanvasScene(candidate)
+  const trunksBefore = canvasBundleTrunks(reference).length
+  assert.equal(canvasBundleTrunks(candidate).length, trunksBefore - 1)
+  const repaired = restoreArchitectureMovedSourceTrunk(candidate, reference, changed)
+  assert.ok(repaired, 'a proven original trunk with an unchanged source can be reused after its target moves')
+  assert.equal(canvasBundleTrunks(repaired).length, trunksBefore)
+  const candidateQuality = assessCanvasVisualQuality(candidate).metrics
+  const repairedQuality = assessCanvasVisualQuality(repaired).metrics
+  assert.ok(repairedQuality.edgeCrossings <= candidateQuality.edgeCrossings)
+  assert.ok(repairedQuality.edgeOverlaps <= candidateQuality.edgeOverlaps)
+  assert.equal(repairedQuality.edgeNodeIntersections, 0)
+  assert.equal(serializeCanvasScene(candidate), saved, 'candidate generation cannot mutate earlier alternatives')
+  assert.equal(restoreArchitectureMovedSourceTrunk(candidate, { ...reference,
+    elements: reference.elements.map((item) => item.type === 'arrow' ? { ...item, bundleKey: undefined } : item),
+  }, changed), undefined, 'never invent a source trunk when there is no verified baseline')
 })
 
 test('incremental routing detects a moved obstacle against an authored noncentral port', () => {

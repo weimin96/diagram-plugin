@@ -37,12 +37,14 @@ test('真实依赖密集图不能因不穿节点就获得错误的自动审查�
   const composed = composeArchitectureGraph(sample.intent)
   const q = composed.quality.metrics
   assert.equal(q.edgeNodeIntersections, 0)
-  assert.ok(q.edgeCrossings <= 3,
-    'bounded negotiated corridors must resolve more severe crossings without changing real source dependencies')
-  assert.ok(q.edgeOverlaps <= 21,
-    'improving crossings must not be achieved by unbounded independent corridor overlap')
+  assert.ok(q.edgeCrossings <= 2,
+    'joint node placement and shared source corridors must resolve more severe crossings')
+  assert.ok(q.edgeOverlaps <= 16,
+    'node placement must improve real independent wire overlap as well as crossings')
   assert.ok(canvasBundleTrunks(composed.scene).length >= 2,
     'negotiating independent corridors must not erase genuine shared source trunks')
+  assert.ok(composed.routeDiagnostics.totalRouteLength <= 13_600,
+    'joint placement must avoid compensating for crossings with a long perimeter detour')
   assert.ok(composed.candidates.some((candidate) =>
     candidate.layout === composed.evaluation.layout
     && candidate.density === composed.evaluation.density

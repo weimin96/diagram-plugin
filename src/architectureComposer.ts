@@ -1,5 +1,5 @@
 import { nudgeArchitectureCorridors, bypassArchitectureBlockingNode, nudgeSharedSourceBranch } from './architectureRouteRepair.js'
-import { annotateSourceFanoutTrunks, routeArchitectureArrowIds, routeArchitectureEdges, routeArchitectureEdgesIncremental } from './architectureRouting.js'
+import { annotateSourceFanoutTrunks, restoreArchitectureMovedSourceTrunk, routeArchitectureArrowIds, routeArchitectureEdges, routeArchitectureEdgesIncremental } from './architectureRouting.js'
 import { beautifyArchitectureScene, inferArchitectureComposition, type ArchitectureComposition, type ArchitecturePartition, type ArchitectureTheme } from './architectureDesign.js'
 import { assessCanvasVisualQuality, type CanvasVisualQualityAssessment } from './canvasQuality.js'
 import type { DiagramVisualStyle } from './diagramVisualStyles.js'
@@ -710,6 +710,66 @@ function negotiateDenseCorridors(result: ReturnType<typeof composeArchitectureGr
   }
 }
 
+/** A compact graph placement cannot be judged independently of its already
+ * shared corridors. Consider whole-scene outcomes of equal-size slot
+ * exchanges, retaining unaffected segments and proposing repaired real
+ * source trunks only when the original graph proved they existed.
+ */
+function negotiateDenseNodeSlots(result: ReturnType<typeof composeArchitectureGraphCandidate>) {
+  const nodes = result.scene.elements.filter((item): item is CanvasNode => item.type === 'node')
+  if (nodes.length < 10 || nodes.length > 14 || nodes.some((node) => node.locked)) return result
+  const baseline = result.quality.metrics
+  const initialTrunks = canvasBundleTrunks(result.scene).length
+  const baselineRoute = result.routeDiagnostics
+  let best: typeof result | undefined
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const left = nodes[i], right = nodes[j]
+      if (!left.groupId?.startsWith('arch-') || left.groupId !== right.groupId
+        || left.width !== right.width || left.height !== right.height) continue
+      const swapped: CanvasScene = {
+        ...result.scene,
+        elements: result.scene.elements.map((item) =>
+          item.id === left.id ? { ...item, x: right.x, y: right.y }
+            : item.id === right.id ? { ...item, x: left.x, y: left.y } : item),
+      }
+      const changed = new Set([left.id, right.id])
+      const incremental = routeArchitectureEdgesIncremental(swapped, changed)
+      const recovered = restoreArchitectureMovedSourceTrunk(incremental, result.scene, changed)
+      for (const scene of recovered ? [incremental, recovered] : [incremental]) {
+        const quality = assessCanvasVisualQuality(scene)
+        const metrics = quality.metrics
+        if (metrics.nodeOverlaps > baseline.nodeOverlaps
+          || metrics.edgeNodeIntersections > baseline.edgeNodeIntersections
+          || metrics.labelNodeIntersections > baseline.labelNodeIntersections
+          || metrics.labelOverflows > baseline.labelOverflows
+          || metrics.labelOverlaps > baseline.labelOverlaps
+          || metrics.edgeCrossings > baseline.edgeCrossings
+          || metrics.edgeOverlaps > baseline.edgeOverlaps
+          || (metrics.edgeCrossings === baseline.edgeCrossings
+            && metrics.edgeOverlaps === baseline.edgeOverlaps)
+          || canvasBundleTrunks(scene).length < initialTrunks) continue
+        const routeDiagnostics = assessArchitectureRouteDiagnostics(scene)
+        if (routeDiagnostics.frameOverlapArea > baselineRoute.frameOverlapArea
+          || routeDiagnostics.unrelatedFrameIntrusionLength > baselineRoute.unrelatedFrameIntrusionLength
+          || routeDiagnostics.totalRouteLength > baselineRoute.totalRouteLength * 1.1) continue
+        const presentation = assessArchitecturePresentation(scene)
+        if (presentation.estimatedTitlePxAtFit < result.presentation.estimatedTitlePxAtFit) continue
+        const evaluation = evaluateArchitectureLayout(scene, quality, result.evaluation.layout, result.evaluation.density)
+        if (evaluation.rawSelectionScore <= (best?.evaluation.rawSelectionScore ?? result.evaluation.rawSelectionScore)) continue
+        best = {
+          ...result, scene, quality, evaluation, routeDiagnostics, presentation,
+          visualPlan: planArchitectureVisual(scene, result.semanticComposition, quality, presentation, routeDiagnostics),
+          candidates: result.candidates.map((item) =>
+            item.layout === evaluation.layout && item.density === evaluation.density ? evaluation : item),
+          reroutedEdges: result.reroutedEdges + 2,
+        }
+      }
+    }
+  }
+  return best ?? result
+}
+
 export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
   const original = composeArchitectureGraphExisting(intent)
   const originalMetrics = original.quality.metrics
@@ -722,8 +782,8 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
     && intent.relations.length >= intent.nodes.length * 1.5 && intent.relations.length <= 48
     && original.evaluation.structuralScore === 0 && originalMetrics.edgeCrossings >= 3
     && regions.size === 1 && !original.scene.elements.some((item) => item.type === 'node' && item.locked)) {
-    const candidate = negotiateDenseCorridors(composeArchitectureGraphCandidate(intent, 'semantic',
-      undefined, false, false, false, false, true))
+    const candidate = negotiateDenseNodeSlots(negotiateDenseCorridors(composeArchitectureGraphCandidate(intent, 'semantic',
+      undefined, false, false, false, false, true)))
     const next = candidate.quality.metrics
     if (next.nodeOverlaps <= originalMetrics.nodeOverlaps
       && next.edgeNodeIntersections <= originalMetrics.edgeNodeIntersections
