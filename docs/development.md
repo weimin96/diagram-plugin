@@ -36,14 +36,14 @@ P0/P4 真实像素视觉评分闭环（2026-10-25，参考 `codex-ppt` 的 `visu
 ```bash
 pnpm benchmark:architecture:design --screenshots --extended
 pnpm benchmark:architecture:project:visual  # 严重几何缺陷会如实返回非零码，但截图/manifest 已产生
-pnpm benchmark:architecture:visual:blind --manifest=test-results/architecture-design-project/manifest.json --case=diagram-plugin-source-imports
+pnpm benchmark:architecture:visual:blind --provider=dsh --manifest=test-results/architecture-design-project/manifest.json --case=diagram-plugin-source-imports
 pnpm benchmark:architecture:visual:score --manifest=test-results/architecture-design-project/manifest.json --review=test-results/architecture-design-project/diagram-plugin-source-imports.model-review.json --require-reviewed
 # 真实人工审核：将对应 review-draft.json 中所有评分、观察、reviewer、approval 填好；模型审核的 approval 必须是 pending。
 pnpm benchmark:architecture:visual:score --manifest=test-results/architecture-design-project/manifest.json --review=<人工评分JSON> --require-human-approval
 # 可选基线比较：--baseline=<之前已验证的visual-scores.json> --fail-on-regression；同一场景下降至少5分阻断
 ```
 
-每个 manifest case 的 `evidence` 包含实际截图 / Canvas / SVG 内容 SHA-256，修改后必须重新截图并重审；手工编辑过的 `review-draft.json` 不会被下一次捕获覆盖，过期指纹也不会误认可复用。模型路径调用隔离、全新、只附 PNG 的 Codex CLI，模型不可看到源码、结构评分或历史基线；记录实际模型评分及问题，但不是盲测 A/B 的一致性证明。首次真实验收：Diagram Plugin 自身 12 模块/26 关系 PNG，由隔离 Codex 单次像素审查得到 **38/100**（分项主次 2、关系追踪 1、文字 2、排版 2、分区 2、统一性 3.5；按预设权重），**仍因3处实际交叉被几何门禁阻断**，且没有人工批准。这是当前截图的一次有来源的主观证据，不是可信普遍视觉评分或 100 分目标已达成。未来要做多轮真实模型/人工盲审 A/B 以校准一致性；此工具现阶段不会让 UI 直接自动发布。
+每个 manifest case 的 `evidence` 包含实际截图 / Canvas / SVG 内容 SHA-256，修改后必须重新截图并重审；手工编辑过的 `review-draft.json` 不会被下一次捕获覆盖，过期指纹也不会误认可复用。默认 DSH 评审只在临时隔离目录放置匿名 PNG，强制一次 `read_image` 成功事件和匹配图像 MIME/尺寸、唯一 JSON 终结事件、六维评分与哈希校验；`--provider=codex` 才使用 Codex CLI。旧的 Codex 单次结果 38/100 是旧截图的历史证据，不能与本轮 DSH 一次结果直接作为 A/B 提升比较。该模型评价不是盲测 A/B 的一致性证明，更不是人工验收；工具现阶段不会让 UI 自动发布。
 评分命令同时输出 `visual-scores.json`（供基线比较）和 `visual-scores.md`（含截图、六维依据、真实问题与门禁状态），放在同一次验收目录中。对未评分场景分数为 `null`，模型独立评分不会置为人工批准；需要交付时显式使用 `--require-human-approval` 阻断未批准或几何未合格的案例。
 
 P2 真实像素发现的架构模块名溢出整改（2026-10-25）：在真实源码 12 节点、26 条导入关系截图中，普通无技术图标的架构节点统一只有 188×80，SVG 导出和编辑器以前均默认一行 15px 标题。Chrome 对输出 SVG 的实际 `getBBox()` 测量显示 **12 个节点标题中 8 个越过卡片左右安全边距**；但旧结构/几何评分没有识别出来。新增共享纯函数 `canvasArchitecturePlainTitleLines`，根据节点真实内宽、字体与最多三行的 80px 高度预算，优先在 camelCase 的完整词语边界断行；SVG 导出与编辑器直接复用，不改变任何持久化原文、节点大小、关系方向/折点、主题字号，也不影响普通自由画布。真实 Chrome 复测：**8 个越界标题→0**，实际渲染文字行数 12→23；相同 Canvas JSON 逐字节一致，交叉/独立重叠依然是 **3/21**。同一独立像素评审流程在两份截图上分别得到 **38→40/100**，文字可读性 2→2.5/5，但只有单次评审，没有盲审统计显著性，不把总分变化当成证实的专业交付改善。仍须解决高密度线路和真实绘制阅读顺序；对超过三行容量的极端长标题，后续应由布局约束扩充几何而不是在渲染阶段无限增加行数。
@@ -348,4 +348,4 @@ ELK 0.12.0 当前只作为 devDependency 引入。其许可标识为 `EPL-2.0 OR
 
 真实 Chrome + React 端到端命令：pnpm benchmark:architecture:relation-lens。已验证关键按钮可点、重要边突出、非关键边 computed opacity 为 0.16、1/2 实例的关键数显示、完整两条关系持续在 DOM、单边焦点覆盖后恢复，以及全部模式的正确恢复。该工具为真实宿主 DOM 渲染检查，不会消耗模型配额；并不声称静态图交叉/重叠已消失。
 
-用户当前 Codex 额度耗尽，避免运行任何 Codex CLI 视觉盲审命令。本机 dsh --version 为 0.2.1-rc.2，dsh headless --help 仅包含文本任务、--json、--session-id，没有可验证的 --image/PNG 上传接口，不能擅自把它当成独立像素审查。实际使用了一次 DeepSeek Harness 的只读**文本**方案评审：建议强化全部关系计数提示、不推断没有标注的主链、确保 Esc/文件切换及 trace 的状态优先级；这些建议已经落实。不要把此次文本建议计作视觉分数。需要图像评分时再验证真正具备像素输入的模型接口或使用人工基于截图审查，旧分数仅与原证据绑定。
+历史说明：本轮之前，用户 Codex 额度耗尽，我们仅用 DeepSeek Harness 做过只读文本方案评审；那一次不能算像素审查。本轮进一步验证 `dsh headless` 真实具备 `read_image` 工具，且 JSONL 可记录实际工具成功事件。因此现在可以让 DSH 直接审查 Chrome PNG，但仍需独立于软件几何验收和人工批准。

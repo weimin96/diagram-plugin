@@ -53,7 +53,7 @@
 2. **可进入人工视觉审查**：以 `visualPlan.review.readyForVisualReview` 及其诊断为准，特别检查分区重叠、复杂关系和适配后的字号。运行 `pnpm benchmark:architecture:review`；有阻断场景就必须真实失败。现有复杂样例若未通过，应如实保留失败，不修改阈值来“修绿”。
 3. **视觉交付验收**：以 Chrome 渲染、可编辑性和人工对照为依据，检查五秒内阅读路径、主次层级、图组边界、箭头方向、密集关系、中文字体、真实场景。命令 `pnpm benchmark:architecture:design --screenshots --extended` 只**生成**证据和人工清单，不自动批准。
 
-分项视觉打分不得混入 `structuralScore`：`benchmark:architecture:design --screenshots` 会为当前真实 Chrome PNG、可编辑 Canvas JSON、SVG 生成 SHA-256 证据，输出全部空分数的 `review-draft.json`；`benchmark:architecture:visual:score` 校验当前证据与审查者、六项 0–5 分具体像素依据，独立汇总 0–100 感知分，缺少评审时保持 **null**，不是 0/100。截图/文档变化使旧评分立即无效。可选 `benchmark:architecture:visual:blind` 调用全新隔离的 Codex CLI 仅看 PNG 进行单次模型评分，**不声称人类审美审批**。正式交付需要几何门禁、当前像素评审及 `reviewMode=human` 的显式 `approval=approved`，模型不得自动批准；跨版本分数比较同一 case，默认下降 ≥5 分视为回退。永远不要把结构评分、模型一次性审美意见、截图存在三者互相代替。
+分项视觉打分不得混入 `structuralScore`：`benchmark:architecture:design --screenshots` 会为当前真实 Chrome PNG、可编辑 Canvas JSON、SVG 生成 SHA-256 证据，输出全部空分数的 `review-draft.json`；`benchmark:architecture:visual:score` 校验当前证据与审查者、六项 0–5 分具体像素依据，独立汇总 0–100 感知分，缺少评审时保持 **null**，不是 0/100。截图/文档变化使旧评分立即无效。可选 `benchmark:architecture:visual:blind` 默认用隔离临时工作区中的 DeepSeek Harness `dsh headless --json` + **已验证成功的 `read_image` 工具事件**读取真实 PNG，明确 `--provider=codex` 才调用 Codex CLI。未成功读图、调用其他工具或返回无效评分时必须拒绝，不能仅以模型口述“看到图片”作为依据。**模型评分不等于人类审批**；正式交付需要几何门禁、当前像素评审及 `reviewMode=human` 的显式 `approval=approved`。跨版本视觉分数比较需注明不同模型并校准一致性，不可拿不同模型的单次分差宣称提升。永远不要把结构评分、模型一次性审美意见、截图存在三者互相代替。
 
 扩展基准 `pnpm benchmark:architecture --suite=extended`、外部引擎 `pnpm benchmark:architecture:engines` 和 D2 `pnpm benchmark:architecture:d2` 是不同目的的实验；报告必须注明是否是虚构合成数据、是否运行真实浏览器，以及评分/耗时统计的计算口径。合成样例不能替代真实项目拓扑。
 
@@ -83,5 +83,5 @@
 
 ### DeepSeek Harness 配额与关键依赖阅读（2026-10-25）
 
-- Codex 额度不足时不能运行 benchmark:architecture:visual:blind（该命令确实启动 Codex CLI），不得通过伪造模型名转由文本推理器输出“截图打分”。本机 DeepSeek Harness 0.2.1-rc.2 的 dsh headless 公开入口仅接收文本任务，没有验证过 PNG/图像参数。可在许可范围内使用 DeepSeek Harness 对设计方案做独立只读文本审查；像素质量仍采用 Chrome、几何门禁和待人工审查清单；未经真正看图的模型评审不得报告视觉得分。
+- Codex 额度不足时**不要指定 `--provider=codex`**。本机 DeepSeek Harness 0.2.1-rc.2 的 `dsh headless` 虽未提供 `--image` 参数，但实测具备 `read_image` 图像工具；命令 `pnpm benchmark:architecture:visual:blind --provider=dsh --manifest=... --case=...` 默认使用该工具。执行必须核验 JSONL 中真正的 `tool_call(read_image)` 与匹配的成功图像 `tool_result`，只允许读取临时隔离目录里的单张 PNG，严格验证六项评价后才能评分，不能把文本评审冒充图片评审。图形质量门禁和人工批准仍必须独立。
 - 架构画布“全部 / 关键”是临时阅读强调，不是两套持久化的结构数据。关键关系仅指已标记 primary 的真实箭头，或两个已标记 primary 的真实节点之间存在的箭头；其余依赖永远保留，且提供保留数量提示。单边悬停/选中与显式上/下游 trace 优先级更高。按 Esc、切换文档或切回全部后恢复；无显式主次证据则禁用关键入口，禁止猜测依赖或隐藏关系。
