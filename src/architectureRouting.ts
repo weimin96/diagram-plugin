@@ -9,7 +9,7 @@ import {
  * move nodes, style cards, or import third-party layout engines.
  */
 import type { CanvasArrow, CanvasGroup, CanvasGroupFrame, CanvasNode, CanvasNote, CanvasPoint, CanvasScene } from './canvas.js'
-import { anchorPoint, canvasArrowBoxRoute, canvasGroupFrames } from './canvas.js'
+import { anchorPoint, canvasArrowBoxRoute, canvasGroupFrames, canvasSharedSourceStem } from './canvas.js'
 
 export function routeArchitectureEdges(scene: CanvasScene): CanvasScene {
   return routeArchitectureEdgeSubset(scene)
@@ -785,4 +785,57 @@ function fixedAnchorPoint(box: Pick<CanvasNode, 'x' | 'y' | 'width' | 'height'>,
   if (anchor === 'right') return { x: box.x + box.width, y: cy }
   if (anchor === 'bottom') return { x: cx, y: box.y + box.height }
   return { x: box.x, y: cy }
+}
+
+function segmentsOverlapBeyondFork(left: ReturnType<typeof canvasArrowBoxRoute>, right: ReturnType<typeof canvasArrowBoxRoute>) {
+  // Both routes already share one explicit source stem. Branches must not
+  // overlap for any positive distance after the fork.
+  for (let i = 0; i + 1 < left.length; i += 1) {
+    const a = left[i], b = left[i + 1]
+    for (let j = 0; j + 1 < right.length; j += 1) {
+      const c = right[j], d = right[j + 1]
+      if (a.x === b.x && c.x === d.x && a.x === c.x
+        && Math.min(Math.max(a.y, b.y), Math.max(c.y, d.y)) - Math.max(Math.min(a.y, b.y), Math.min(c.y, d.y)) > 2) return true
+      if (a.y === b.y && c.y === d.y && a.y === c.y
+        && Math.min(Math.max(a.x, b.x), Math.max(c.x, d.x)) - Math.max(Math.min(a.x, b.x), Math.min(c.x, d.x)) > 2) return true
+    }
+  }
+  return false
+}
+
+/** Explicitly identify a real shared source stem, not arbitrary edge overlaps. */
+export function annotateSourceFanoutTrunks(scene: CanvasScene): CanvasScene {
+  const nodes = new Map(scene.elements.filter((item): item is CanvasNode => item.type === 'node').map((item) => [item.id, item]))
+  const arrows = scene.elements.filter((item) => item.type === 'arrow')
+  const bundles = new Map<string, string>()
+  for (const source of new Set(arrows.map((arrow) => arrow.from))) {
+    const outgoing = arrows.filter((arrow) => arrow.from === source && !arrow.bundleKey)
+    if (outgoing.length < 2) continue
+    const paths = outgoing.flatMap((arrow) => {
+      const from = nodes.get(arrow.from), to = nodes.get(arrow.to)
+      return from && to ? [{ arrow, path: canvasArrowBoxRoute(from, to, arrow) }] : []
+    })
+    // Shared-bus SVG rendering uses the identical first waypoint. Require
+    // at least 12px of collinear outgoing trunk followed by separate branches.
+    for (let i = 0; i < paths.length; i += 1) {
+      const first = paths[i]
+      if (bundles.has(first.arrow.id) || first.path.length < 3) continue
+      for (let j = i + 1; j < paths.length; j += 1) {
+        const second = paths[j]
+        if (bundles.has(second.arrow.id) || second.path.length < 3) continue
+        const shared = canvasSharedSourceStem(first.path, second.path)
+        if (!shared || segmentsOverlapBeyondFork(shared.leftTail, shared.rightTail)) continue
+        const b = shared.trunk.at(-1)!
+        // Keep disjoint pairs separate even when their fork coordinates match.
+        const key = `from:${source}:${Math.round(b.x)}:${Math.round(b.y)}:${i}:${j}`
+        bundles.set(first.arrow.id, key)
+        bundles.set(second.arrow.id, key)
+        break
+      }
+    }
+  }
+  if (!bundles.size) return scene
+  return { ...scene, elements: scene.elements.map((item) => item.type === 'arrow' && bundles.has(item.id)
+    ? { ...item, bundleKey: bundles.get(item.id) }
+    : item) }
 }
