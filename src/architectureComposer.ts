@@ -40,12 +40,19 @@ export interface ArchitectureIntentGraph {
 export interface ArchitectureLayoutAssessment {
   /** Geometry and readability heuristic, NOT a subjective aesthetic or semantic correctness score. */
   structuralScore: number
+  /** Same underlying penalty as structuralScore, without 0–90 display
+   * clipping. Internal candidate selection must distinguish dense failures. */
+  rawSelectionScore: number
   layout: ArchitectureComposition
   density: Exclude<CanvasArchitectureDensity, 'auto'>
   issueCount: number
   aspectRatio: number
   longDetours: number
   detourPenalty: number
+}
+
+function layoutSelectionScore(evaluation: ArchitectureLayoutAssessment, preferUnclamped: boolean): number {
+  return preferUnclamped ? evaluation.rawSelectionScore : evaluation.structuralScore
 }
 
 /** Layout selection penalty from measurable presentation defects, not aesthetic judgment.
@@ -94,8 +101,9 @@ function evaluateArchitectureLayout(scene: CanvasScene, quality: CanvasVisualQua
     + (density === 'dense' && m.nodes < 35 ? 7 : density === 'compact' && m.nodes < 10 ? 3 : 0)
   // Reserve the top 10 points for real rendered-image visual review.
   const detours = architectureDetourMetrics(scene)
-  const structuralScore = Math.max(0, Math.min(90, Math.round((90 - geometryPenalty - hierarchyPenalty - readabilityPenalty - detours.detourPenalty) * 10) / 10))
-  return { structuralScore, layout: composition, density, issueCount: quality.issues.length, aspectRatio: Math.round(ratio * 100) / 100, ...detours }
+  const rawSelectionScore = Math.round((90 - geometryPenalty - hierarchyPenalty - readabilityPenalty - detours.detourPenalty) * 10) / 10
+  const structuralScore = Math.max(0, Math.min(90, rawSelectionScore))
+  return { structuralScore, rawSelectionScore, layout: composition, density, issueCount: quality.issues.length, aspectRatio: Math.round(ratio * 100) / 100, ...detours }
 }
 
 /** Only reroute implicated edges, and accept strictly improving results; never move authored nodes. */
@@ -104,6 +112,7 @@ function refineArchitectureRoutes(
   composition: ArchitectureComposition,
   density: Exclude<CanvasArchitectureDensity, 'auto'>,
   visibilityFallback = false,
+  preferUnclamped = false,
 ) {
   let scene = initialScene
   let quality = assessCanvasVisualQuality(scene)
@@ -140,8 +149,10 @@ function refineArchitectureRoutes(
           || nextQuality.metrics.nodeOverlaps > quality.metrics.nodeOverlaps) continue
         const nextEvaluation = evaluateArchitectureLayout(candidate, nextQuality, composition, density)
         const previous = best?.evaluation ?? evaluation
-        if (nextEvaluation.structuralScore > previous.structuralScore
-          || (nextEvaluation.structuralScore === previous.structuralScore && nextQuality.issues.length < (best?.quality.issues.length ?? quality.issues.length))) {
+        const nextScore = layoutSelectionScore(nextEvaluation, preferUnclamped)
+        const previousScore = layoutSelectionScore(previous, preferUnclamped)
+        if (nextScore > previousScore
+          || (nextScore === previousScore && nextQuality.issues.length < (best?.quality.issues.length ?? quality.issues.length))) {
           best = { scene: candidate, quality: nextQuality, evaluation: nextEvaluation }
         }
       }
@@ -162,6 +173,7 @@ function refineArchitectureNodeOrder(
   density: Exclude<CanvasArchitectureDensity, 'auto'>,
   protectedNodes: ReadonlySet<string> = new Set(),
   visibilityFallback = false,
+  preferUnclamped = false,
 ) {
   let best = initial
   let reorderedPairs = 0
@@ -221,7 +233,8 @@ function refineArchitectureNodeOrder(
       if (quality.metrics.nodeOverlaps || quality.metrics.edgeNodeIntersections
         || quality.metrics.labelNodeIntersections) continue
       const evaluation = evaluateArchitectureLayout(routed, quality, composition, density)
-      if (evaluation.structuralScore <= (improved?.evaluation.structuralScore ?? best.evaluation.structuralScore)) continue
+      if (layoutSelectionScore(evaluation, preferUnclamped)
+        <= layoutSelectionScore(improved?.evaluation ?? best.evaluation, preferUnclamped)) continue
       improved = { scene: routed, quality, evaluation, reroutedEdges: best.reroutedEdges }
     }
     if (!improved) break
@@ -238,6 +251,7 @@ function composeArchitectureGraphCandidate(
   spatialOrder = false,
   partitionFirst = false,
   obstacleFreeFallback = false,
+  preferUnclamped = false,
 ) {
   const ids = new Set<string>()
   for (const node of intent.nodes) {
@@ -313,7 +327,7 @@ function composeArchitectureGraphCandidate(
     const quality = assessCanvasVisualQuality(result.scene)
     const evaluation = evaluateArchitectureLayout(result.scene, quality, composition, density)
     // Respect the inferred topology when structural metrics do not justify a different layout.
-    const selectionScore = evaluation.structuralScore - (composition === inferred ? 0 : 6)
+    const selectionScore = layoutSelectionScore(evaluation, preferUnclamped) - (composition === inferred ? 0 : 6)
       - (density === autoDensity ? 0 : 1)
     return { ...result, quality, evaluation, selectionScore }
   }))
@@ -329,13 +343,13 @@ function composeArchitectureGraphCandidate(
     .slice(0, 3)
   const refined = shortlisted.map((candidate) => {
     const result = refineArchitectureRoutes(
-      candidate.scene, candidate.summary.composition, candidate.summary.resolvedDensity, obstacleFreeFallback,
+      candidate.scene, candidate.summary.composition, candidate.summary.resolvedDensity, obstacleFreeFallback, preferUnclamped,
     )
     const visualPenalty = architecturePresentationSelectionPenalty(
       assessArchitecturePresentation(result.scene),
       assessArchitectureRouteDiagnostics(result.scene),
     )
-    const structuralSelectionScore = result.evaluation.structuralScore
+    const structuralSelectionScore = layoutSelectionScore(result.evaluation, preferUnclamped)
       - (candidate.summary.composition === inferred ? 0 : 6)
       - (candidate.summary.resolvedDensity === autoDensity ? 0 : 1)
     return {
@@ -355,11 +369,11 @@ function composeArchitectureGraphCandidate(
     || a.summary.composition.localeCompare(b.summary.composition))
   const { selectionScore: _selectionScore, structuralSelectionScore: _structuralSelectionScore, visualPenalty: _visualPenalty, ...selected } = eligible[0]
   const ordered = refineArchitectureNodeOrder(selected, selected.summary.composition, selected.summary.resolvedDensity,
-    peerOrder === 'main-path' ? new Set(intent.primaryPath) : undefined, obstacleFreeFallback)
+    peerOrder === 'main-path' ? new Set(intent.primaryPath) : undefined, obstacleFreeFallback, preferUnclamped)
   // Reordering can reintroduce node intersections after the first routing
   // pass. Repair only those hard geometry failures, not the whole graph again.
   const postOrderRepair = ordered.quality.metrics.edgeNodeIntersections > 0
-    ? refineArchitectureRoutes(ordered.scene, selected.summary.composition, selected.summary.resolvedDensity, obstacleFreeFallback)
+    ? refineArchitectureRoutes(ordered.scene, selected.summary.composition, selected.summary.resolvedDensity, obstacleFreeFallback, preferUnclamped)
     : undefined
   const repaired = postOrderRepair
     ? { ...ordered, ...postOrderRepair, reroutedEdges: ordered.reroutedEdges + postOrderRepair.reroutedEdges }
@@ -634,6 +648,43 @@ function composeArchitectureGraphExisting(intent: ArchitectureIntentGraph) {
  * decide whether it is safe to replace the historical layout. */
 export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
   const original = composeArchitectureGraphExisting(intent)
+  const originalMetrics = original.quality.metrics
+  const regions = new Set(original.scene.elements.filter((item): item is CanvasNode => item.type === 'node')
+    .map((item) => item.groupId))
+  // Dense dependency graphs can saturate the public 0–90 score at zero.
+  // Compare precisely the same penalties *before clipping* for one complete
+  // candidate; do not change the healthy fast path or publish an unsafe result.
+  if (!intent.primaryPath?.length && intent.nodes.length >= 10 && intent.nodes.length <= 24
+    && intent.relations.length >= intent.nodes.length * 1.5 && intent.relations.length <= 48
+    && original.evaluation.structuralScore === 0 && originalMetrics.edgeCrossings >= 3
+    && regions.size === 1 && !original.scene.elements.some((item) => item.type === 'node' && item.locked)) {
+    const candidate = composeArchitectureGraphCandidate(intent, 'semantic',
+      undefined, false, false, false, false, true)
+    const next = candidate.quality.metrics
+    if (next.nodeOverlaps <= originalMetrics.nodeOverlaps
+      && next.edgeNodeIntersections <= originalMetrics.edgeNodeIntersections
+      && next.labelNodeIntersections <= originalMetrics.labelNodeIntersections
+      && next.labelOverflows <= originalMetrics.labelOverflows
+      && next.labelOverlaps <= originalMetrics.labelOverlaps
+      && next.edgeCrossings <= originalMetrics.edgeCrossings - 2
+      && next.edgeOverlaps <= originalMetrics.edgeOverlaps + 2
+      && candidate.evaluation.rawSelectionScore > original.evaluation.rawSelectionScore
+      && candidate.presentation.estimatedTitlePxAtFit >= original.presentation.estimatedTitlePxAtFit
+      && candidate.routeDiagnostics.frameOverlapArea <= original.routeDiagnostics.frameOverlapArea
+      && candidate.routeDiagnostics.unrelatedFrameIntrusionLength <= original.routeDiagnostics.unrelatedFrameIntrusionLength
+      && candidate.routeDiagnostics.totalRouteLength <= original.routeDiagnostics.totalRouteLength * 1.1) {
+      const inputOrder = new Map([
+        ...intent.nodes.map((node, index) => [node.id, index] as const),
+        ...intent.relations.map((_, index) => [`__relation-${index + 1}`, intent.nodes.length + index] as const),
+      ])
+      return {
+        ...candidate, inputOrderStrategy: 'original' as const,
+        layoutOrderingStrategy: 'dense-unclamped-candidate' as const,
+        scene: { ...candidate.scene, elements: candidate.scene.elements.slice().sort((a, b) =>
+          (inputOrder.get(a.id) ?? Infinity) - (inputOrder.get(b.id) ?? Infinity)) },
+      }
+    }
+  }
   if (intent.primaryPath?.length || intent.nodes.length > 26
     || original.routeDiagnostics.frameOverlapArea < original.scene.width * original.scene.height * 0.1
     || original.quality.metrics.edgeOverlaps > 10) return original

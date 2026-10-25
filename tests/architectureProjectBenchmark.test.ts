@@ -37,6 +37,16 @@ test('真实依赖密集图不能因不穿节点就获得错误的自动审查�
   const composed = composeArchitectureGraph(sample.intent)
   const q = composed.quality.metrics
   assert.equal(q.edgeNodeIntersections, 0)
+  assert.ok(q.edgeCrossings <= 4,
+    'bounded unclamped-score recovery must reduce severe crossings without changing real source dependencies')
+  assert.ok(q.edgeOverlaps <= 25,
+    'improving crossings must not be achieved by unbounded independent corridor overlap')
+  assert.equal(composed.presentation.estimatedTitlePxAtFit, 12.5)
+  assert.ok(composed.evaluation.structuralScore >= 0 && composed.evaluation.structuralScore <= 90)
+  assert.ok(composed.evaluation.rawSelectionScore <= composed.evaluation.structuralScore,
+    'display-score clipping must not conceal worse raw geometry in candidate selection')
+  assert.deepEqual(composeArchitectureGraph(sample.intent).scene, composed.scene,
+    'saturated-score recovery remains deterministic across repeated generations')
   // The source topology changes with the repository. Improving its routing
   // should make this test pass, not force a permanent failing benchmark.
   if (q.edgeCrossings >= 3) {
