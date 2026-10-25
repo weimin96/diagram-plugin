@@ -121,7 +121,9 @@ JSON 中每个 score 允许 0 至 5，每次递增 0.5。分数须根据各维�
   const validated = evaluateArchitectureVisualReview({
     id: item.id, ...item.evidence, readyForVisualReview: item.readyForVisualReview,
   }, result, new Set(graph.elements.map((element) => element.id)))
-  const outputFile = path.resolve(flag('out') ?? path.join(directory, `${item.id}.model-review.json`))
+  // Keep independent providers' evidence separate. A Codex run must never
+  // overwrite the DSH review for the very same screenshot (or vice versa).
+  const outputFile = path.resolve(flag('out') ?? path.join(directory, `${item.id}.${provider}.model-review.json`))
   await mkdir(path.dirname(outputFile), { recursive: true })
   await writeFile(outputFile, JSON.stringify({
     kind: 'diagram-independent-pixel-review', version: 1,

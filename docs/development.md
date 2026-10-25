@@ -56,11 +56,13 @@ Chrome 截图、SVG、Canvas JSON 共同生成 SHA-256 指纹，图片或源码�
 
 ```sh
 pnpm benchmark:architecture:visual:blind --provider=dsh --manifest=test-results/architecture-design-project/manifest.json --case=diagram-plugin-source-imports
-pnpm benchmark:architecture:visual:repeat --manifest=test-results/architecture-design-project/manifest.json --case=diagram-plugin-source-imports --samples=3
+pnpm benchmark:architecture:visual:blind --provider=codex --manifest=test-results/architecture-design-project/manifest.json --case=diagram-plugin-source-imports
+pnpm benchmark:architecture:visual:repeat --provider=codex --manifest=test-results/architecture-design-project/manifest.json --case=diagram-plugin-source-imports --samples=3
+pnpm benchmark:architecture:visual:repeat --provider=dsh --manifest=test-results/architecture-design-project/manifest.json --case=diagram-plugin-source-imports --samples=3
 pnpm benchmark:architecture:visual:score --manifest=test-results/architecture-design-project/manifest.json --review=<人工填写的review.json> --require-human-approval
 ```
 
-DeepSeek Harness 需要执行真实 `read_image` 工具调用并在原始 JSONL 中验证成功的图像结果；只传提示词或让模型声称看到图不算像素评审。重复评审保留各次原始记录与区间，不能用单次分差声明质量提升。Codex 配额不足时保留默认 DSH Provider，不指定 `--provider=codex`。
+DeepSeek Harness 需要执行真实 `read_image` 工具调用并在原始 JSONL 中验证成功的图像结果；Codex 使用隔离的只读 PNG 输入、结构化 JSON 输出及证据指纹。只传提示词或让模型声称看到图不算像素评审。默认报告路径带 `.dsh.` 或 `.codex.`，不会互相覆盖；重复评审保留各次原始记录与区间。不同 Provider/模型之间的绝对评分不能直接当作改善证据，只有同模型、同案例、同评分合同且通过证据指纹校验的重复样本才能与历史基线比较。人工批准门禁独立于模型评分。
 
 六维评分包括主次阅读路径、依赖可追踪性、字体可读性、留白/对齐、分区边界和视觉一致性，总分 100。无人评分是 `null`，模型评级不能伪装人工 `approval=approved`；最终交付必须通过机器几何、当前像素指纹和真实人工批准。
 

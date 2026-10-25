@@ -62,3 +62,21 @@ test('architecture export distinguishes verified primary nodes without overwriti
   assert.match(svg, /fill="#223344"/, 'custom background remains authoritative')
   assert.equal(serializeCanvasScene(scene), original)
 })
+
+test('exported architecture SVG exposes the real relation endpoints on hover without adding visible labels', () => {
+  const source: CanvasScene = {
+    type: 'diagram-plugin-canvas', version: 1, title: 'Real relations', width: 700, height: 300,
+    architecture: { theme: 'technical', view: 'detail' },
+    elements: [
+      { id: 'api', type: 'node', text: 'API', x: 40, y: 90, width: 160, height: 80 },
+      { id: 'store', type: 'node', text: 'Store', x: 420, y: 90, width: 160, height: 80 },
+      { id: 'dep', type: 'arrow', from: 'api', to: 'store', label: 'sync & audit' },
+    ],
+  }
+  const before = serializeCanvasScene(source)
+  const svg = canvasSceneToSvg(source)
+  assert.match(svg, /<title>api → store · sync &amp; audit<\/title>/)
+  assert.equal(serializeCanvasScene(source), before, 'tooltips cannot change relation semantics')
+  assert.doesNotMatch(canvasSceneToSvg({ ...source, architecture: undefined }), /<title>api → store/,
+    'normal user-authored freeform canvases retain their existing export behavior')
+})

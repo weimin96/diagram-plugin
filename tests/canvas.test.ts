@@ -421,7 +421,8 @@ test('architecture actors, branded nodes and manual fill share card geometry and
   const svg = canvasSceneToSvg(scene)
   assert.equal((svg.match(/fill-opacity="0\.94"/g) ?? []).length, 2)
   assert.match(svg, /fill="#123456" fill-opacity="1"[^>]+stroke-width="3"/)
-  assert.match(svg, /opacity="0\.62"><path[^>]+marker-end="url\(#arrow\)"/)
+  assert.match(svg, /opacity="0\.62"><title>brand → custom<\/title><path[^>]+marker-end="url\(#arrow\)"/,
+    'muted architecture relations retain arrow style while exposing actual hover endpoints')
   for (const label of ['用户', 'PostgreSQL', '手工底色']) assert.match(svg, new RegExp(`>${label}<\\/text>`))
   assert.equal(serializeCanvasScene(scene), before)
 })

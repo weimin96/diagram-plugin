@@ -432,7 +432,14 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
       ? `<g class="canvas-arrow-label"><title>${escapeXml(visibleLabel)}</title>${architectureMode ? '' : `<rect x="${label.x - label.width / 2}" y="${label.y - label.height / 2}" width="${label.width}" height="${label.height}" rx="8" fill="${escapeXml(background)}" stroke="${escapeXml(border)}" stroke-opacity="0.28"/>`}${labelText}</g>`
       : ''
     const markerEnd = arrow.markerEnd === 'none' ? '' : ' marker-end="url(#arrow)"'
-    return `<g opacity="${opacity}"><path d="${geometry}" fill="none" stroke="${escapeXml(stroke)}" stroke-width="${strokeWidth}"${dash}${markerEnd}/>${labelMarkup}</g>`
+    // Exported SVG remains inspectable even when an architecture's truthful
+    // relation labels are deliberately omitted to avoid visual congestion.
+    // SVG-native tooltips expose actual source and target on hover; they do
+    // not change the rendered geometry or invent a business relation name.
+    const relationTitle = architectureMode
+      ? `<title>${escapeXml(`${arrow.from} → ${arrow.to}${arrow.label ? ` · ${arrow.label}` : ''}`)}</title>`
+      : ''
+    return `<g opacity="${opacity}">${relationTitle}<path d="${geometry}" fill="none" stroke="${escapeXml(stroke)}" stroke-width="${strokeWidth}"${dash}${markerEnd}/>${labelMarkup}</g>`
   }).join('')
   const collapsedConnections = canvasCollapsedConnections(scene, groupFrames).map((connection) => {
     const fromCenter = centerOfCanvasBox(connection.fromBox)
