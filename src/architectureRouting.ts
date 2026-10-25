@@ -1,3 +1,4 @@
+import { reservedPorts, availablePortRatios, portSpacingPenalty, type FixedSide, type PortReservations } from './architecturePortPlanning.js'
 import {
   addOccupiedSegments, expandRect, findOrthogonalRoute, scoreRoute,
   segmentIntersectsRect, segmentsCross, simplifyRoute, uniqueNumbers,
@@ -8,7 +9,7 @@ import {
  * move nodes, style cards, or import third-party layout engines.
  */
 import type { CanvasArrow, CanvasGroup, CanvasGroupFrame, CanvasNode, CanvasNote, CanvasPoint, CanvasScene } from './canvas.js'
-import { canvasArrowBoxRoute, canvasGroupFrames } from './canvas.js'
+import { anchorPoint, canvasArrowBoxRoute, canvasGroupFrames } from './canvas.js'
 
 export function routeArchitectureEdges(scene: CanvasScene): CanvasScene {
   return routeArchitectureEdgeSubset(scene)
@@ -62,6 +63,9 @@ function routeArchitectureEdgeSubset(scene: CanvasScene, only?: Set<string>, nod
   const occupied: RouteSegment[] = []
   const fanout = countArrowEndpoints(arrows, 'from')
   const fanin = countArrowEndpoints(arrows, 'to')
+  // The escape hatch is a single-edge geometry repair, not a second global
+  // router. Multi-edge rerouting keeps the established center-port behavior.
+  const portReservations = nodePorts && only?.size === 1 ? reservedPorts(arrows, only) : undefined
   const highDensityRouting = arrows.length >= 48 || boxes.size >= 36
   const groupedFanoutIds = only ? new Set<string>() : collectDownwardGroupFanoutArrowIds(arrows, boxes)
   const crossGroupBundleIds = only ? new Set<string>() : collectCrossGroupBundleArrowIds(arrows, boxes, groupedFanoutIds)
@@ -83,7 +87,7 @@ function routeArchitectureEdgeSubset(scene: CanvasScene, only?: Set<string>, nod
   const remainingRouteOrder = only || !highDensityRouting ? routeOrder : routeOrder.filter((arrow) => !isIntraGroupArrow(arrow, boxes))
 
   for (const arrow of localRouteOrder) {
-    const result = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts)
+    const result = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts, portReservations)
     if (result) routed.set(arrow.id, result)
   }
 
@@ -99,13 +103,13 @@ function routeArchitectureEdgeSubset(scene: CanvasScene, only?: Set<string>, nod
     for (const [id, arrow] of bundled) routed.set(id, arrow)
     for (const arrow of arrows) {
       if (!crossGroupBundleIds.has(arrow.id) || routed.has(arrow.id)) continue
-      const fallback = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts)
+      const fallback = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts, portReservations)
       if (fallback) routed.set(arrow.id, fallback)
     }
   }
 
   for (const arrow of remainingRouteOrder) {
-    const result = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts)
+    const result = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts, portReservations)
     if (result) routed.set(arrow.id, result)
   }
 
@@ -114,7 +118,7 @@ function routeArchitectureEdgeSubset(scene: CanvasScene, only?: Set<string>, nod
     for (const [id, arrow] of bundled) routed.set(id, arrow)
     for (const arrow of arrows) {
       if (!groupedFanoutIds.has(arrow.id) || routed.has(arrow.id)) continue
-      const fallback = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts)
+      const fallback = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts, portReservations)
       if (fallback) routed.set(arrow.id, fallback)
     }
   }
@@ -140,6 +144,7 @@ function routeArchitectureArrow(
   groupFrames: Map<string, CanvasGroupFrame>,
   groups: Map<string, CanvasGroup>,
   nodePorts = false,
+  portReservations?: PortReservations,
 ): CanvasArrow | undefined {
   const from = boxes.get(arrow.from)
   const to = boxes.get(arrow.to)
@@ -162,15 +167,33 @@ function routeArchitectureArrow(
   const routingDx = fromFrame && toFrame && !nodePorts ? (toFrame.x + toFrame.width / 2) - (fromFrame.x + fromFrame.width / 2) : dx
   const routingDy = fromFrame && toFrame && !nodePorts ? (toFrame.y + toFrame.height / 2) - (fromFrame.y + fromFrame.height / 2) : dy
   const pairs = preferredAnchorPairs(routingDx, routingDy)
-  let best: { score: number; fromAnchor: 'top' | 'right' | 'bottom' | 'left'; toAnchor: 'top' | 'right' | 'bottom' | 'left'; route: CanvasPoint[] } | undefined
+  let best: { score: number; fromAnchor: FixedSide; toAnchor: FixedSide; fromPortRatio?: number; toPortRatio?: number; route: CanvasPoint[] } | undefined
   for (const [fromAnchor, toAnchor] of pairs) {
-    const start = fixedAnchorPoint(from, fromAnchor)
-    const end = fixedAnchorPoint(to, toAnchor)
-    const route = findOrthogonalRoute(start, end, obstacles, occupied, bundleKey, fromAnchor, toAnchor)
-    const score = scoreRoute(route, obstacles, occupied, bundleKey)
-      + (fromAnchor === pairs[0][0] && toAnchor === pairs[0][1] ? 0 : 42)
-    if (!best || score < best.score) best = { score, fromAnchor, toAnchor, route }
+    const independentPortRepair = !bundleKey && !arrow.bundleKey && portReservations
+    const fromRatios = independentPortRepair
+      ? availablePortRatios(from, fromAnchor, portReservations) : [0.5]
+    const toRatios = independentPortRepair
+      ? availablePortRatios(to, toAnchor, portReservations) : [0.5]
+    for (const fromRatio of fromRatios) {
+      for (const toRatio of toRatios) {
+        const start = fromRatio === 0.5 ? fixedAnchorPoint(from, fromAnchor)
+          : anchorPoint(from, fromAnchor, toCenter, fromRatio)
+        const end = toRatio === 0.5 ? fixedAnchorPoint(to, toAnchor)
+          : anchorPoint(to, toAnchor, fromCenter, toRatio)
+        const route = findOrthogonalRoute(start, end, obstacles, occupied, bundleKey, fromAnchor, toAnchor)
+        const score = scoreRoute(route, obstacles, occupied, bundleKey)
+          + (fromAnchor === pairs[0][0] && toAnchor === pairs[0][1] ? 0 : 42)
+          + (independentPortRepair ? portSpacingPenalty(from, fromAnchor, fromRatio, portReservations)
+            + portSpacingPenalty(to, toAnchor, toRatio, portReservations) : 0)
+        if (!best || score < best.score) best = {
+          score, fromAnchor, toAnchor, fromPortRatio: fromRatio === 0.5 ? undefined : fromRatio,
+          toPortRatio: toRatio === 0.5 ? undefined : toRatio, route,
+        }
+      }
+    }
     if (bundleKey?.startsWith('from:') || bundleKey?.startsWith('to:')) {
+      const start = fixedAnchorPoint(from, fromAnchor)
+      const end = fixedAnchorPoint(to, toAnchor)
       const side = bundleKey.startsWith('from:') ? 'from' : 'to'
       const bundled = buildBundleRoute(start, end, fromAnchor, toAnchor, side)
       const bundleScore = scoreRoute(bundled, obstacles, occupied, bundleKey) - 72
@@ -209,8 +232,8 @@ function routeArchitectureArrow(
     routing: 'orthogonal',
     fromAnchor: best.fromAnchor,
     toAnchor: best.toAnchor,
-    fromPortRatio: undefined,
-    toPortRatio: undefined,
+    fromPortRatio: best.fromPortRatio,
+    toPortRatio: best.toPortRatio,
     lineStyle: asyncEdge ? 'dashed' : arrow.lineStyle ?? 'solid',
     points: simplified.length > 2 ? simplified.slice(1, -1) : undefined,
     bundleKey,

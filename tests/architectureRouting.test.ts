@@ -9,7 +9,8 @@ import {
   routeArchitectureArrowIds as legacyRouteArrowIds,
   routeArchitectureEdges as legacyRouteEdges,
 } from '../src/architectureDesign.js'
-import { canvasArrowBoxRoute, serializeCanvasScene, type CanvasArrow, type CanvasScene } from '../src/canvas.js'
+import { canvasArrowBoxRoute, parseCanvasScene, serializeCanvasScene, type CanvasArrow, type CanvasScene } from '../src/canvas.js'
+import { assessCanvasVisualQuality } from '../src/canvasQuality.js'
 
 function graph(): CanvasScene {
   return {
@@ -82,6 +83,67 @@ test('incremental routing detects a moved obstacle against an authored noncentra
   const arrow = updated.elements.find((item) => item.id === 'wire')
   assert.ok(arrow?.type === 'arrow')
   assert.notDeepEqual(arrow, originalArrow, 'obstacle intersects only the actual y=120 port, not the old y=140 center')
+  assert.equal(arrow.fromPortRatio, undefined)
+  assert.equal(arrow.toPortRatio, undefined)
+})
+
+function congestedPorts(): CanvasScene {
+  return {
+    type: 'diagram-plugin-canvas', version: 1, title: 'Independent fanout ports',
+    width: 1180, height: 660, architecture: { theme: 'technical' },
+    groups: [{ id: 'g', label: 'Shared region' }],
+    elements: [
+      { id: 'source', type: 'node', x: 80, y: 230, width: 180, height: 96, text: 'Source', groupId: 'g', icon: 'service' },
+      { id: 'target-a', type: 'node', x: 750, y: 180, width: 180, height: 80, text: 'Target A', groupId: 'g' },
+      { id: 'target-b', type: 'node', x: 750, y: 300, width: 180, height: 80, text: 'Target B', groupId: 'g' },
+      { id: 'wire-a', type: 'arrow', from: 'source', to: 'target-a', routing: 'orthogonal',
+        fromAnchor: 'right', toAnchor: 'left', points: [{ x: 400, y: 278 }, { x: 400, y: 220 }] },
+      { id: 'wire-b', type: 'arrow', from: 'source', to: 'target-b', routing: 'orthogonal',
+        fromAnchor: 'right', toAnchor: 'left', points: [{ x: 400, y: 278 }, { x: 400, y: 340 }] },
+    ],
+  }
+}
+
+test('single-edge corridor repair assigns a distinct real port without moving nodes or rewriting other edges', () => {
+  const source = congestedPorts()
+  const before = serializeCanvasScene(source)
+  const centerOnly = routeArchitectureArrowIds(source, ['wire-b'])
+  const planned = routeArchitectureArrowIds(source, ['wire-b'], true)
+  const originalArrow = source.elements.find((item) => item.id === 'wire-a')
+  const selected = planned.elements.find((item) => item.id === 'wire-b')
+  assert.ok(originalArrow?.type === 'arrow' && selected?.type === 'arrow')
+  assert.equal(selected.fromAnchor, 'right')
+  assert.ok(selected.fromPortRatio !== undefined && Math.abs(selected.fromPortRatio - 0.5) >= 0.1)
+  assert.deepEqual(planned.elements.find((item) => item.id === 'wire-a'), originalArrow)
+  assert.deepEqual(planned.elements.filter((item) => item.type === 'node'),
+    source.elements.filter((item) => item.type === 'node'))
+  assert.equal(serializeCanvasScene(source), before)
+  const restored = parseCanvasScene(serializeCanvasScene(planned))
+  const reopened = restored.elements.find((item) => item.id === 'wire-b')
+  assert.ok(reopened?.type === 'arrow')
+  assert.equal(reopened.fromPortRatio, selected.fromPortRatio)
+  const sourceNode = source.elements[0]
+  const targetNode = source.elements[2]
+  assert.ok(sourceNode.type === 'node' && targetNode.type === 'node')
+  const path = canvasArrowBoxRoute(sourceNode, targetNode, selected)
+  assert.ok(path.slice(1).every((point, i) => point.x === path[i].x || point.y === path[i].y))
+  assert.ok(assessCanvasVisualQuality(planned).metrics.edgeNodeIntersections
+    <= assessCanvasVisualQuality(centerOnly).metrics.edgeNodeIntersections)
+})
+
+test('multi-edge repair retains center-port search and does not modify shared bus ports', () => {
+  const source = congestedPorts()
+  const multi = routeArchitectureArrowIds(source, ['wire-a', 'wire-b'], true)
+  assert.ok(multi.elements.filter((item): item is CanvasArrow => item.type === 'arrow')
+    .every((item) => item.fromPortRatio === undefined && item.toPortRatio === undefined))
+  const bus: CanvasScene = {
+    ...source,
+    elements: source.elements.map((item) => item.id === 'wire-b' && item.type === 'arrow'
+      ? { ...item, bundleKey: 'group:source-to-targets' } : item),
+  }
+  const rerouted = routeArchitectureArrowIds(bus, ['wire-b'], true)
+  const arrow = rerouted.elements.find((item) => item.id === 'wire-b')
+  assert.ok(arrow?.type === 'arrow')
   assert.equal(arrow.fromPortRatio, undefined)
   assert.equal(arrow.toPortRatio, undefined)
 })
