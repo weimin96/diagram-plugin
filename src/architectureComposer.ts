@@ -673,13 +673,20 @@ function optimizeCongestedRoutes(result: ReturnType<typeof composeArchitectureGr
   let changes = 0
   // Rip up one contested relation and re-evaluate its route against all the
   // others. A bounded negotiation, not another router or invented edge.
-  const maxAffectedEdges = 14
+  // Consider every independent relation on small dense graphs, but cap the
+  // global negotiation budget for larger scenes. The prior fixed 14-edge
+  // shortlist could miss a locally short-looking relationship whose routing
+  // forces a large exterior detour elsewhere in the same scene.
+  const maxAffectedEdges = Math.min(32, scene.elements.filter((item) =>
+    item.type === 'arrow').length)
   for (let round = 0; round < maxRounds; round++) {
     const affected = [...new Set([
+      ...routeDiagnostics.worstPerimeterDetours.map((route) => route.edgeId),
       ...quality.issues
       .filter((issue) => issue.code === 'edge-crossing' || issue.code === 'edge-overlap')
       .flatMap((issue) => issue.elementIds),
-      ...routeDiagnostics.worstPerimeterDetours.map((route) => route.edgeId),
+      ...scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow' && !item.bundleKey)
+        .map((item) => item.id),
     ])].slice(0, maxAffectedEdges)
     let best: {
       scene: CanvasScene; quality: CanvasVisualQualityAssessment

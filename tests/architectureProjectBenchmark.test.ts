@@ -45,8 +45,10 @@ test('真实依赖密集图不能因不穿节点就获得错误的自动审查�
     'negotiating independent corridors must not erase genuine shared source trunks')
   assert.ok(composed.routeDiagnostics.totalRouteLength <= 13_000,
     'bounded conflict negotiation must not trade equal geometry for longer routes')
-  assert.ok(composed.routeDiagnostics.perimeterDetours <= 10,
-    'perimeter tie-breaking cannot introduce additional long exterior detours')
+  assert.ok(composed.routeDiagnostics.perimeterDetours <= 9,
+    'dense negotiation must cover real independent arrows beyond the original conflict shortlist')
+  assert.ok(composed.evaluation.structuralScore >= 60,
+    'broader deterministic corridor coverage must preserve the real-source geometry improvement')
   assert.ok(composed.candidates.some((candidate) =>
     candidate.layout === composed.evaluation.layout
     && candidate.density === composed.evaluation.density
