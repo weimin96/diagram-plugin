@@ -52,7 +52,9 @@ test('validates the exact screenshot path, including macOS /private/tmp alias', 
   assert.ok(parseDshPixelAssessment(events({ file_path: '/private/tmp/diagram-dsh-visual-example/anonymous.png' }), cwd))
   for (const wrong of ['./older.png', '../anonymous.png', '/tmp/other/anonymous.png']) {
     assert.throws(() => parseDshPixelAssessment(events({ file_path: wrong }), cwd),
-      /isolated current screenshot/)
+      (error: unknown) => error instanceof Error
+        && error.message.includes('isolated current screenshot')
+        && error.message.includes(JSON.stringify(wrong)))
   }
 })
 

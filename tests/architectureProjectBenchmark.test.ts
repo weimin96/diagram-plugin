@@ -43,8 +43,10 @@ test('真实依赖密集图不能因不穿节点就获得错误的自动审查�
     'real independent wire overlap must remain meaningfully below the severe-congestion threshold')
   assert.ok(canvasBundleTrunks(composed.scene).length >= 2,
     'negotiating independent corridors must not erase genuine shared source trunks')
-  assert.ok(composed.routeDiagnostics.totalRouteLength <= 13_600,
-    'joint placement must avoid compensating for crossings with a long perimeter detour')
+  assert.ok(composed.routeDiagnostics.totalRouteLength <= 13_000,
+    'bounded conflict negotiation must not trade equal geometry for longer routes')
+  assert.ok(composed.routeDiagnostics.perimeterDetours <= 10,
+    'perimeter tie-breaking cannot introduce additional long exterior detours')
   assert.ok(composed.candidates.some((candidate) =>
     candidate.layout === composed.evaluation.layout
     && candidate.density === composed.evaluation.density

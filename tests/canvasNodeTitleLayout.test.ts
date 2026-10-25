@@ -41,3 +41,24 @@ test('architecture SVG and Canvas editor share semantic title layout without rew
   assert.match(plain, />architecturePresentationQuality<\/text>/,
     'ordinary user-edited Canvas nodes must not unexpectedly inherit automatic architecture wrapping')
 })
+
+test('architecture export distinguishes verified primary nodes without overwriting authored colors', () => {
+  const scene: CanvasScene = {
+    type: 'diagram-plugin-canvas', version: 1, title: 'Emphasis', width: 750, height: 300,
+    architecture: { theme: 'technical', view: 'detail', density: 'compact' },
+    elements: [
+      { id: 'main', type: 'node', text: 'Primary', x: 20, y: 70, width: 160, height: 80, emphasis: 'primary' },
+      { id: 'peer', type: 'node', text: 'Secondary', x: 230, y: 70, width: 160, height: 80, emphasis: 'secondary' },
+      { id: 'custom', type: 'node', text: 'Custom', x: 440, y: 70, width: 160, height: 80,
+        emphasis: 'primary', fillColor: '#223344' },
+    ],
+  }
+  const original = serializeCanvasScene(scene)
+  const svg = canvasSceneToSvg(scene)
+  assert.equal((svg.match(/fill-opacity="0.05" pointer-events="none"/g) ?? []).length, 1,
+    'only the primary unstyled architecture node gets a subtle visual tint')
+  assert.equal((svg.match(/font-weight="700"/g) ?? []).length, 2,
+    'primary node typography is visually distinct without changing the saved labels')
+  assert.match(svg, /fill="#223344"/, 'custom background remains authoritative')
+  assert.equal(serializeCanvasScene(scene), original)
+})

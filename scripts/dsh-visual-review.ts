@@ -44,7 +44,10 @@ export function parseDshPixelAssessment(
   const input = toolCalls[0].input?.file_path
   if (!input || normalizeMacTmp(path.resolve(cwd, input))
     !== normalizeMacTmp(path.resolve(cwd, expectedImage))) {
-    throw new Error('read_image did not target the isolated current screenshot')
+    // Keep the strict evidence boundary. Include the attempted path so an
+    // upstream model/tool mismatch can be diagnosed without accepting a
+    // different image or silently replacing the reviewer.
+    throw new Error(`read_image did not target the isolated current screenshot (received: ${JSON.stringify(input ?? '<missing>').slice(0, 180)})`)
   }
   const match = events.find((event) => event.type === 'tool_result' && event.callId === toolCalls[0].callId)
   if (!match || match.status !== 'completed'

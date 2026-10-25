@@ -85,9 +85,21 @@ test('moved endpoint recovers a previously real source stem without inventing a 
   assert.equal(canvasBundleTrunks(repaired).length, trunksBefore)
   const candidateQuality = assessCanvasVisualQuality(candidate).metrics
   const repairedQuality = assessCanvasVisualQuality(repaired).metrics
-  assert.ok(repairedQuality.edgeCrossings <= candidateQuality.edgeCrossings)
-  assert.ok(repairedQuality.edgeOverlaps <= candidateQuality.edgeOverlaps)
+  // Restoration is a geometric *proposal*, not a second authority for
+  // deciding which complete scene is publishable. The proposed shared stem
+  // may avoid an overlap but introduce a crossing; Composer's whole-scene
+  // candidate gate must keep the original better layout instead.
+  const selectedQuality = assessCanvasVisualQuality(reference).metrics
+  assert.ok(selectedQuality.edgeCrossings <= candidateQuality.edgeCrossings)
+  assert.ok(selectedQuality.edgeCrossings <= repairedQuality.edgeCrossings)
+  assert.ok(selectedQuality.edgeOverlaps <= candidateQuality.edgeOverlaps)
+  assert.ok(selectedQuality.edgeOverlaps <= repairedQuality.edgeOverlaps)
   assert.equal(repairedQuality.edgeNodeIntersections, 0)
+  assert.deepEqual(repaired.elements.filter((item) => item.type === 'arrow')
+    .map((item) => [item.id, item.from, item.to]),
+  candidate.elements.filter((item) => item.type === 'arrow')
+    .map((item) => [item.id, item.from, item.to]),
+  'candidate generation cannot add or drop source relationships')
   assert.equal(serializeCanvasScene(candidate), saved, 'candidate generation cannot mutate earlier alternatives')
   assert.equal(restoreArchitectureMovedSourceTrunk(candidate, { ...reference,
     elements: reference.elements.map((item) => item.type === 'arrow' ? { ...item, bundleKey: undefined } : item),

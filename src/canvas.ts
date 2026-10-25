@@ -492,7 +492,7 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
       : lines
     const texts = architectureCard
       ? `<text x="${item.x + 16}" y="${item.y + (showSubtitle ? 55 : Math.max(54, item.height / 2 + 5))}" font-size="15" font-weight="650" fill="${escapeXml(palette.text)}">${escapeXml(truncateCanvasText(lines.join(' '), cardTitleLimit))}</text>`
-      : plainArchitectureLines.map((line, index) => `<text x="${item.x + item.width / 2}" y="${item.y + item.height / 2 + (index - (plainArchitectureLines.length - 1) / 2) * 19}" text-anchor="middle" dominant-baseline="middle" font-size="15"${architectureMode && architectureTheme === 'technical' ? ' font-family="ui-monospace, SFMono-Regular, Menlo, monospace"' : ''} fill="${escapeXml(palette.text)}">${escapeXml(line)}</text>`).join('')
+      : plainArchitectureLines.map((line, index) => `<text x="${item.x + item.width / 2}" y="${item.y + item.height / 2 + (index - (plainArchitectureLines.length - 1) / 2) * 19}" text-anchor="middle" dominant-baseline="middle" font-size="15"${architectureMode && item.emphasis === 'primary' ? ' font-weight="700"' : ''}${architectureMode && architectureTheme === 'technical' ? ' font-family="ui-monospace, SFMono-Regular, Menlo, monospace"' : ''} fill="${escapeXml(palette.text)}">${escapeXml(line)}</text>`).join('')
     const rolePaths = item.icon ? canvasIconPaths(item.icon) : []
     const icon = item.iconRef
       ? `<g transform="translate(${item.x + 8} ${item.y + 8}) scale(.8333)">${canvasIconRefMarkup(item.iconRef, hexLuminance(palette.text) > 0.62, palette.stroke)}</g>`
@@ -506,6 +506,10 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
     const strokeWidth = item.strokeWidth ?? (item.emphasis === 'primary' ? 2.4 : item.emphasis === 'muted' ? 1.1 : 1.5)
     const opacity = item.opacity ?? (item.emphasis === 'muted' ? '0.72' : '1')
     const accent = !skin && item.emphasis === 'primary' && !item.shapeRef ? `<rect x="${item.x}" y="${item.y}" width="5" height="${item.height}" rx="${Math.min(5, shapeRadius(item.shape, item.height))}" fill="${escapeXml(palette.stroke)}"/>` : ''
+    const primaryTint = architectureMode && item.type === 'node' && !architectureCard
+      && item.emphasis === 'primary' && !item.fillColor && !item.shapeRef
+      ? `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="${item.cornerRadius ?? shapeRadius(item.shape, item.height)}" fill="${escapeXml(palette.stroke)}" fill-opacity="0.05" pointer-events="none"/>`
+      : ''
     const cardBand = architectureCard ? `<rect x="${item.x + 12}" y="${item.y + item.height - 4}" width="${Math.max(24, item.width - 24)}" height="2" rx="1" fill="${escapeXml(architectureCardBandColor(cardTemplate.kind, palette.stroke, border))}" fill-opacity="0.72"/>` : ''
     const dash = cardTemplate.kind === 'external' || cardTemplate.kind === 'messaging' ? ' stroke-dasharray="7 5"' : ''
     const shapeMarkup = item.shapeRef
@@ -514,7 +518,7 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
           return `<g transform="translate(${item.x} ${item.y})"><path d="${geometry.bodyPath}" fill="${escapeXml(fillColor)}" stroke="${escapeXml(strokeColor)}" stroke-width="${strokeWidth}"${architectureCard ? dash : ''}/>${geometry.detailPaths.map((path) => `<path d="${path}" fill="none" stroke="${escapeXml(strokeColor)}" stroke-width="${Math.max(1, strokeWidth * 0.86)}"/>`).join('')}</g>`
         })()
       : `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="${item.cornerRadius ?? shapeRadius(item.shape, item.height)}" fill="${escapeXml(fillColor)}" stroke="${escapeXml(strokeColor)}" stroke-width="${strokeWidth}"${architectureCard ? dash : ''}/>`
-    return wrapRotation(`<g opacity="${opacity}"${skin ? ` style="filter:${skin.shadow};font-family:${skin.font}"` : ''}>${shapeMarkup}${accent}${cardBand}${icon}${stencil}${c4}${texts}${subtitle}</g>`)
+    return wrapRotation(`<g opacity="${opacity}"${skin ? ` style="filter:${skin.shadow};font-family:${skin.font}"` : ''}>${shapeMarkup}${primaryTint}${accent}${cardBand}${icon}${stencil}${c4}${texts}${subtitle}</g>`)
   }).join('')
   const groups = canvasPresentationGroupFrames(scene, groupFrames)
     .filter((group) => !isInsideCollapsedAncestor(group.id, scene.groups ?? [])).map((group) => {

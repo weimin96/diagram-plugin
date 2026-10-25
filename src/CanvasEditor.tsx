@@ -308,6 +308,9 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
                 <rect className="freeform-image-outline" width={displayItem.width} height={displayItem.height} rx={displayItem.cornerRadius ?? 8} />
               </> : displayItem.shapeRef ? <CanvasBoxShape item={displayItem} /> : <rect width={displayItem.width} height={displayItem.height} rx={displayItem.cornerRadius ?? (displayItem.shape === 'square' ? 3 : displayItem.shape === 'pill' ? displayItem.height / 2 : architecture && architectureMark ? 9 : 14)} />}
               {!architecture && !visualStyle && displayItem.emphasis === 'primary' ? <rect className="freeform-card-accent" width="5" height={displayItem.height} rx="3" /> : null}
+              {architecture && displayItem.type === 'node' && displayItem.emphasis === 'primary'
+                && !displayItem.shapeRef && !architectureMark
+                ? <rect className="freeform-architecture-primary-rule" width="5" height={displayItem.height} rx="3" /> : null}
               {!architecture && architectureCard ? <rect className="freeform-card-kind-band" x="12" y={displayItem.height - 4} width={Math.max(24, displayItem.width - 24)} height="2" rx="1" /> : null}
               {architectureMark && iconRefMarkup && showRoleIcon ? (
                 <g className="freeform-icon-ref" transform={`translate(${architectureMarkX} ${architectureMarkY}) scale(${architectureMarkSize / 24})`} dangerouslySetInnerHTML={{ __html: iconRefMarkup }} />

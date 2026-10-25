@@ -666,6 +666,7 @@ function optimizeCongestedRoutes(result: ReturnType<typeof composeArchitectureGr
   let scene = result.scene
   let quality = result.quality
   let evaluation = result.evaluation
+  let routeDiagnostics = result.routeDiagnostics
   const minimumTrunks = canvasBundleTrunks(scene).length
   const initial = quality.metrics
   const initialRoute = result.routeDiagnostics
@@ -674,10 +675,16 @@ function optimizeCongestedRoutes(result: ReturnType<typeof composeArchitectureGr
   // others. A bounded negotiation, not another router or invented edge.
   const maxAffectedEdges = 14
   for (let round = 0; round < maxRounds; round++) {
-    const affected = [...new Set(quality.issues
+    const affected = [...new Set([
+      ...quality.issues
       .filter((issue) => issue.code === 'edge-crossing' || issue.code === 'edge-overlap')
-      .flatMap((issue) => issue.elementIds))].slice(0, maxAffectedEdges)
-    let best: { scene: CanvasScene; quality: CanvasVisualQualityAssessment; evaluation: ArchitectureLayoutAssessment } | undefined
+      .flatMap((issue) => issue.elementIds),
+      ...routeDiagnostics.worstPerimeterDetours.map((route) => route.edgeId),
+    ])].slice(0, maxAffectedEdges)
+    let best: {
+      scene: CanvasScene; quality: CanvasVisualQualityAssessment
+      evaluation: ArchitectureLayoutAssessment; routeDiagnostics: ReturnType<typeof assessArchitectureRouteDiagnostics>
+    } | undefined
     for (const id of affected) {
       const currentArrow = scene.elements.find((item) => item.id === id && item.type === 'arrow')
       if (!currentArrow) continue
@@ -700,19 +707,29 @@ function optimizeCongestedRoutes(result: ReturnType<typeof composeArchitectureGr
           || m.labelOverlaps > prev.labelOverlaps || m.labelOverflows > prev.labelOverflows
           || m.edgeCrossings > prev.edgeCrossings || m.edgeOverlaps > initial.edgeOverlaps + 2) continue
         const next = evaluateArchitectureLayout(candidate, proposed, evaluation.layout, evaluation.density)
-        if (next.rawSelectionScore <= (best?.evaluation.rawSelectionScore ?? evaluation.rawSelectionScore)) continue
+        const previous = best?.evaluation ?? evaluation
+        if (next.rawSelectionScore < previous.rawSelectionScore) continue
         if (canvasBundleTrunks(candidate).length < minimumTrunks) continue
         const diagnostics = assessArchitectureRouteDiagnostics(candidate)
         if (diagnostics.frameOverlapArea > initialRoute.frameOverlapArea
           || diagnostics.unrelatedFrameIntrusionLength > initialRoute.unrelatedFrameIntrusionLength
           || diagnostics.totalRouteLength > initialRoute.totalRouteLength * 1.1) continue
-        best = { scene: candidate, quality: proposed, evaluation: next }
+        if (next.rawSelectionScore === previous.rawSelectionScore) {
+          const incumbent = best?.routeDiagnostics ?? routeDiagnostics
+          // A route-only tie is meaningful only if nothing visible worsens.
+          if (m.edgeCrossings > prev.edgeCrossings || m.edgeOverlaps > prev.edgeOverlaps
+            || diagnostics.perimeterDetours > incumbent.perimeterDetours
+            || (diagnostics.perimeterDetours === incumbent.perimeterDetours
+              && diagnostics.totalRouteLength >= incumbent.totalRouteLength)) continue
+        }
+        best = { scene: candidate, quality: proposed, evaluation: next, routeDiagnostics: diagnostics }
       }
     }
     if (!best) break
     scene = best.scene
     quality = best.quality
     evaluation = best.evaluation
+    routeDiagnostics = best.routeDiagnostics
     changes++
   }
   if (!changes) return result
