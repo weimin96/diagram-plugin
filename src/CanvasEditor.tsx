@@ -1,6 +1,7 @@
 import { routeArchitectureArrowIds, routeArchitectureEdges, routeArchitectureEdgesIncremental } from './architectureRouting.js'
 import { canvasVisualSkin, canvasStyledBox, canvasFillTextColor, diagramVisualStyles, type DiagramVisualStyle } from './diagramVisualStyles.js'
 import { canvasArrowLabelText } from './canvasLabelText.js'
+import { canvasArchitecturePlainTitleLines } from './canvasNodeTitleLayout.js'
 import { CanvasRectIndex } from './canvasRectIndex.js'
 import { canvasArrowCrossesViewport } from './canvasViewport.js'
 import { buildCanvasPlaybackPlan } from './canvasPlayback.js'
@@ -291,6 +292,9 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
   const architectureMarkY = (displayItem.height - architectureMarkSize) / 2
   const architectureTextX = architectureMark ? architectureMarkX + architectureMarkSize + 12 : architectureCard ? 16 : displayItem.width / 2
   const architectureTitleY = architectureMark ? displayItem.height / 2 + (showCardSubtitle ? -4 : 4) : architectureCard ? (showCardSubtitle ? 55 : Math.max(54, displayItem.height / 2 + 5)) : displayItem.height / 2
+  const plainTitleLines = architecture && !architectureCard && displayItem.type === 'node'
+    ? canvasArchitecturePlainTitleLines(displayText, displayItem.width, displayItem.height,
+      architectureTheme === 'technical' ? 'monospace' : 'sans') : null
   return <>
               {displayItem.description ? <title>{displayItem.description}</title> : null}
               {imagePath ? <>
@@ -341,13 +345,17 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
                 </text>
               ) : <text style={{
                 ...(displayItem.type === 'node' && (skin || originalItem.fillColor) ? { fill: titleColor, fontFamily: skin?.font, fontWeight: 600 } : {}),
+                ...(plainTitleLines && architectureTheme === 'technical' ? { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' } : {}),
                 ...(architecture && architectureCard && titleScale && titleScale > 1 ? {
                   fontSize: (architectureMark
                     ? ({ technical: 12, presentation: 14, editorial: 14.5 } as Partial<Record<ArchitectureTheme, number>>)[architectureTheme ?? 'enterprise'] ?? 13
                     : density === 'dense' ? 12 : density === 'compact' ? 13 : 14) * titleScale,
                 } : {}),
               }} className={architectureCard ? 'freeform-node-title' : undefined} x={architectureTextX} y={architectureTitleY} textAnchor={architectureCard ? 'start' : 'middle'} dominantBaseline={architectureCard ? undefined : 'middle'}>
-                {truncate(displayText, architectureCard ? cardTitleLimit : 28)}
+                {plainTitleLines
+                  ? plainTitleLines.map((line, index) => <tspan key={index} x={architectureTextX}
+                    dy={index === 0 ? -(plainTitleLines.length - 1) * 19 / 2 : 19}>{line}</tspan>)
+                  : truncate(displayText, architectureCard ? cardTitleLimit : 28)}
               </text> : null}
               {showCardSubtitle ? <text className="freeform-node-subtitle" x={architectureTextX} y={architectureMark ? architectureTitleY + 17 : displayItem.height - 12} textAnchor={architectureCard ? 'start' : 'middle'}>{truncate(displayItem.subtitle!, architectureCard ? 34 : 32)}</text> : null}
               {displayItem.sourcePaths?.length && showSourceBadge ? <text className="freeform-source-badge" x={displayItem.width - 10} y={displayItem.c4Type ? 34 : 18} textAnchor="end">⌘ {displayItem.sourcePaths.length}</text> : null}

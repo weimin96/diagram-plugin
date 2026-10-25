@@ -1,6 +1,7 @@
 import { canvasVisualSkin, canvasStyledBox, canvasFillTextColor, isDiagramVisualStyle, type DiagramVisualStyle } from './diagramVisualStyles.js'
 import { hexLuminance } from './colors.js'
 import { canvasArrowLabelText } from './canvasLabelText.js'
+import { canvasArchitecturePlainTitleLines } from './canvasNodeTitleLayout.js'
 import { CanvasRectIndex } from './canvasRectIndex.js'
 import {
   CANVAS_ROLE_ICON_IDS,
@@ -485,9 +486,13 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
     const showSubtitle = Boolean(item.subtitle && (!architectureCard || projection.density !== 'dense'))
     const cardTitleLimit = projection.density === 'dense' ? 22 : projection.density === 'compact' ? 26 : 30
     const lines = item.text.split('\n').slice(0, 6)
+    const plainArchitectureLines = architectureMode && !architectureCard
+      ? canvasArchitecturePlainTitleLines(item.text, item.width, item.height,
+        architectureTheme === 'technical' ? 'monospace' : 'sans')
+      : lines
     const texts = architectureCard
       ? `<text x="${item.x + 16}" y="${item.y + (showSubtitle ? 55 : Math.max(54, item.height / 2 + 5))}" font-size="15" font-weight="650" fill="${escapeXml(palette.text)}">${escapeXml(truncateCanvasText(lines.join(' '), cardTitleLimit))}</text>`
-      : lines.map((line, index) => `<text x="${item.x + item.width / 2}" y="${item.y + item.height / 2 + (index - (lines.length - 1) / 2) * 19}" text-anchor="middle" dominant-baseline="middle" font-size="15" fill="${escapeXml(palette.text)}">${escapeXml(line)}</text>`).join('')
+      : plainArchitectureLines.map((line, index) => `<text x="${item.x + item.width / 2}" y="${item.y + item.height / 2 + (index - (plainArchitectureLines.length - 1) / 2) * 19}" text-anchor="middle" dominant-baseline="middle" font-size="15"${architectureMode && architectureTheme === 'technical' ? ' font-family="ui-monospace, SFMono-Regular, Menlo, monospace"' : ''} fill="${escapeXml(palette.text)}">${escapeXml(line)}</text>`).join('')
     const rolePaths = item.icon ? canvasIconPaths(item.icon) : []
     const icon = item.iconRef
       ? `<g transform="translate(${item.x + 8} ${item.y + 8}) scale(.8333)">${canvasIconRefMarkup(item.iconRef, hexLuminance(palette.text) > 0.62, palette.stroke)}</g>`

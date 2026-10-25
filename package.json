@@ -20,6 +20,7 @@
     "benchmark:architecture:project:visual": "node --import tsx scripts/benchmark-architecture-design.ts --project --screenshots",
     "benchmark:architecture:design": "node --import tsx scripts/benchmark-architecture-design.ts",
     "benchmark:architecture:visual:score": "node --import tsx scripts/architecture-visual-score.ts",
+    "benchmark:architecture:title-pixels": "node --import tsx scripts/architecture-title-pixels.ts",
     "benchmark:architecture:visual:blind": "node --import tsx scripts/architecture-visual-blind.ts",
     "benchmark:architecture:engines": "node --import tsx scripts/benchmark-architecture-engines.ts",
     "benchmark:architecture:d2": "node --import tsx scripts/benchmark-architecture-d2.ts",
