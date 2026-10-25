@@ -122,6 +122,8 @@ export interface ArchitectureVisualPlan {
   regions: Array<{ id: string; label: string; nodeCount: number }>
   review: {
     readyForVisualReview: boolean
+    /** Objective geometry blockers, distinct from issues that are inspectable in a human review. */
+    blockers: ArchitectureReviewBlocker[]
     concerns: ArchitectureVisualConcernCode[]
     /** Bounded, evidence-based suggestions; not claims that a visual reviewer has inspected pixels. */
     repairTargets: ArchitectureVisualRepairTarget[]
@@ -129,6 +131,10 @@ export interface ArchitectureVisualPlan {
     overlapHotspots: ArchitectureOverlapHotspot[]
   }
 }
+
+export type ArchitectureReviewBlocker =
+  | 'node-overlap' | 'edge-through-node' | 'label-through-node'
+  | 'severe-edge-crossings' | 'severe-independent-overlaps' | 'severe-frame-overlap'
 
 export function architectureVisualScenario(
   scene: CanvasScene, composition: ArchitectureComposition,
@@ -257,20 +263,27 @@ export function planArchitectureVisual(
     'frame-overlap': 3,
   }
   repairTargets.sort((a, b) => (reviewPriority[a.concern] ?? 10) - (reviewPriority[b.concern] ?? 10))
+  // Each independent overlap counts one pair of relations sharing visible
+  // geometry. At >= one overlapping pair per two relations, line identity is
+  // no longer reliably traceable by sight. A small number of isolated pairs
+  // can still be inspected in a review; this catches dense real-source graphs
+  // without treating any minor crossing as automatic failure.
+  const severeRelationCongestion = relations.length > 0
+    && quality.metrics.edgeOverlaps * 2 >= relations.length
+  const blockers: ArchitectureVisualPlan['review']['blockers'] = []
+  if (quality.metrics.nodeOverlaps > 0) blockers.push('node-overlap')
+  if (quality.metrics.edgeNodeIntersections > 0) blockers.push('edge-through-node')
+  if (quality.metrics.labelNodeIntersections > 0) blockers.push('label-through-node')
+  if (quality.metrics.edgeCrossings > 2) blockers.push('severe-edge-crossings')
+  if (severeRelationCongestion) blockers.push('severe-independent-overlaps')
+  if (geometry.frameOverlapArea >= scene.width * scene.height * 0.1) blockers.push('severe-frame-overlap')
   return {
     scenario, reference, recommendedView,
     nodeCount: nodes.length, relationCount: relations.length,
     primaryNodeIds, primaryRelationIds, regions,
     review: {
-      readyForVisualReview: quality.metrics.nodeOverlaps === 0
-        && quality.metrics.edgeNodeIntersections === 0
-        && quality.metrics.labelNodeIntersections === 0
-        // A handful of crossings can be inspected, but a dense network
-        // with several independent crossings needs routing work first.
-        && quality.metrics.edgeCrossings <= 2
-        // Tiny frame intersections can still be visually reviewed; broad
-        // overlapping regions need layout repair before meaningful review.
-        && geometry.frameOverlapArea < scene.width * scene.height * 0.1,
+      readyForVisualReview: blockers.length === 0,
+      blockers,
       concerns,
       repairTargets: repairTargets.slice(0, 5),
       overlapHotspots: overlapHotspots.slice(0, 5),

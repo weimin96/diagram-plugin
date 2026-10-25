@@ -101,6 +101,15 @@ test('架构语义图通过真实 MCP 一次生成、保存和质量评估', asy
     assert.ok(['semantic', 'dependency'].includes(created.structuredContent.architectureEvaluation.layoutOrderingStrategy))
     assert.ok(Array.isArray(created.structuredContent.architectureEvaluation.routeDiagnostics.worstFrameIntrusions))
     assert.ok(created.structuredContent.architectureEvaluation.reroutedEdges >= 0)
+    const inspected = await call(client, root, 'architecture-session', 'diagram.inspectQuality', {
+      path: created.structuredContent.diagram.path,
+    })
+    assert.equal(inspected.isError, undefined)
+    assert.equal(inspected.structuredContent.visualPlan.review.readyForVisualReview,
+      created.structuredContent.visualPlan.review.readyForVisualReview,
+      'creation and later inspection must use the same architecture quality gate')
+    assert.deepEqual(inspected.structuredContent.visualPlan.review.blockers,
+      created.structuredContent.visualPlan.review.blockers)
     assert.equal((await readFile(path.join(root, created.structuredContent.diagram.path), 'utf8')).includes('arch-application'), true)
     assert.ok(JSON.stringify(await call(client, root, 'architecture-session', 'diagram.threadState')).includes(created.structuredContent.diagram.path))
     const wrong = await call(client, root, 'architecture-session', 'diagram.composeArchitecture', {

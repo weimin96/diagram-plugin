@@ -67,6 +67,7 @@ for (const id of ids) {
     concerns: result.visualPlan.review.concerns,
     repairTargets: result.visualPlan.review.repairTargets,
     readyForVisualReview: result.visualPlan.review.readyForVisualReview,
+    reviewBlockers: result.visualPlan.review.blockers,
     presentation: result.presentation,
     quality: result.quality.metrics,
     elapsedMs,
@@ -134,7 +135,8 @@ console.log(`Review report: ${path.join(output, 'review.md')}`)
 console.log(`Visual gallery: ${path.join(output, 'index.html')}`)
 console.log(`Unscored pixel review template: ${path.join(output, 'review-draft.json')}`)
 if (cases.some((item) => !item.readyForVisualReview)) {
-  console.error('Hard geometry errors remain. Human visual sign-off is blocked.')
+  console.error('Human visual sign-off blocked:', cases.filter((item) => !item.readyForVisualReview)
+    .map((item) => `${item.id}: ${item.reviewBlockers.join(', ')}`).join('; '))
   process.exitCode = 1
 }
 

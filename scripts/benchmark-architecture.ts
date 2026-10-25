@@ -72,6 +72,7 @@ await writeFile(path.join(output, 'report.json'), JSON.stringify({
   reviewReadiness: {
     status: blockedReviewCases.length ? 'blocked' : 'awaiting-human-review',
     blockedCases: blockedReviewCases.map((result) => result.id),
+    blockersByCase: Object.fromEntries(blockedReviewCases.map((result) => [result.id, result.visualPlan.review.blockers])),
     note: 'Eligibility for visual review is not human approval or delivery certification.',
   },
   results,
@@ -120,5 +121,6 @@ if (results.some(({ metrics }) => metrics.nodeOverlaps || metrics.edgeNodeInters
 }
 if (requireReviewReady && blockedReviewCases.length) {
   process.exitCode = 1
-  console.error('Architecture visual-review gate failed: unresolved diagram geometry prevents meaningful visual review. Do not waive defects by hiding detail or lowering thresholds.')
+  console.error('Architecture visual-review gate failed:', blockedReviewCases
+    .map((item) => `${item.id}: ${item.visualPlan.review.blockers.join(', ')}`).join('; '))
 }

@@ -9,8 +9,11 @@ import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mc
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import type { OpenAIUiToolMetadata } from '@openai/mcp-extensions/server'
 import { z } from 'zod/v4'
-import { beautifyArchitectureScene, routeArchitectureEdges } from './architectureDesign.js'
+import { beautifyArchitectureScene, inferArchitectureComposition, routeArchitectureEdges } from './architectureDesign.js'
 import { composeArchitectureGraph } from './architectureComposer.js'
+import { assessArchitecturePresentation } from './architecturePresentationQuality.js'
+import { assessArchitectureRouteDiagnostics } from './architectureRouteDiagnostics.js'
+import { planArchitectureVisual } from './architectureVisualPlan.js'
 import { architectureDesignSkill, isArchitectureIntent } from './architectureSkill.js'
 import { searchArchitectureNodeTemplates } from './architectureNodeTemplates.js'
 import { assessCanvasVisualQuality } from './canvasQuality.js'
@@ -910,7 +913,7 @@ server.registerTool('diagram.composeArchitecture', {
     : 'basic geometry checks passed'
   const visualReviewStatus = composed.visualPlan.review.readyForVisualReview
     ? 'eligible for human visual review, NOT visually approved'
-    : `BLOCKED from visual review (${composed.visualPlan.review.concerns.join(', ') || 'unresolved geometry'}); editable draft only, NOT a finished layout`
+    : `BLOCKED from visual review (${composed.visualPlan.review.blockers.join(', ')}); editable draft only, NOT a finished layout`
   return {
     content: [{ type: 'text', text: `Created architecture ${diagram.path} with ${nodes.length} semantic nodes, ${relations.length} evidence-backed relations and ${composed.summary.composition} composition. Geometry: ${geometryStatus}. Visual review: ${visualReviewStatus}.` }],
     structuredContent: {
@@ -1043,12 +1046,22 @@ server.registerTool('diagram.inspectQuality', {
   const inspectedSource = source ?? diagram.source
 
   if (diagram.type === 'canvas') {
-    const quality = assessCanvasVisualQuality(parseCanvasScene(inspectedSource))
+    const scene = parseCanvasScene(inspectedSource)
+    const quality = assessCanvasVisualQuality(scene)
+    const presentation = scene.workbench === 'architecture' ? assessArchitecturePresentation(scene) : undefined
+    const routeDiagnostics = scene.workbench === 'architecture' ? assessArchitectureRouteDiagnostics(scene) : undefined
+    const visualPlan = presentation && routeDiagnostics
+      ? planArchitectureVisual(scene, inferArchitectureComposition(scene), quality, presentation, routeDiagnostics)
+      : undefined
+    const blocked = visualPlan?.review.blockers.length
     return {
-      content: [{ type: 'text', text: quality.needsRevision
-        ? `Quality review found ${quality.issues.length} Canvas issue(s) in ${diagram.path}. Fix only the reported issues, then inspect once more.`
-        : `Quality review passed for ${diagram.path}.` }],
-      structuredContent: { kind: 'diagram-quality', workspacePath: store.workspacePath, path: diagram.path, type: diagram.type, candidate: Boolean(source), ...quality },
+      content: [{ type: 'text', text: blocked
+        ? `Architecture review blocked for ${diagram.path}: ${visualPlan!.review.blockers.join(', ')}. Editable draft only, not visually approved.`
+        : quality.needsRevision
+          ? `Quality review found ${quality.issues.length} Canvas issue(s) in ${diagram.path}. Fix only the reported issues, then inspect once more.`
+          : `Basic geometry passed for ${diagram.path}; this is not visual approval.` }],
+      structuredContent: { kind: 'diagram-quality', workspacePath: store.workspacePath, path: diagram.path, type: diagram.type, candidate: Boolean(source), ...quality,
+        ...(visualPlan ? { presentation, routeDiagnostics, visualPlan } : {}) },
     }
   }
 

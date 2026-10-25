@@ -55,9 +55,20 @@ jobs:
           pnpm typecheck
           pnpm test
           pnpm benchmark:architecture
+          pnpm benchmark:architecture:review
+          pnpm benchmark:architecture:acceptance
           pnpm build
           pnpm smoke
           pnpm check:hosts
+      - name: 保存未通过的架构质量证据
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: architecture-quality-blockers-${{ github.run_number }}
+          path: |
+            test-results/architecture-benchmark-extended/
+            test-results/architecture-benchmark-project/
+          if-no-files-found: ignore
       - name: 打包
         working-directory: package
         run: |

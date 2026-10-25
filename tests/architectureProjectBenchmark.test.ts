@@ -58,11 +58,11 @@ test('真实依赖密集图不能因不穿节点就获得错误的自动审查�
     'saturated-score recovery remains deterministic across repeated generations')
   assert.ok(composed.evaluation.rawSelectionScore >= composed.evaluation.structuralScore,
     'successful dense-corridor negotiation must not rely on hiding a negative raw score')
-  // The source topology changes with the repository. Improving its routing
-  // should make this test pass, not force a permanent failing benchmark.
-  if (q.edgeCrossings >= 3) {
+  // Readability is a geometry gate, not an absence-of-node-intersection gate.
+  // The genuine source graph currently remains too crowded for approval.
+  if (q.edgeCrossings >= 3 || q.edgeOverlaps * 2 >= q.arrows) {
     assert.equal(composed.visualPlan.review.readyForVisualReview, false)
-    assert.ok(composed.visualPlan.review.concerns.includes('crossing-relationships'))
+    assert.ok(composed.visualPlan.review.blockers.length > 0)
   }
   const ids = new Set(composed.scene.elements.filter((element) => element.type === 'arrow').map((arrow) => arrow.id))
   if (q.edgeCrossings > 0) {

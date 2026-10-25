@@ -106,6 +106,22 @@ function evaluateArchitectureLayout(scene: CanvasScene, quality: CanvasVisualQua
   return { structuralScore, rawSelectionScore, layout: composition, density, issueCount: quality.issues.length, aspectRatio: Math.round(ratio * 100) / 100, ...detours }
 }
 
+/** The only final-scene assessment contract for candidate adoption and
+ * published diagnostics. Never reuse measurements from intermediate routes. */
+function assessCompleteArchitectureScene(
+  scene: CanvasScene,
+  composition: ArchitectureComposition,
+  density: Exclude<CanvasArchitectureDensity, 'auto'>,
+  semanticComposition: ArchitectureComposition,
+) {
+  const quality = assessCanvasVisualQuality(scene)
+  const evaluation = evaluateArchitectureLayout(scene, quality, composition, density)
+  const routeDiagnostics = assessArchitectureRouteDiagnostics(scene)
+  const presentation = assessArchitecturePresentation(scene)
+  const visualPlan = planArchitectureVisual(scene, semanticComposition, quality, presentation, routeDiagnostics)
+  return { quality, evaluation, routeDiagnostics, presentation, visualPlan }
+}
+
 /** Only reroute implicated edges, and accept strictly improving results; never move authored nodes. */
 function refineArchitectureRoutes(
   initialScene: CanvasScene,
@@ -382,11 +398,8 @@ function composeArchitectureGraphCandidate(
   const finalScene: CanvasScene = annotateSourceFanoutTrunks(titleScale > 1
     ? { ...repaired.scene, architecture: { ...repaired.scene.architecture!, titleScale } }
     : repaired.scene)
-  const finalQuality = assessCanvasVisualQuality(finalScene)
-  const finalEvaluation = evaluateArchitectureLayout(finalScene, finalQuality, selected.summary.composition, selected.summary.resolvedDensity)
-  const presentation = assessArchitecturePresentation(finalScene)
-  const routeDiagnostics = assessArchitectureRouteDiagnostics(finalScene)
-  const visualPlan = planArchitectureVisual(finalScene, inferred, finalQuality, presentation, routeDiagnostics)
+  const { quality: finalQuality, evaluation: finalEvaluation, presentation, routeDiagnostics, visualPlan } =
+    assessCompleteArchitectureScene(finalScene, selected.summary.composition, selected.summary.resolvedDensity, inferred)
   // Prefer the existing non-destructive overview projection for genuinely
   // crowded diagrams. Detail stays fully available, no edges are deleted.
   const publishedScene = visualPlan.recommendedView === 'overview'
@@ -697,15 +710,11 @@ function negotiateDenseCorridors(result: ReturnType<typeof composeArchitectureGr
   }
   if (!changes) return result
   scene = annotateSourceFanoutTrunks(scene)
-  quality = assessCanvasVisualQuality(scene)
-  evaluation = evaluateArchitectureLayout(scene, quality, evaluation.layout, evaluation.density)
-  const routeDiagnostics = assessArchitectureRouteDiagnostics(scene)
-  const presentation = assessArchitecturePresentation(scene)
+  const assessed = assessCompleteArchitectureScene(scene, evaluation.layout, evaluation.density, result.semanticComposition)
   return {
-    ...result, scene, quality, evaluation, routeDiagnostics, presentation,
-    visualPlan: planArchitectureVisual(scene, result.semanticComposition, quality, presentation, routeDiagnostics),
+    ...result, scene, ...assessed,
     candidates: result.candidates.map((item) =>
-      item.layout === evaluation.layout && item.density === evaluation.density ? evaluation : item),
+      item.layout === assessed.evaluation.layout && item.density === assessed.evaluation.density ? assessed.evaluation : item),
     reroutedEdges: result.reroutedEdges + changes,
   }
 }
@@ -981,13 +990,9 @@ function repairPartitionCorridors(result: ReturnType<typeof composeArchitectureG
   }
   if (!changes) return result
   scene = annotateSourceFanoutTrunks(scene)
-  quality = assessCanvasVisualQuality(scene)
-  const diagnostics = assessArchitectureRouteDiagnostics(scene)
-  const presentation = assessArchitecturePresentation(scene)
-  const evaluation = evaluateArchitectureLayout(scene, quality, result.evaluation.layout, result.evaluation.density)
+  const assessed = assessCompleteArchitectureScene(scene, result.evaluation.layout, result.evaluation.density, result.semanticComposition)
   return {
-    ...result, scene, quality, evaluation, routeDiagnostics: diagnostics, presentation,
-    visualPlan: planArchitectureVisual(scene, result.semanticComposition, quality, presentation, diagnostics),
+    ...result, scene, ...assessed,
     reroutedEdges: result.reroutedEdges + changes,
   }
 }

@@ -1,111 +1,23 @@
-# 开发与发布
+# 开发、质量验收与发布
 
-面向维护者的开发、测试、构建与发布说明。用户安装和使用请看 [README](../README.md)。
+本文件记录当前可执行的开发流程。长期不变量和最终架构见 [AGENTS.md](../AGENTS.md)；历史实验的具体取舍可从 Git 提交查看，不再在本文逐轮堆积算法补丁说明。
 
-仓库级技术路线、禁止的布局反模式与质量分层见 [AGENTS.md](../AGENTS.md)。任何新布局修复都要先验证联合布局/布线根因，不能仅通过增加更多局部启发式规则来提高单一样例的评分。
+## 架构与输出
 
-P2 分区与走廊冲突复核（2026-10-25）：在扩展 20 例中，`microservices-reversed`、`microservices-fanout`、`deployment-fanout` 均以**无关分区框大面积相交**阻断视觉审查，分别为 287096、244276、310828px²；三者当前均为零线路交叉和零穿节点。因此局部箭头优化已经不是主要阻断原因。根因之一位于布局阶段：compact 的常规列步长为 188px，节点最大宽 170px，实际列间距 18px，却使用 24px 节点避让阈值；逐节点冲突规避会让同一组晚处理节点连续下移并侵入下游分区。简单将列距放宽至 194px，或将避让阈值统一减至 18px，虽然让这批图的分区相交面积归零，却使其他图出现新的交叉/独立边重叠，`microservices-fanout` 甚至产生 3 条穿节点关系。**两次试验均已撤销**，不能仅用分区面积评分替换实际整图质量。已有备用 `alignedSpacing` 构图也有同类缺陷；后续需要让分区整体矩形排布、节点坐标与所有真实关系同时成为候选约束，而不是全局调小阈值。
+- 语义入口：`diagram.composeArchitecture` 接收实际存在的节点、关系、证据和可选经确认的主路径、功能分区；`ArchitectureIntentGraph` 是权威输入。
+- 构图：`architectureComposer.ts` 协调完整候选；`architectureDesign.ts` 负责场景/节点/分区；`architectureRouting.ts` 与 `architectureOrthogonalSolver.ts` 负责端口、线段和可见通道；`architectureRouteRepair.ts` 仅提出局部几何候选。
+- 质量：`canvasQuality.ts`、`architectureRouteDiagnostics.ts`、`architecturePresentationQuality.ts` 和 `architectureVisualPlan.ts` 检查**最终** Canvas。`visualPlan.review.blockers` 是机器审查阻断的唯一输出，不得以未阻断的几何指标代替交付批准。
+- 编辑与持久化：Canvas 使用 `.diagram.json`，Mermaid 使用 `.mmd` / `.mermaid`；`CanvasEditor.tsx` 与 `canvas.ts` 共用节点、箭头与端口语义。保存/重开、revision 冲突、提案审批、文件原子写入和人工作图不得被自动重排破坏。
+- 宿主：`src/hosts/`、`integrations/deepseek/` 与打包层隔离 Codex、DSH Desktop/Web 差异，复用同一图表领域代码和画板。
 
-P2 分区先行的**完整受约束候选**（2026-10-25）：`architectureDesign.ts` 的 opt-in `partitionFirst` 在分区内完成初始节点排列之后，按每个组内**真实节点尺寸**构建与 `canvasGroupFrames` 一致的组框包围盒，整组平移后预留至少 8px 的同级间隙，再通过原有 `routeArchitectureEdges` / Composer 路由优化重算全部箭头。人工锁定节点和非自动分区继续走原路径；新增算法不是新的持久化协议或替代路由器。Composer 只在存在大面积组框冲突、节点量有界、轻中度独立线路重叠且未指定真实主路径时尝试；只采用消除审查阻断、减少独立边重叠、未引入任何交叉/穿节点/标签缺陷或字号退化，且 `structuralScore - architecturePresentationSelectionPenalty` 较旧结果严格改善的完整候选。之所以使用现有展示惩罚而不是仅比较原始结构分，是因为原始结构分**不评价无关分区包围框相交**；不更改现有 `readyForVisualReview` 的判断标准。部署高扇出场景由 310828px² 框重叠→0，独立关系重叠 3→2，线路总长 9135→7393px，字号仍 12px，交叉和穿节点均为 0，自动审查资格由阻断转为可以进入**人工审查**；结构分 82.3→77.0 必须保留供后续质量审计。其余微服务反向/扇出场景仍阻断，尚未解决，尤其不能把微服务高扇出替代候选新增的穿节点关系忽略掉。
-
-P2 分区与真实线路的受限质量取舍（2026-10-25）：尝试反转路由顺序、依赖排序、调节布局间距、整体平移分区与局部端口枚举，均未为 `microservices-reversed` 找到同时具备 0 分区重叠、0 独立线路重叠和 0 交叉的完整候选。尝试把已占用线路附近的平行空闲通道加入正交求解器，反而导致微服务和部署样例新增线路交叉/重叠，实验**已撤销**。保留单一路由引擎，调整 Composer 现有完整候选采纳策略：只有**旧场景因大面积分区相交被审查阻断**、新候选通过原有 `readyForVisualReview`、不新增交叉/穿节点/文字缺陷且不降低适配字号时，才可使用最多增加两处、绝对不超过两处独立关系重叠的受限取舍；新结构分下降不得超过 6，仍需用现有的 `structuralScore - architecturePresentationSelectionPenalty` 综合评分检验真实净收益。原本已可进入审查的图不得用此方式换分。微服务反向样例的包围框重叠 287096→0px²，线长 6349→5280px，适配字号 11.2→12.5px，原有 0 交叉/0 穿节点不变，但独立线路重叠 **0→2（真实退步，必须记录）**，结构分 **90→84.3**；它仅由“自动审查阻断”变为“允许进入人工审查”，不是成品视觉批准，剩余两处重叠必须继续治理。高扇出微服务仍未解除阻断，不能以降低门禁或隐藏真实关系强行交付。
-
-P2 高扇出联合正交搜索（2026-10-25）：对现有 `partitionFirst` **先尝试默认求解器**，只有其完整候选仍出现穿节点时才再次评估同语义、同分区布局，使用 `architectureOrthogonalSolver.ts` 内同一求解器的可见通道后备路径：从真实障碍物矩形边界和起止端口构造有界正交网格，基于距离、拐角、已占用线路代价做方向感知最短路径，最多 14000 个格点，保持源/目标端口法向。默认图不启用，避免破坏原先健康共享主干；`architectureComposer.ts` 再针对完整场景的交叉热点进行最多 4 轮有界几何候选搜索、对独立重叠进行最多 10 轮真实单边局部重路由，并在最后依据实际路径重新标注可证实的共享前缀。所有候选均使用现有的画布质量、跨区诊断和可读性检查；不修改 `readyForVisualReview` 门槛，也不持久化运行时开关。
-
-P2 Chrome 视觉复核与纯路由性能收敛（2026-10-25）：执行 `pnpm benchmark:architecture:design --screenshots --extended`，在本机 Chrome/Chromium 渲染 6 个虚构参考及压力案例，并检查生成的 `test-results/architecture-design-review/`。微服务高扇出仍有长距离右侧外围折返、局部线路密集与共享主干减少的问题，**尚未经过人工视觉批准**；分区虚线框在整体缩放后偏浅，于是同步增强 `canvasSceneToSvg` 展开分区框描边（非系统边框透明度 0.78→0.92、最小宽度 1.35→1.65）和编辑器展开分区边框对比度；折叠摘要、语义关系、节点位置不变。重新生成 Chrome 截图后核对了边界可辨认性，未借此声称外围折返已解决。
-
-P2 高扇出外围连接段收敛（2026-10-25）：在既有分区优先完整候选通过穿节点与交叉修复后，对少量**非共享、明显绕行**的关系复用已存在的 `routeArchitectureArrowIds(..., nodePorts=true)` 精确端口能力；每次仅比较当前场景的真实 Canvas 线路，只有整图线路总长至少减少 12px、节点/标签/交叉/独立重叠不增加，且分区框重叠与非归属分区穿越均不恶化时才保留。没有新路由引擎、持久化字段或特定样例 ID 逻辑。基于当前 `main` 的新基线做扩展 20 例对照，只有合成 `microservices-fanout` 的 JSON/SVG 发生变化：总线路 **8027→7928px**、结构分 **73.2→74.9**，0 交叉、0 穿节点、6 处独立线路重叠、1 条真实共享主干、12px 字号不变，余下 19 组输出逐字节一致。Chrome 截图可见连接段略短，但右侧外围绕行仍然明显；该方案只是有界局部收益，不能替代后续分区内核心节点位置和多关系主干的联合规划。
-
-P2 核心节点布局方向复核（2026-10-25）：架构领域链路与编辑合同已经分层，但近几次端口、单边修复的优化不足以解决整图阅读质量。尝试了“高连接度应用节点优先按度数排序占用中心槽位”及“只与中心节点交换一次位置”两种完整分区候选，并重新执行包含可见性路由与联合修复的真实生成流程。两种候选都从本已可人工审查的 `microservices-fanout` 退回到旧布局（分区框冲突 244276px²）；单次中央交换得到的未采纳候选虽然组框冲突清零，却有 10 处独立重叠、2 处交叉，结构评分约 51.7。**已撤销所有中心置换试验**，不把连接度等同于正确几何位置；下一阶段以分区占用、全部真实关系、主干和阅读路径为共同目标重新设计布局候选。
-
-为防止“自动可审查＝专业视觉完成”的误判，在现有权威 `architectureRouteDiagnostics.ts` 中增加不修改场景的外围绕行诊断：同一分区内关系线路比实际端口间曼哈顿距离额外增加至少 80px，且路径超出两端节点包围范围至少 36px 时，记录真实关系 ID、绕行额外长度及包围盒外偏移；`architectureVisualPlan.ts` 将最多两条严重案例列为人工修复目标，不修改自动审查资格或既有结构分。高扇出微服务图识别出三条真实关系，其中 `__relation-4` 额外长度约 419px，`__relation-18` / `__relation-6` 各约 116px。门禁仍需保证 Canvas、SVG、结构/路由质量不被诊断变动更改；这些指标是后续真正的节点-走廊联合规划的证据，而不是已修好的线。
-
-P4 真实源码导入依赖基准启动（2026-10-25）：此前所有 20 例都属于参考/合成拓扑，容易对有限场景过拟合。本轮尝试对 `microservices-fanout` 中 3 个外围绕行关系的真实端点与应用区同伴做 32 次节点交换 + 完整路由，**没有一个候选**同时维持零交叉、零穿节点、独立重叠不增加和真实共享主干不减少，已全部撤销；把正交线路占用重叠代价从 4 试降到 2/1 或升到 6，也未带来净收益，已撤销。不要再单凭连接度/节点交换或全局线路评分系数宣称根因解决。
-
-新增 `scripts/architecture-project-cases.ts` 用 TS AST 读取 **Diagram Plugin 自身 12 个核心模块**的真实源码 `import`，为每个节点保留 `sourcePaths`，只在选定模块之间生成真实有向依赖关系；显式说明包含类型导入、不含运行时动态依赖、仅为**选定子图**。运行 `pnpm benchmark:architecture:project` 生成 `test-results/architecture-benchmark-project/{report.json,index.html,*.diagram.json,*.svg}`，也可用 `pnpm benchmark:architecture:project:visual` 生成 `test-results/architecture-design-project/` 的 Chrome 截图和未勾选人工验收清单；该命令遇阻断会**按约定非零退出**，不能当成截图失败。当前实际导入子图有 **12 节点、26 直接导入关系，7 处交叉、23 处独立线路重叠、0 穿节点，结构评分 0/90**；Chrome 里多个边缘大回绕及箭头穿插严重，尚不适于正式汇报。这揭示了原来审查资格只阻断穿节点/大面积分区重叠、对严重线路交叉过于宽松的漏洞。
-
-`architectureVisualPlan.ts` 现将具体交叉关系 ID 加入 `crossing-relationships` 审查目标，**3 处及以上交叉**的密集图不得标成可进入人工视觉审查；轻微交叉（例如原 20 例中的 1 处）仍可审查，但保留问题提示。这是收紧客观门禁，不修改 Canvas、语义关系、几何布局，也不把人工审美混成自动评分。下一步需要以这个真实失败用例作为**分区/节点次序/共享通道联合解**的工程验收，而不是继续为原 20 个样例堆局部修补。
-
-P2 严重拥塞时的未裁剪候选排序（2026-10-25）：真实导入依赖图的 7 处交叉与 23 处重叠等惩罚使不同布局候选的展示型 `structuralScore` 都饱和为 **0**，原路由修复只能比较问题条数，失去分辨实际结构改善的能力。将现有**完全相同**的几何、层次和文字惩罚结果保留为 `rawSelectionScore`（可为负数），继续提供 0–90 范围的 `structuralScore`；仅在原结果分数为 0、至少 3 处真实交叉、10–24 个节点、单分区、未锁定且密度足够时，对额外完整候选采用未截断分数。选中仍需保证交叉至少减少 2、独立重叠至多增加 2、节点/标签/分区/字体不退化、线长不超过原来的 110%，并保持全部真实节点和关系。真实源码图的独立交叉 **7→4**，线路重叠 **23→25**，穿节点 **0→0**，适配字号保持 **12.5px**，结构展示分仍为 **0/90**，因此**继续阻断人工审查**。原有 20 组合成与参考案例在从当前 `main` 重建基线后，所有结构指标、可编辑 Canvas JSON 和 SVG 均逐字节一致。全局启用未截断选分曾让正常高扇出图新增交叉并被阻断，已撤销；单纯依赖拓扑深度、节点度数重排则增加了大规模独立边重叠，未采纳。隔离 ELK 原生纵横布局实验虽可减少交叉和独立重叠，但最好的组合适配字号仅约 10.1px，低于 11px 质量线，**不打进发行包，也不替换当前引擎**。后续需要真正联合决定拥挤拓扑的节点、层次与共享通道，不再只调惩罚系数。
-
-P2 高密度独立线路占用协商（2026-10-25）：在上面已经触发的严重要素候选上，沿用 `routeArchitectureArrowIds` 已有的增量布线与精确比例端口，最多 4 轮从真实 `edge-crossing` / `edge-overlap` 关系中选 14 条做单边通道释放与重新占用；对完整 Canvas 质量、已有未裁剪评分、分区诊断、线长预算、标签与实际共享前缀进行逐次验收，不移动节点、不修改真实关系或生成新持久化协议。此前试验一次做了近 400 个候选，虽把源图降至 3 处交叉、20 处重叠，却损失一条真正的共享主干，**未采用**；收紧到保持两条真实主干、4 轮/14 条/两类原有端口模式后，真实源码 12 节点/26 边的交叉 **4→3**、独立重叠 **25→21**，穿节点仍为 0，总线长约 **13870→14241px**，适配字号仍 12.5px，展示结构分由 0 提升至约 12.5。相对该任务开始时实际源码基线是交叉 **7→3**、重叠 **23→21**。对原有 20 例的最新扩展基准，结构指标与所有可编辑 JSON/SVG 均逐文件一致。Chrome 截图仍明显线缆密集，真实场景**仍被自动审查阻断且未完成人工视觉验收**；不要把本次通道协商视为最终全局布局引擎。将精确端口候选直接塞入原先所有候选细化阶段的实验反而得到 4 处交叉/25 处重叠并损失主干，故撤回，避免把重排决策分散到各阶段。
-
-P0/P4 真实像素视觉评分闭环（2026-10-25，参考 `codex-ppt` 的 `visualSnapshot`/视觉 Fingerprint/独立像素审查机制，但不直接复制 PPT 视觉权重）：现在明确三种相互独立的状态：① `canvasQuality` / `readyForVisualReview` 是确定性的结构与几何门禁；② 仅在真实 Chrome 截图存在且证据完全匹配时，才有可信的 **六维感知评价**（主次阅读路径 20、依赖可追踪 25、文字可读性 20、留白对齐 15、分区边界 10、视觉一致性 10，总和 100）；③ 最终交付必须获得一位真实人工评审的明确批准，模型评分即便 100 分也不能代替。评分来自六项 0–5 分且逐项有实际观察依据，不从启发式结构分自动换算；无人审查用 **null/unreviewed**，避免虚假的 0/100。
-
-工作流：
-```bash
-pnpm benchmark:architecture:design --screenshots --extended
-pnpm benchmark:architecture:project:visual  # 严重几何缺陷会如实返回非零码，但截图/manifest 已产生
-pnpm benchmark:architecture:visual:blind --provider=dsh --manifest=test-results/architecture-design-project/manifest.json --case=diagram-plugin-source-imports
-pnpm benchmark:architecture:visual:score --manifest=test-results/architecture-design-project/manifest.json --review=test-results/architecture-design-project/diagram-plugin-source-imports.model-review.json --require-reviewed
-# 真实人工审核：将对应 review-draft.json 中所有评分、观察、reviewer、approval 填好；模型审核的 approval 必须是 pending。
-pnpm benchmark:architecture:visual:score --manifest=test-results/architecture-design-project/manifest.json --review=<人工评分JSON> --require-human-approval
-# 可选基线比较：--baseline=<之前已验证的visual-scores.json> --fail-on-regression；同一场景下降至少5分阻断
-```
-
-每个 manifest case 的 `evidence` 包含实际截图 / Canvas / SVG 内容 SHA-256，修改后必须重新截图并重审；手工编辑过的 `review-draft.json` 不会被下一次捕获覆盖，过期指纹也不会误认可复用。默认 DSH 评审只在临时隔离目录放置匿名 PNG，强制一次 `read_image` 成功事件和匹配图像 MIME/尺寸、唯一 JSON 终结事件、六维评分与哈希校验；`--provider=codex` 才使用 Codex CLI。旧的 Codex 单次结果 38/100 是旧截图的历史证据，不能与本轮 DSH 一次结果直接作为 A/B 提升比较。该模型评价不是盲测 A/B 的一致性证明，更不是人工验收；工具现阶段不会让 UI 自动发布。
-评分命令同时输出 `visual-scores.json`（供基线比较）和 `visual-scores.md`（含截图、六维依据、真实问题与门禁状态），放在同一次验收目录中。对未评分场景分数为 `null`，模型独立评分不会置为人工批准；需要交付时显式使用 `--require-human-approval` 阻断未批准或几何未合格的案例。
-
-P2 真实像素发现的架构模块名溢出整改（2026-10-25）：在真实源码 12 节点、26 条导入关系截图中，普通无技术图标的架构节点统一只有 188×80，SVG 导出和编辑器以前均默认一行 15px 标题。Chrome 对输出 SVG 的实际 `getBBox()` 测量显示 **12 个节点标题中 8 个越过卡片左右安全边距**；但旧结构/几何评分没有识别出来。新增共享纯函数 `canvasArchitecturePlainTitleLines`，根据节点真实内宽、字体与最多三行的 80px 高度预算，优先在 camelCase 的完整词语边界断行；SVG 导出与编辑器直接复用，不改变任何持久化原文、节点大小、关系方向/折点、主题字号，也不影响普通自由画布。真实 Chrome 复测：**8 个越界标题→0**，实际渲染文字行数 12→23；相同 Canvas JSON 逐字节一致，交叉/独立重叠依然是 **3/21**。同一独立像素评审流程在两份截图上分别得到 **38→40/100**，文字可读性 2→2.5/5，但只有单次评审，没有盲审统计显著性，不把总分变化当成证实的专业交付改善。仍须解决高密度线路和真实绘制阅读顺序；对超过三行容量的极端长标题，后续应由布局约束扩充几何而不是在渲染阶段无限增加行数。
-
-新增真实浏览器像素检查入口：`pnpm benchmark:architecture:title-pixels --dir=test-results/architecture-design-project --fail-on-overflow`，读取当前的可编辑 JSON 与 SVG，借助 Chrome 字体真实 `getBBox()` 验证**没有图标的 15px 架构节点标题**是否超出卡片内 5px 安全边距；输出 `title-pixel-bounds.json`，越界时严格退出非零，不调用视觉模型，也不修改布局。原项目真实 A/B 的检测结果是 12 条单行中 8 条越界→23 条多行中 0 条越界。该测量是明确范围内的物理像素证据，并非全部架构卡片、任意字体、箭头遮挡或人工美感的完备检查。
-
-P2 密集关系交互聚焦（2026-10-25）：源图继续存在 3 处真实交叉、21 处独立线路重叠，且上一轮单次像素评价中的依赖可追踪性只有 1/5。尝试了从真实交叉/重叠关系出发的 **192 次双边重路由**，均未满足严格的零穿节点、总线保留及冲突单调改善条件；完整删除该实验，不新增路由循环。另试验纯渲染正交跨线桥，真实 Chrome 原图与实验分别得到单次模型评分 **42/100 和 40/100**，未能证明视觉净收益，已彻底撤销跨线桥源码而不是上线占用渲染层的特例。
-
-新增 `canvasRelationshipFocus.ts` 负责确定单一准确的关系源、目标，`CanvasEditor.tsx` 只在架构选择工具下支持鼠标悬停和单关系选中：准确强调所选线路/两端节点、其余关系临时弱化（非隐藏、可继续点击）、展示“源→目标”短提示；鼠标离开后恢复，选中保持，已有语义追踪模式拥有更高优先级。不修改 `CanvasScene`、关系与分组、人工布局、Canvas JSON、静态 SVG，也不声称完整架构图视觉已经通过。运行 `pnpm benchmark:architecture:relation-lens` 执行 **真正 Chrome/React DOM + PointerEvent 的集成验收**：已核对 source/target 高亮、非目标线 computedStyle opacity **0.16**、浮动提示文本、离开恢复与点击后持续聚焦，且旧的 `pnpm benchmark:architecture:review` / 主机测试仍作为不可退化的基础。此入口不使用模型，无额外推理费用，静态复杂图剩余重叠还须另行设计联合布局或多视图。
-
-P2 节点槽位与共享主干联合优化（2026-10-25）：在真实源码 12 节点 / 26 关系的密集候选上，先证伪“仅换位后全图重布线”：66 组交换没有净收益，并且每次重新布线都失去原有 2 条合法共享主干；改为受影响边的增量重布线，最优候选交叉 2、重叠 17，但仍失去 1 条主干。根因是移动的**目标节点**使单条关系改用新的锚点，未继承原来源端实际公共前缀。将一次基于原始确证共享前缀、未移动的源节点和另一条仍然使用此前缀的关系进行局部恢复，交给现有正交求解器选择从分叉处到**新目标节点**的路线。模块职责：`architectureRouting.ts` 只提议路由几何，`architectureComposer.ts` 仅在严重拥塞的单分区完整候选上，枚举最多 14 个同尺寸未锁定节点的换位并通过**完整场景**评估比较；不添加布局 SPI、不改变语义、方向、Canvas 协议和通用路由器。真实代码图最终交叉 **3→2**、独立重叠 **21→16**、穿节点仍 **0**、合法共享主干维持 **2**、总线长 **14,241→13,581px**、字号保持 **12.5px**。原 20 组合成/参考场景的几何报告、Canvas JSON 与 SVG 在相同输入下全部一致。原先 ≥3 交叉触发的结构审查阻断已解除，当前 **仅具备人工审查资格，尚未获得人工视觉批准**；不可把几何资格提升称为完成视觉验收。实验经验：没有同时考虑原有真实主干的节点交换会恶化拓扑表达，即使初步减少交叉也不应采用。
-
-性能：对 `microservices-fanout` 分阶段计时，原有选择约 10s、普通分区候选约 3s、可见路径完整候选约 6.2s、联合修复约 2.5s（仅一次环境样本）。尝试跳过第二次完整候选布局、直接用第一次分区位置全量重路由，约降至 13.2s，但退回不能接受的分区冲突布局，因此**撤销**。最终只在纯正交可见性 Dijkstra 单次搜索内复用同一相邻网格边的障碍测试和已占用线路代价，方向/拐角惩罚仍逐状态计算；不增加跨请求或跨场景缓存。重建当前 `main` 而非使用陈旧报告后，同机 20 例耗时一次测量约 **59.7s→58.0s**；20/20 的自动几何诊断、审查资格、可编辑 Canvas JSON 完全一致，20 份 SVG 仅因预期边框样式变化。该幅度不能证明稳定 P95 提升。
-
-扩展 20 例中，`microservices-fanout` 分区框重叠 **244276→0px²**，交叉/穿节点均 **0→0**，独立线路重叠 **5→6**，总线长 **9116→8027px**，字号 **12→12px**，结构评分 **74.1→73.2**。旧版 5 条可识别真实共享主干重新排布后剩 1 条（并非伪造或隐藏关系；节点 19、关系 18 均保留），这是待人工视觉审查的**明确代价**；回归校验必须逐条验证剩余 Bundle 的真实共有前缀，不能通过抑制告警来“提升”指标。其余默认架构生成保持原逻辑，`microservices-reversed` 仍沿用此前较大的 12.5px 字号及两处已声明的独立线路重叠。20 个合成案例的自动审查资格全部满足，但**尚未完成浏览器像素级和人眼交付验收**；本次不能据此宣称图表品质已达到满分。优化后的局部搜索存在额外 CPU 成本，需在后续阶段继续收敛候选预算而不能牺牲严格质量门禁。
-
-为减少后续联合候选搜索成本，`refineArchitectureRoutes` 现在根据完整关系对象去重**同一轮、同一 ID** 的已生成单边候选，并跳过与当前关系对象完全相同的候选，不减少任何真实不同的正交路径，也不缓存整图质量。扩展 20 例原始指标与报告字段逐项一致，20 份可编辑 Canvas JSON 及 20 份 SVG 逐字节一致；同机一次耗时合计约 45.3 秒→44.4 秒（仅一次样本、提升较小，不代表稳定 P95）。该改动不解除上述 3 个视觉阻断场景，也未进行人工视觉批准。
-
-## 项目结构
-
-```text
-src/                图表服务、React 编辑器与共享领域逻辑
-  hosts/            Codex / DeepSeek 宿主适配层
-  diagramSkills/    19 种 Mermaid 图表的生成与修改规则
-  canvasPlayback.ts Canvas 绘制回放的纯计划算法
-  ReviewPanels.tsx  候选修改、历史、Git 影响审查面板
-  reviewTypes.ts    审查面板与主工作台共享的结果类型
-integrations/deepseek/  DeepSeek 插件入口、客户端与 locale
-manifest/           Codex 插件清单与 MCP 配置
-scripts/            构建、安装、冒烟与视觉回归脚本
-tests/              单元测试、宿主集成测试与视觉基线
-docs/               维护者文档与 README 截图
-```
-
-核心约定：
-
-- 模型与图表面板共享同一个图表服务实例，面板不复制编辑器、存储或 Proposal 实现。
-- 画布回放计划独立于 React 编辑器，可单独测试；审查面板从主工作台拆分，仍共享原有状态和请求。
-- 大画布的连线标签避让和节点重叠检测采用临时矩形空间索引，避免每个候选位置扫描所有图元；布局结果与原有精确矩形相交判断一致，不持久化索引。
-- Canvas 语义投影以离散 LOD 等级而非连续缩放值作为重新计算条件；同一等级内的平移和缩放不会重复执行语义投影。
-- 不需要视口裁剪的静态画布只在图形、语义等级或选中关系变化时更新标签布局；折叠关系和捆绑线在几何变化时更新。拖动中的临时图形和已裁剪大图仍计算实时布局。
-- 大画布视口裁剪复用静态投影的节点、关系与折叠映射，超大画布（超过 6000 个可绘制节点）才使用空间索引查询，其余继续线性过滤；保留图层顺序及选中节点、连线端点。缩略图节点云路径不再随平移反复生成，拖动中的几何修改仍走实时裁剪。
-- 连线视口裁剪不仅保留端点可见的连线，还保留实际路径穿过视口、但两端节点都在视口外的连线，以及独立起止点连线。先排除包围盒远离视口的关系，再检查实际路径；不因优化性能而截断跨屏关系。
-- 视口裁剪只对两端都不可见的关系做路径相交检测；稳定投影中的节点查找表可复用，避免平移时对全部连线重复计算跨屏几何。选中节点不改变可见集合和选中关系时，复用已有关系标签避让布局，选择连线、编辑图形、拖动及改变视口可见集合会使其失效。
-- Canvas 节点的纯 SVG 图案、图标与文字由 `React.memo` 独立复用；选中状态、播放中的文字和几何变化使其按需更新，外层拖动、锚点与缩放手柄继续实时响应。此前 360 节点的 React Profiler 比较来自**开发构建**，不能据此判断生产环境 FPS。
-- 连线的可点击路径、描边和标题使用独立 `React.memo` SVG 子树；关系选中、标签拖动及端点编辑仍留在父级，避免更新视口时重新渲染不变的笔画。
-- Chrome 性能排查用 `pnpm perf:canvas`：自动启动独立无头 Chrome，**使用 React 生产模式**在 360 节点 / 512 连线图上往返缩放 12 次，汇总 JavaScript FunctionCall、SVG Layout 和 Paint 耗时；需要 DevTools 原始轨迹时用 `pnpm perf:canvas -- --trace /tmp/canvas-trace.json`。不使用虚拟时间，也不以 React 开发构建的 Profiler 数字推断发布版本 FPS。
-- 同一工具可用 `pnpm perf:canvas -- --nodes 3000 --drag` 验证真实浏览器指针拖动（16 次移动、最终提交）、SVG 图元规模和 JS 堆内存；也可指定 `--nodes 1200` 测量缩放。场景属于合成压力基准，绝不能把 JS 单任务耗时等同于整体 FPS。
-- `pnpm perf:canvas -- --nodes 3000 --detail --drag` 先放大至完整细节视图，再真实拖动验证：对于视窗裁剪且超过 1000 条关系的详细视图，拖动期间稳定复用未变化的关系标签布局；移动节点关联的自动标签跟随位移，结束拖动后恢复精确全量避让。LOD、视窗可见关系集或场景变化时不复用过期布局。
-- `pnpm perf:canvas -- --nodes 3000 --detail --select` 测量 16 次真实节点点击，验证至少 8 个不同节点被选中，且没有变化的连线标签布局未漂移；`--pan` 使用真实指针平移检查视口位置。基准使用与插件一致的 Tailwind 编译样式，否则节点选中后属性检查器可能遮挡测试画布，产生错误的性能数据。CSS 正常加载时，3000 节点详细视图的选择测试中 JavaScript 总耗时从约 906ms 降至 262ms（同机重复 A/B 测得），不等于整体帧率提升。
-- ≥3000 节点的画布在默认 100% 缩放优先使用现有语义概览，临时抽样至约 640 个节点；继续放大可进入完整紧凑/详细视图，选中元素会被强制保留，不修改原始文档。此策略避免在视觉上看不清内容时挂载数万 SVG 子元素。
-- SVG 连接锚点只在节点被选中、处于连接模式或被指定为连线起点时挂载；普通选择模式下未选中的节点不再生成不可见锚点。360 节点的相同测试场景中 SVG 子元素由 9913 降至 8113，保留连接模式下的悬停锚点，不以该数量下降直接推断帧率提升。
-- Mermaid 使用同一个渲染队列串行完成初始化与渲染，避免模板缩略图和编辑器预览互相覆盖全局配置。新建图表的模板缩略图只在进入可见区域时渲染，已卸载的请求在入队执行前跳过。
-- 面板在浏览器后台或被宿主隐藏时暂停会话跟随、图表发现和 revision 轮询；重新可见时恢复同步，正在进行的 AI 新图表监听不受影响。
-- Mermaid 直接读写 `.mmd` / `.mermaid`；Canvas 保存为 `.diagram.json`，两者共用保存、revision 与导出链路。
-- 服务端写入采用进程内队列、跨进程工作区锁与 revision 检查；锁位于系统临时目录，只保证同机同用户下的多宿主互斥。
-- 会话选择、未确认的 Proposal 等状态只在当前服务进程保留；超过 24 小时不访问或进程内活跃会话超过 512 个时进行惰性清理，不影响已经保存的图表文件。
+下一阶段是**统一约束下的节点/分区/端口/走廊联合布局**。任何替代方案必须与现有 Canonical Canvas 合同进行同语义、同尺寸、同渲染/导出、同完整指标 A/B；未证明改善就撤销试验代码，不继续叠加条件路由器。ELK 和 D2/TALA 保留独立实验，不因单项指标较好或 native SVG 可看就进入正式依赖；还必须检查许可证与几何回灌保真。
 
 ## 本地开发
 
+Node.js 22+、pnpm 11，构建与测试：
+
 ```sh
-pnpm install
+pnpm install --frozen-lockfile
 pnpm typecheck
 pnpm test
 pnpm build
@@ -113,247 +25,78 @@ pnpm smoke
 pnpm check:hosts
 ```
 
-- `pnpm build` 生成 `package/`，其中同时包含 Codex 的 `.codex-plugin/plugin.json`、`.mcp.json` 与 DeepSeek 的 npm 包入口。
-- `pnpm test` 运行领域逻辑单元测试；`pnpm check:hosts` 覆盖工作区越界拒绝、内部工具过滤、会话隔离、并发 revision 冲突与 Proposal 确认流程。
-- `pnpm smoke` 检查构建产物中的关键 UI 资源、MCP 标记、npm 元数据与 locale 文件。
+`pnpm build` 生成同时支持 Codex 与 DSH 的 `package/`。宿主测试基于真实 MCP stdio 子进程，覆盖身份/工作区边界、候选保存、revision 冲突和工具可见性；单元测试负责领域合同。类型检查、打包通过不是 Desktop 原生人工验收。
 
-## 视觉回归
-
-### 架构图统一视觉规范（P0）
-
-架构画布中的参与者、技术服务、数据库与外部组件都应有一致的卡片底板、图标与标题水平基线；技术 Logo 只是内部内容，不能取消节点容器。架构模式的箭头采用固定大小、可辨认的箭头头部与更清晰的默认线宽，分区边界不再以极淡的虚线呈现。`CanvasEditor` 的 SVG/CSS 与 `canvasSceneToSvg` 导出遵守同一视觉原则。显式的节点 `fillColor`、`strokeColor`、`strokeWidth`、箭头颜色及方向必须保留。上述内容属于渲染升级，不更改节点、连线、文件格式和布局坐标；历史图文件无需迁移。
-
-复杂架构图可读性：如果生成图以「总览」方式打开、节点至少 17 个且全图宽度适配后的预计标题小于 11px，Canvas 编辑器初次挂载时使用当前可见主链节点计算清晰阅读镜头（约 11.5px 目标），避免以缩到不可读的全图比例启动；手工切换详细视图、普通图或之后的编辑不会自动重置镜头。折叠边界内不可见节点不能成为聚焦对象。该能力仅改变临时视口，不改变保存的 Canvas、箭头路由或节点布局；用户仍可使用「适配」查看全图。
-
-### 布局引擎视觉对照（P1，独立实验）
-
-`pnpm benchmark:architecture:engines --case=microservices` 继续用于现有 Canvas 布局与三种 ELK 实验候选的几何质量对照。**不直接开启 ELK 正式路由。**
-
-`pnpm benchmark:architecture:d2` 将同一架构图中的真实节点、节点尺寸、功能容器和有向关系转换为 D2 测试输入，输出 `test-results/architecture-d2-review/` 下的 `.d2`、当前引擎 SVG 和对照画廊。安装 D2 0.9.0+，使用 `d2 layout` 确认 TALA 已内置，再运行 `pnpm benchmark:architecture:d2 --render` 实际生成 TALA、D2 ELK、Dagre。支持 `--case=...` 和 `D2_BIN=/path/to/d2`。实验解析 D2 SVG 的真实节点位置（支持 0.9.0 的 base64 CSS 类名），保留原始 Canvas 图元、尺寸、业务关系和标签：`*-placement-only` 仅导入位置并交给 Canvas 布线器；`*-native-bends` 则从 D2 真实关系 ID 逐条读取原生正交折点，映射为可编辑 Canvas 并检查几何质量。两种候选都可单独导出 SVG/JSON，不影响正式引擎。
-
-**重要限制：**原生 D2 SVG 使用 D2 自己的主题、边线与端口。native-bends 导入保留 TALA/ELK 的可解析正交折点，但圆角转换为直角，非节点边界上的端点仍需通过 Canvas 锚点进行正交衔接，原生关系标签位置也无法原样保留；**落在矩形节点边界的原生端口**现可使用 Canvas v1 可选的 `fromPortRatio/toPortRatio` 保留其沿边界的精确比例，省略时仍按原先的居中锚点渲染。包含 `C/Q` 等无法表示的曲线路径时**明确拒绝该候选**，不静默回退本地布线。因此它是“原生折点 + 可选精确端口 + Canvas 标签”的混合实现，**不等于 D2 原生几何已无损导入**。报告新增非正交线段门禁。只有 Canvas 对照图满足门禁并接受人工观察，才能考虑进一步试用。当前生成器耗时包含候选搜索，而 D2 CLI 耗时包含进程启动、布局及 SVG 渲染，不能直接作为速度 A/B；native-bends 显示的仅是额外导入耗时。锁定节点、异常或缺失的坐标明确拒绝导入。所有路径仍只在 `scripts/` 实验中使用，不新增正式运行依赖、默认模型路由或新的文档版本。
-
-如果机器暂时没有 D2，可以用 `pnpm benchmark:architecture:d2 --reuse-svg-dir=/绝对路径/已保存的architecture-d2-review` 重放先前生成的 D2 SVG。脚本要求每个样例的 `.d2` 源码和本次完全一致，否则直接报错；报告标明 `sourceMode=matching-saved-d2-svg-replay`，只证明旧 D2 结果在当前 Canvas 上的再导入效果，**不能冒充本轮重新运行了 D2 CLI**。
-
-2026-10-25 五组已保存 D2 0.9 SVG 的重放结果：TALA 原生折点经 Canvas 锚点正交衔接后，五组均可导出可编辑 JSON 和 SVG，非正交线段均为 0；其中数据平台样例通过“可进入人工视觉审查”的几何门禁，其余四组仍因适配字号下降、重叠或新增交叉被拒绝。这并非新跑的 TALA 生成性能数据，也不是视觉交付批准。额外试验发现 ELK Native + compound 在未正确处理分区局部边线坐标时，会引入 16 处穿节点；该分支已撤回，不作为布局候选。后续若研究 ELK 复合原生线路，必须先正确变换边线的坐标空间，而不是增添碰撞补丁。
-
-在 macOS ARM64 上实测官方 D2 v0.9.0（release SHA-256：`eaf6c0c143e56dd9fa97bfb6df25ea9c1ebce40245f056a0768cf1a6c15d3064`），五组结果均成功回灌可编辑 Canvas。以下为「交叉 / 重叠 / 适配字号」；不是主观审美打分：
-
-| 样例 | 当前布局 | TALA 位置 + 本地正交布线 |
-| --- | --- | --- |
-| 企业系统 | 0 / 0 / 12px | 0 / 0 / 8.9px |
-| 微服务 | 0 / 1 / 12px | 0 / 0 / 9px |
-| 微服务高扇出 | 0 / 6 / 12px | 1 / 4 / 5.8px |
-| 数据平台 | 0 / 1 / 11.2px | 0 / 3 / 14px |
-| 数据平台高扇出 | 0 / 4 / 8.3px | 6 / 0 / 8.9px |
-
-对照中的 TALA 候选没有一组同时满足不增加交叉/重叠、不恶化文字可读性的基本门禁；绝不因原生 D2 SVG 看起来较干净就将其自动发布成 Canvas。实验门禁输出具体拒绝原因；允许进入人工视觉审查不代表可以上线。后续优先在现有求解层解决紧凑度、分区排布与端口联动，再复评 TALA 的真实价值。
+## 架构生成质量与真实性
 
 ```sh
-pnpm visual:smoke       # 真实 Chrome 渲染全部 Mermaid 模板，捕获 lexer / 渲染兼容问题
-pnpm visual:benchmark   # 复杂样例的尺寸、文字越界、节点重叠与拆图建议
-pnpm visual:styles      # 12 套样式 × 19 种图表 × 明暗主题
-pnpm visual:regression  # 固定画布像素 golden 对比
-pnpm visual:verify      # 依次执行以上全部检查
+pnpm benchmark:architecture                # 五组虚构核心案例：基础几何
+pnpm benchmark:architecture:review         # 20 组参考/合成案例：自动视觉审查资格
+pnpm benchmark:architecture:project        # 当前仓库真实 import 子图，输出事实和诊断
+pnpm benchmark:architecture:acceptance     # 同一真实图要求通过审查资格；已知失败则退出非零
+pnpm benchmark:architecture:project:visual # 真实 Chrome 截图及人工审核清单
+pnpm benchmark:architecture:relation-lens  # 真实 Chrome + React 聚焦交互
 ```
 
-像素基线存放在 `tests/fixtures/visual-baseline/`，只有确认视觉改动符合预期后才运行 `pnpm visual:regression:update` 重建。失败时诊断图写入 `test-results/visual-regression/`。
+真实项目基准通过 TypeScript AST 解析 `src` 中固定的 12 个核心模块，提取 26 条直接静态 import（包含 type-only），不猜测运行时完整调用图。2026-10-25 当前基线：**12 节点、26 关系、2 处交叉、16 处独立重叠、32.6/90 结构分、0 穿节点**。审查资格已经正确阻断为 `severe-independent-overlaps`；在解决真实拥塞之前发布工作流有意失败。不要删真实关系、换成虚构案例或调低门禁换取发布绿灯。
 
-## 本地安装
+`benchmark:architecture:review` 检查合成数据的防退化，不证明真实系统质量。所有图的自动报告必须保留节点/关系数、独立线路重叠、交叉、穿节点、分区框、适配字体、绕线长度和耗时；更改布局前后比较同一实际图与扩展集。机器准入只允许进入人工视觉审查。
 
-### Codex
+浏览器可视化与 Mermaid 图表检查：
 
 ```sh
-pnpm plugin:install
+pnpm benchmark:architecture:design --screenshots --extended
+pnpm visual:verify
+pnpm perf:canvas -- --nodes 3000 --detail --drag
 ```
 
-脚本会注册本地 marketplace 并安装 `diagram-plugin@diagram-plugin-local`。Codex Desktop 已打开时可用 `pnpm plugin:install:desktop` 顺便刷新宿主。
+Chrome 截图、SVG、Canvas JSON 共同生成 SHA-256 指纹，图片或源码改变后旧评分立即失效。`test-results/` 的 HTML、PNG、`manifest.json`、`review-draft.json` 和 `review.md` 是验收证据，截图本身不自动批准。`visual:verify` 覆盖 Mermaid 兼容渲染、压力场景、12 套样式和固定像素回归；只有人工确认视觉升级正确后才可执行 `pnpm visual:regression:update`。
 
-### DeepSeek Harness
-
-当前目标为 Desktop `0.2.1-rc.2`，按本机安装包内的接口核对；其他版本需要重新验证。先完整退出 Desktop，再执行：
+## 像素审查与人类批准
 
 ```sh
-pnpm build
+pnpm benchmark:architecture:visual:blind --provider=dsh --manifest=test-results/architecture-design-project/manifest.json --case=diagram-plugin-source-imports
+pnpm benchmark:architecture:visual:repeat --manifest=test-results/architecture-design-project/manifest.json --case=diagram-plugin-source-imports --samples=3
+pnpm benchmark:architecture:visual:score --manifest=test-results/architecture-design-project/manifest.json --review=<人工填写的review.json> --require-human-approval
+```
+
+DeepSeek Harness 需要执行真实 `read_image` 工具调用并在原始 JSONL 中验证成功的图像结果；只传提示词或让模型声称看到图不算像素评审。重复评审保留各次原始记录与区间，不能用单次分差声明质量提升。Codex 配额不足时保留默认 DSH Provider，不指定 `--provider=codex`。
+
+六维评分包括主次阅读路径、依赖可追踪性、字体可读性、留白/对齐、分区边界和视觉一致性，总分 100。无人评分是 `null`，模型评级不能伪装人工 `approval=approved`；最终交付必须通过机器几何、当前像素指纹和真实人工批准。
+
+## 宿主安装与验收
+
+**Codex：** `pnpm plugin:install` 安装源码版本；Desktop 已开启时使用 `pnpm plugin:install:desktop` 刷新。公开 npm 版通过 `npx -y @weimin96/diagram-plugin@latest install --codex` 安装。注意不要同时开启 `diagram-plugin-local` 与 `diagram-plugin-npm`。
+
+**DSH Desktop：** 退出 Desktop、运行 `pnpm build`，再执行：
+
+```sh
 "/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" \
   plugin --profile desktop add "file:/绝对路径/diagram-plugin/package"
 ```
 
-随后重新打开 Desktop。不要为同一个 Diagram 再配置通用 MCP 客户端，避免重复工具或模型与面板连接到不同实例。同版本的 `file:` 依赖可能继续使用已安装副本；开发中重新构建后，需要先 `plugin --profile desktop remove @weimin96/diagram-plugin`，再重新添加，并确认插件已进入 `dsh.profile.bundles`。
+如果同版本缓存未刷新，先用 `dsh plugin --profile desktop remove @weimin96/diagram-plugin` 移除旧的本地安装，再重新安装。DSH Web 使用独立的 `--profile web` 安装配置，不能视为自动继承 Desktop。宿主窗口使用独立会话的 MessagePort 与后端协作，不能把模型传来的任意路径作为工作区授权。
 
-Web 使用同一份 DeepSeek Client 与 MCP 服务，不需要独立的 Web 编辑器。将 `--profile desktop` 换成 `--profile web` 后启动 `dsh web`；Web 侧需单独检查 Web profile 是否安装插件。客户端在同一应用实例的多个会话之间复用静态画板 HTML，但每个会话都必须重新建立独立的 MessagePort 和宿主绑定。面板的工作区由当前会话确定，不能自行切换到其他目录。
-
-原生验收至少覆盖：
-
-- 安装后从聊天标题区打开 Diagram，能看到当前项目的图表。
-- 新建 Mermaid 与 Canvas，保存、重开并导出，操作的是同一份文件。
-- 聊天调用图表工具后面板跟随；已有图修改先形成 Proposal，接受前文件不变。
-- 两个项目聊天之间的图表、选区与 Proposal 不串用，主题切换同步。
-- Codex 与 DeepSeek 基于旧 revision 保存同一张图时，必须有一个请求明确报告冲突。
-
-## 宿主适配
-
-| 位置 | 职责 |
-| --- | --- |
-| `src/hosts/types.ts` | 编辑器使用的宿主合同 |
-| `src/hosts/codex.ts` | MCP Apps 与 OpenAI 扩展 |
-| `src/hosts/deepseek.ts` | 与 DeepSeek 标签页通信的 MessagePort |
-| `src/hosts/serverContext.ts` | 带宿主命名空间的会话与绝对工作区 |
-| `integrations/deepseek/host.mjs` | stdio 子进程、模型工具与经过宿主认证的面板接口 |
-| `integrations/deepseek/client.mjs` | 原生右侧标签页、共享编辑器与 Session Controller |
-
-DeepSeek 模型工具注册为 `diagram_create` 等名字，内部工具只供面板调用。画板运行在不含 `allow-same-origin` 的 sandbox iframe 内，通过父窗口核验与独立 MessagePort 交换请求，不接触宿主认证凭据；面板接口挂载在 DeepSeek Connection 的 `/api` 路径下，沿用其认证、来源检查与 owner 限制。
-
-新增宿主时实现 `DiagramHost` 所需的能力并在入口选择适配器。缺失的消息、文件打开和下载能力应显式声明；宿主必须从真实会话取得身份与工作区，不能把模型参数中的会话标识当作权威。
+双宿主真实交互验收至少包含：图表打开、新建、保存重开、SVG/PNG 导出；AI 会话跟随；修改前 Proposal、接受/拒绝；项目会话互不串数据；两个实例基于旧 revision 保存时报告冲突；历史文件可读取。`check:hosts` 不能替代以上原生桌面操作。
 
 ## 发布
 
-正式包名为 `@weimin96/diagram-plugin`。发布流程：
+CI 配置为 `.github/workflows/publish-plugin.yml`，正式包 `@weimin96/diagram-plugin`，使用 npm Trusted Publishing OIDC。发布前必须保证版本号与 Git tag `diagram-plugin-v<version>` 一致，并实际通过：
 
-1. 更新根目录 `package.json` 的版本号并提交。
-2. 推送 `diagram-plugin-v<版本>` 标签，或手动触发 `publish-plugin.yml` 并填写相同版本。
-3. 工作流执行类型检查、构建、冒烟、宿主集成测试与 DeepSeek、Codex 双宿主 npm tarball 验收，然后发布 tarball。
+- TypeScript、全量单元与宿主集成测试；
+- 核心、扩展与真实项目架构审查资格；
+- 构建、冒烟与双宿主 npm tarball 验证。
 
-本地验包：
+当前实际项目的严重独立重叠未解决，**CI 的 acceptance 阶段会阻断下一次正式发布**。不能为了发布而跳过该阶段；先取得可验证的布局改善再重启发布。正式安装及发布确认不等同于 Git commit 或本地构建。新包需要预先配置 npm Trusted Publishing 与 GitHub Actions OIDC。
+
+本地校验发布包：
 
 ```sh
 pnpm build
 mkdir -p release
 npm pack ./package --ignore-scripts --pack-destination release
-# 文件名中的版本号来自根目录 package.json，例如 0.20.0
-node scripts/check-deepseek-package.mjs release/weimin96-diagram-plugin-<version>.tgz
-node scripts/check-codex-package.mjs release/weimin96-diagram-plugin-<version>.tgz
+node scripts/check-deepseek-package.mjs release/*.tgz
+node scripts/check-codex-package.mjs release/*.tgz
 ```
 
-同一个包包含 DeepSeek Harness 的 `dsh` 元数据和 Codex 的 `.agents/plugins/marketplace.json`、`.codex-plugin/plugin.json`、`.mcp.json` 及 `bin/diagram-plugin.mjs`。Codex 安装器使用 `CODEX_HOME`（默认 `~/.codex`），将发布产物持久化后注册本地 marketplace；CI 在临时 `CODEX_HOME` 内真实运行 Codex CLI，验证首次安装、重复安装和插件启用状态，绝不操作维护者的正式 Codex 配置。发布后用户执行 `npx @weimin96/diagram-plugin@latest install --codex`。
-
-发布使用 npm Trusted Publishing（OIDC），不配置长期 `NPM_TOKEN`。新包需要先通过交互式 `npm login` 完成首次建包，再执行 `npm trust github` 绑定仓库 `weimin96/diagram-plugin`、工作流 `publish-plugin.yml`，权限为 `publish`。工作流当前显式关闭 npm provenance（`--provenance=false`）。
-
-### 插件市场发现
-
-社区市场通过两条独立通道发现插件，发布包必须同时满足：
-
-- **npm 关键词**：`keywords` 首个为 `dsh-plugin`，且声明 `dsh.bundle`；缺任一项不会被收录。
-- **GitHub topic**：仓库需公开并设置 `dsh-plugin` topic。
-
-兼容性由 `engines.dsh` 单独决定，当前为 `>=0.2.0-rc.1 <0.3.0-0`；比较使用 `includePrerelease: true`，且禁止 `workspace:` 前缀。展示信息来自 `package.json` 的 `icon` 与 `locale/<lang>.json` 的 `meta.title` / `meta.description`，必须通过 `exports` 暴露。`scripts/check-deepseek-package.mjs` 与 `pnpm smoke` 会断言这些字段。
-
-## 兼容性
-
-Canvas 文档类型与 Mermaid 样式指令保留向后兼容：读取时同时接受 `codex-diagram-canvas` 与 `%% codex-diagram:style=`，写入时统一使用新前缀，旧图可直接打开并在首次保存后迁移。最近工作区状态优先写入 `~/.diagram-plugin`，并回退读取 `~/.codex-diagram`。
-
-改名前的 `@weimin96/diagram-deepseek` 与正式包是不同包。已安装旧插件的用户应先移除旧插件，再安装新包，否则会重复注册 Diagram 标签页和工具。
-
-## 架构图布局实验（仅开发环境）
-
-### 语义主链与受约束的可读性择优
-
-`diagram.composeArchitecture` 可接收经过真实代码或用户输入确认的 `primaryPath`、节点 `partition` 和 `sourcePaths`。`primaryPath` 的每一段必须在 `relations` 中存在同方向的实际依赖；非法或重复节点会在创建文件前拒绝。`partition` 只表示五类明确功能区，不应被用于猜测部署归属。输出仍是原有可编辑 Canvas JSON，既有输入可以完全不填写这些可选字段。
-
-正式布局保持原有结构评分优先。最多三个经过布线修复的布局候选中，仅在结构选择分差不超过 1 分时，才用 1200px 适配标题字号、无关分区侵入线长与分区相交面积辅助择优；不能为了视觉指标牺牲明显更好的结构。该惩罚值不是审美评分，生成后的实际视觉表现仍需截图审查。
-
-专业视觉审查使用 `pnpm benchmark:architecture:design --screenshots`。它在本机 Chrome/Chromium 中渲染导出的真实 Canvas SVG，输出 `test-results/architecture-design-review/index.html`、PNG、可编辑 JSON、`review.md` 和几何统计。未安装浏览器时省略 `--screenshots` 仍能生成 SVG 画廊；不能声称截图验收已完成。截图、结构评分和人工视觉评审相互独立，不能仅凭截图存在即判定视觉通过。
-增加 `--extended` 可同时渲染微服务、数据平台和部署拓扑三种合成高扇出压力图，专门检查线段密集、文字缩小和大分区冲突；每个样例都在画廊和清单中标明合成数据，不作为真实项目质量证明。
-
-分区冲突诊断直接提供发生重叠的两个真实 `groupId` 及重叠面积（`worstFrameOverlaps`，最多 5 项）。`visualPlan.review.repairTargets` 最多展示两个最严重的分区对，保持与既有边线冲突共同使用的五项修复预算。分区累计重叠超过画布面积 10% 时阻止标记为 `readyForVisualReview`；较小的边界冲突仍允许人工审查，但保留修复目标。尝试过扩大网格间距或直接下移分区，两者虽消除边框冲突，却增加节点穿越或连线交叉，因此未接入自动修复。布局与布线必须共同验证，不以分区边框独立合格宣称生成质量已通过。
-
-后续对输入顺序进行的落位实验确认：原布局的碰撞避让依赖 AI 节点枚举顺序，可能把上游分区最后几个节点挤到下游空间。按目标坐标排序虽然能降低部分分区重叠，但会使其他场景新增多处交叉；跨分区跳过碰撞同样失败，均已撤回。诊断现增加 `intrudingNodeIds`，从真实节点矩形与对方分区边界的相交结果中选出侵入面积最大的前 4 项，帮助后续精确确定需要联合重新落位与布线的节点。该名单只是几何接触证据，不等于自动推断了全部根因，也不会触发不受控搬移。
-
-P2 稀疏交错输入修复：保留原有布局、分区及布线引擎，只为节点 17–22 个、关系数量不超过节点数 80%、最终分区重叠面积至少 80,000px² 的图额外比较一次按目标空间位置处理碰撞的候选。必须与原生成器**全部候选和布线修复完成后的最终结果**比较：分区交叠面积至少降低 35%，且结构评分、箭头交叉、节点遮挡、文字碰撞和连线重叠均不能退化。确认改善后保留输入的原始节点/关系顺序与 ID，不额外持久化坐标策略。交错输入 18 节点、4 关系基准的分区重叠面积由 345,056px² 降至 94,464px²，结构评分维持 82、交叉和重叠均为 0。高扇出拓扑经实验无法通过同样质量约束，不启用该候选以避免重复耗时，仍需进一步研究联合端口路由。
-
-P2 分区先打包、后布线：对于已完成所有常规优化、仍有至少 50,000px² 分区重叠的 **layered 稀疏图**（17–22 节点、关系数不超过节点数 60%，没有锁定节点、显式主链、共享主干或非标准/嵌套分区），按照节点实际尺寸先计算每个分区的网格占用，再把「外部 / 入口 / 应用」「处理」「数据」分行放置，最后使用现有正交路由器重布线。只在分区重叠至少减少 80%，并且交叉、节点穿越、重叠、字号、文字冲突、跨无关分区穿越、路由长度及结构评分全部满足门禁时采纳；不动原始图元 ID、顺序、分区语义或文件协议。18 节点、4 关系回归样例的重叠面积从空间次序修复后的 94,464px² 进一步降至 0，结构评分 82→90，适配标题字号 10.8→12.8px，0 交叉、0 穿节点、0 线段重叠。复杂高扇出图不适用该候选，仍需端口与布局的联合求解。
-
-高扇出路由只在 14–24 节点、32 条以内关系、单源至少 5 条出边且已有至少 5 处重叠时，额外尝试一次反向关系顺序的完整布线。采用前必须减少至少 2 处重叠、结构评分提升至少 3 分，且不能增加交叉或穿节点；原始图元 ID、方向、保存顺序、输入数据完全保留。不同起点的独立线路不能伪装成共享主干。这是有界的候选搜索，复杂图可能增加一次完整布局的 CPU 开销。
-
-局部端口修复：完整布局和布线结束后，对 16–24 节点、关系不超过 32 条且至少有 3 处独立线路重叠的图，最多检查 10 条实际冲突关系。仅对**没有共享主干标记**的箭头，尝试根据真实源/目标节点而非分区中心选择端口，并通过已有增量布线接口重排单条箭头。只接受独立线路重叠减少、交叉/穿节点/文字碰撞不增加、无关分区穿越不增加、总路由长度不增长超过 15% 的候选，且最终结构评分不能下降。成功后同步重算质量、布局评分、分区诊断和视觉修复清单；不移动节点或新增数据协议。扩展基准的企业高扇出 3→2、数据平台高扇出 4→3、部署高扇出 6→4；这一步尚未改善微服务高扇出的 6 处重叠，后续通过分叉后走廊修复降低至 5 处。
-
-共享主干分叉后走廊修复：原有端口复选无法移动带 `from:` 标记的箭头，因为必须保护真实共同出口。在剩余重叠至少 4 处时，最多抽取 5 条真实冲突的共享源箭头；仅在源端 `bottom`、目标端 `top`、上下距离足够且两端横向接近时，试验极少量中间折线，保留首尾端口法线，并以 `canvasSharedSourceStem` 确认与所有同组关系仍然**实际共享**起始路径。复用上述零退化门禁且不改写 `bundleKey`。微服务合成高扇出从 6 处降到 5 处、评分 72.5→75、总路线长度略降，仍有 0 交叉 / 0 穿节点。这只优化实际可行的局部冲突，不代表分区大面积重叠已解决。
-
-密集关系的冲突热点：`visualPlan.review.overlapHotspots` 根据已有 `edge-overlap` 事实识别与最多**不同真实关系**重叠的箭头，携带 `edgeId`、冲突关系 ID 与端点所属分区；排序不依赖 AI 输入的关系枚举顺序。原本有限次数的独立端口调整和共享主干分叉走廊检查，也优先针对这些热点，仍严格执行交叉/穿节点、共享主干、可读性与路线长度门禁。微服务高扇出中 `payment → payprovider` 同时与多条 `orders` 出边重叠，这是下一轮区域布局与多关系走廊共同求解的直接证据。**热点是精准诊断和有界修复优先级，不是已经消除冲突的保证，也不把独立关系改写为 Bundle。**
-
-严重分区冲突时的可读总览：对于至少 16 节点、存在至少两个分区交叠且累计交叠面积达到画布 12% 的生成架构图，默认打开**总览**，不再将重叠的完整框架强制展示给用户。投影只对实际冲突的自动 `arch-*` 分区放宽折叠门槛至 2 节点，汇总原有真实跨区箭头；导出的摘要分区与编辑器统一为实心底色卡片、中文分区名和实际组件数量，并支持双击下钻。初次打开包含折叠区域的复杂总览，依据面板尺寸适当放大阅读；适配全图及详细视图均保留。微服务高扇出、部署高扇出的**显示层**分区交叠面积均降为 0（原始详细图分别仍有 244,276、310,828px²）；这不是原始布局碰撞被修复，也不更改 Canvas 节点坐标、关系、源文件协议或几何质量指标。
-
-密集分区的局部网格收敛：尝试对高扇出拓扑全量重排、减小全局或同分区安全距离、直接采用 ELK compound 布局都不能兼顾零交叉和分区分离，因此没有切换默认布局。当前对已有至少 100,000px² 重叠、17–24 节点、至多 32 关系且无显式主链/锁定节点的图，限量使用 `worstFrameOverlaps[].intrudingNodeIds` 定位实际越界节点，检查其**同一分区现有的行列网格交点**。最多评估 16 次增量布线，严格拒绝新交叉、穿节点、节点和文字碰撞、额外独立线段重叠、无关分区穿越、共享主干失真、字号缩小或明显长距离绕线。仅当分区重叠面积缩小至少 20% 时，允许旧结构评分因额外路线绕行下降最多 1 分（旧评分没有计入分区重叠）。微服务合成高扇出实测分区重叠 310,828→244,276px²，交叉 0、穿节点 0、线段重叠 5、字号 12px 不变，结构评分 75→74.1；这不是分区零重叠，不能据此宣布复杂布局完全达标。
-
-构图间距与主链顺序整改：历史网格的列间距在三种密度下略小于落位碰撞检测的安全距离，部分同排节点会被意外下移。为避免对既有图及高扇出场景产生全局退化，正式生成只在「确认主链局部顺序倒置」或「数据平台已存在交叉」且规模有界时，比较一套安全间距布局。采用前要求消除主链倒序或显著提高结构评分，且不能增加穿节点、交叉和线路重叠；没有问题的普通图仍走原有路径。此方案不修改旧 Canvas 文件，也不在人工编辑时强制重排。
-
-### 专业构图质量基准（新增）
-
-运行 `pnpm benchmark:architecture:design` 会基于企业系统、微服务和数据平台三个虚构参考拓扑生成 SVG、完整可编辑 Canvas JSON、`manifest.json` 和不预勾选的 `review.md`。报告包括专业阅读路径、设计重点与反例、系统生成的几何指标，以及需要人工实际观察的字体、主次、留白与可读性检查。**不把启发式结构评分当作人工视觉审美评分，不伪造专业案例或人工打分。**
-
-`diagram.composeArchitecture` 可使用可选的 `visualScenario` 明确用户给出的场景，原有 `theme` 与布局引擎继续独立工作。生成后 `visualPlan` 返回场景参考、已存在的主链节点/关系、分区依赖顺序及视觉审查风险。对信息密集或缩放后不可读的图，新建时默认进入非破坏性的 `overview`，用户可在编辑器切回详情；节点、关系及其来源均保留在完整 Canvas JSON 中，历史画布不批量改写。业务系统不会再仅因为存在 Kafka、Worker 和三个存储就误判为数据平台；数据平台需观察到多个明确的批流/清洗处理阶段，用户明确提供的类型优先作为视觉场景。
-
-P20 视觉细化：默认 enterprise 主题中，真实主链 `emphasis=primary` 技术节点增加低对比度的背景/细描边和稍强的标题；其余主题与次要节点保留原风格。导出 SVG 与 Desktop Canvas 都呈现这一层级，纯视觉变化不修改语义或坐标。`visualPlan.review.repairTargets` 只从已存在的关系、分区和检测结果生成最多五条定向建议；例如明确标记 `api → index` 穿越处理区 336px，但不会自动把它移出并制造更多交叉。这是机器检查结果，不等于模型已经看过截图。
-
-自动分区边界压缩曾进行实验：企业系统的边界视觉冲突有所缓解，但由于分区边界同时参与布线，数据平台的适配字号退化到 9.3px 且重叠数增加；因此**撤回了更改边界几何的实现**。后续必须把“可见边界装饰”与“布线障碍几何”分离后再验证。
-
-P22 将上述问题改为纯显示层修正：`canvasGroupFrames` 继续作为布局、碰撞、分区下钻和持久化的唯一几何依据；`canvasPresentationGroupFrames` 只为自动生成的非折叠架构分区提供更紧凑的 SVG/Desktop/缩略图外框，用户创建的普通分组、C4 与折叠区域完全不变。现有五类样例在**不修改节点和线路坐标**的前提下，企业系统可见分区相交数 2→0、数据平台 1→0；微服务仍有 2 处，后续需从节点布局解决，而不是继续缩窄外框。
-
-P23 输入顺序稳定性改造：AI 提供的节点或关系列表顺序不应决定构图质量。对节点 7–16、关系不超过 24 且结构评分低于 80 或至少存在两处交叉/重叠的场景，在现有完整布局结果以外，分别构建“节点 ID 稳定排序”和“关系键稳定排序”候选，运行相同的全局布局与路由。只在交叉/穿节点不增加、字号适配仍可阅读及结构评分满足安全提升阈值时采纳；高扇出或仅有轻微线路问题的图不额外搜索。生成服务返回 `architectureEvaluation.inputOrderStrategy` 记录采纳结果，完整 Canvas 始终恢复原始节点和关系 ID、顺序及方向；历史文件不迁移。
-
-在扩展基准中，逆序业务平台 84.1→89.8（重叠 2→0），逆序数据平台 75.5→87.5（重叠 0→1，存在取舍），逆序部署 85→90（重叠 2→0）。正常顺序的五个核心案例采用 `original`，不增加额外布局搜索；发生异常的小图会增加最多两次端到端候选计算，需继续关注真实 P95 耗时。基准报告额外记录 `inputOrderStrategy`，这些分数均为确定性的结构启发式，不代表美学评审。
-
-P24 联合布局候选：`peerOrder=dependency` 根据**跨分区真实上下游关系**给同一分区的节点形成稳定的加权排序，而不是盲目将主链节点前置；然后复用现有完整布线、局部修复、质量评估。仅对 12–22 节点、30 条关系以内、结构评分低于 70 且至少 2 处交叉的自动生成图尝试。必须减少至少 2 处交叉、提高至少 8 分、保持零穿节点/文字冲突，限制线路重叠、分区边界相交/面积/侵入、跨区线长和适配字号，才允许选择。部署高扇出合成基准从 56→74.8、交叉 3→0、跨区线长 8013→6108px，同时重叠 5→6、无关分区侵入 69→318px；保留这些风险指标，不宣称已达到专业设计水准。服务和基准新增 `layoutOrderingStrategy` 以便归因；原始元素及关系顺序与方向不改变。正常五例及零交叉的高扇出图不额外搜索。
-
-P25 大图阅读：Desktop 缩放区的原“阅读”改为“主链”，保持之前按面板大小计算的有界放大，同时基于**真实 primary 节点与带权关系度**将视口定位到核心节点。对数据平台等宽画布，避免放大后仍停在空旷中心；点“适配”可返回整图，缩略图仍可导航。该方案只改变临时视口，不改变节点坐标、历史画布尺寸、SVG 导出内容，也不声称几何重叠已消失。实验性反向路由优先级导致微服务高扇出新增 4 处交叉、数据平台新增 5 处交叉，故已撤回。
-
-目前的正式生成逻辑仍使用 `architectureComposer` + 内置正交路由。ELK Layered 是隔离的开发试验，没有加入 `src/server.ts`，不会自动影响现有用户图表。
-
-- 快速基准：`pnpm benchmark:architecture`，5 个参考架构，会在生成节点重叠/穿节点时失败；已加入 npm 发布门禁。
-- 扩展基准：`pnpm benchmark:architecture --suite=extended`，20 个参考/合成场景，重点检查输入顺序、中文长标签和高扇出；合成用例并非用户生产拓扑。
-- 视觉审查资格门禁：`pnpm benchmark:architecture:review`，对扩展 20 例要求 `visualPlan.review.readyForVisualReview=true`；存在严重分区重叠等阻断场景时返回非零退出码，不能因基础几何检查通过而宣称可以交付。两种架构基准均在 `report.json.reviewReadiness` 中报告阻断案例。这个门禁只决定是否**可以进入人工视觉审查**，并不代替截图检查或人工批准。当前存在已知失败，修复前不得通过改阈值或删除失败场景使该命令变绿；为避免阻断无关版本修复，暂不放入既有 npm 发布工作流。
-- 专业交付复核：`pnpm benchmark:architecture:design --screenshots --extended` 会输出浏览器截图与人工检查清单，自动生成的截图不等于真实人工审核通过。
-- 压力样例：`pnpm benchmark:architecture --suite=stress`，30/50/80 节点，运行成本较高，不放到默认 CI。
-- 对比试验：`pnpm benchmark:architecture:engines`，或 `pnpm benchmark:architecture:engines --suite=extended`。输出 `test-results/architecture-engines/index.html`、`report.json` 及各候选的可编辑 Canvas JSON 与 SVG。支持 `--case=data-platform` 只跑单例。
-
-P2 领域职责收敛（2026-10-25）：将 `architectureDesign.ts` 中原有整段布线逻辑移动到 `architectureRouting.ts`，并把正交走廊候选搜索、矩形相交、折线简化、占用评分拆到纯几何 `architectureOrthogonalSolver.ts`；`architectureComposer.ts`、`CanvasEditor.tsx`、`canvasPatch.ts` 直接调用共同的路由接口，旧 `architectureDesign.ts` 公共入口保留兼容再导出。这是**一个实现拆分成职责明确的模块**，不是增加 LayoutEngine SPI 或第二套引擎。原先增量路由计算既有关系几何时重复使用边中点，可能漏检不在中点上的原生端口；现在直接调用 `canvasArrowBoxRoute`，新增端口偏移与移动遮挡回归测试。拆分前后 20 例扩展生成指标及最终场景结果逐字段对比一致（不含耗时），原有 3 个视觉审查阻断案例不变。后续优化先调整统一路由模块的端口容量和走廊约束，必须通过相同的整图指标及视觉检查，不能因职责拆分宣称生成质量已提高。
-
-P2 端口容量与线路走廊联合试验（2026-10-25）：在现有 `routeArchitectureArrowIds(scene,[id],true)` 单边重排热点路径中，`architecturePortPlanning.ts` 读取**其他真实关系在对应节点边界已占用的端口**并提议最多两处空闲端口间隙；`architectureRouting.ts` 只在无显式 Bundle、无自动 Bundling 的关系上将端口间距计入候选代价，再调用既有 `architectureOrthogonalSolver.ts` 完成走廊搜索。不额外引入引擎、任务状态或 Canvas 协议；来源为空/自动锚点不猜测占用，旋转节点不添加精确端口，多边重路由和正常完整初始布线不改变。这不是全图端口容量求解器。20 组扩展合成基准中，数据平台高扇出独立线路重叠 **3→2**、结构评分 **76.7→79.2**；部署高扇出重叠 **4→3**、结构评分 **79.8→82.3**，其他 18 组无结构或可读性指标退化。数据平台总线长 **14787→14915px**（+0.87%），无关分区侵入不增加；部署总线长 **9180→9135px**。已知 3 例阻断视觉审查仍旧阻断；这只是机器几何的局部净收益，不是人工视觉验收，也不代表所有关系已联合求解。
-
-P2 Composer 消融审查（2026-10-25）：以本地 20 例扩展基准为同输入对照，临时关闭稀疏分区重打包 `packSparseArchitectureRegions` 后，20 例评价及视觉审查状态均无差异；但独立单测 **“稀疏交错输入先按实际节点尺寸打包分区”** 覆盖了该策略的真实适用拓扑，因此不能仅凭扩展集没有触发就删除。临时关闭逐关系正交走廊 `nudgeArchitectureCorridors` 后，阻断人工视觉审查的合成样例由 **3→5**，部署高扇出结构分 **82.3→58.5** 且交叉 **0→3**；本地累计测量耗时虽降低约 10 秒，但不可牺牲这些质量收益换速度。这两项临时关闭均已还原，未新增永久调试开关或测试专用分支。
-
-为降低长期耦合，将 `nudgeArchitectureCorridors`、`bypassArchitectureBlockingNode`、`nudgeSharedSourceBranch` 三类现存、验证过的局部**候选生成**移至 `architectureRouteRepair.ts`；`architectureComposer.ts` 仍独占质量评估与是否采纳候选的职责；同源真实共享主干的识别收敛至现有 `architectureRouting.ts`。编辑、Canvas v1 存储和图形语义不变化。此次是职责调整，不宣称消融本身修复了 3 个剩余视觉阻断场景，也不把从原文件移出的代码行数当作性能提升。
-
-ELK 平铺与复合分组候选只修改节点坐标，然后复用当前 Canvas 正交路由；`elk-native` 与 `elk-native-compound` 导入原生 Section、端口和折点为可编辑 Canvas 箭头，不修改默认生成路径。复合候选先按 `edge.container` 找到 ELK 边线的局部坐标原点，再转换为世界坐标；不能直接对根 `edges` 的所有 Section 统一加画布边距。节点边界上的端口现直接记录 `fromPortRatio/toPortRatio`，无需强制回到边中点；边界外端点仍由共享正交接线适配，因此不宣称所有原生端口都无损移植。锁定节点明确拒绝原生重新排布。报告在原有尺寸、分区与字体指标上补充非正交线段、分区相交面积和同一 Canvas 的候选拒绝原因。时间字段口径不同：`current` 包含整套候选搜索与优化；`elk-*` 仅包含在已完成的 Canvas 图上再次布局，不能当作整体生成速度 A/B 结论。
-
-2026-10-25 修正 `edge.container` 后，微服务高扇出合成拓扑的 `elk-native-compound` 由错误映射的 **24 交叉、16 穿节点**变为 **0 交叉、0 穿节点**，分区框重叠仍为 0；但独立关系重叠由 1 增至 12（正式自研引擎为 5）。因此该候选尚未通过整体几何门禁，不能直接切换；下一步应把分区联合排布与边线独立走廊视为同一约束问题，而非继续对单根线增加局部补丁。这是实验样例的机器检查，不是人工视觉验收。
-
-复合分区坐标修复后，扩展 **20 例** 同协议 A/B：当前引擎累计交叉 1 / 独立线路重叠 19 / 穿节点 0；`elk-native-compound` 为交叉 17 / 重叠 86 / 穿节点 0，分区框重叠数由当前 34 降为 0。20 例中原生复合候选通过整体几何门禁 **0 例**，说明分区消重本身不足以支撑切换。实验比较的是基于已生成场景的二次布局，并非等价端到端耗时；无需据此新增运行时引擎开关。
-
-P2 精确端口合同实验：复用现有 Canvas v1 JSON，箭头新增可选的 `fromPortRatio/toPortRatio`（0..1，必须依附非 auto 的 `fromAnchor/toAnchor`）。未指定比例时沿用原有边中点，旧文件可直接打开；序列化、Canvas 编辑器画线、SVG 导出、局部 patch、反转方向和重新连接端点走同一个合同。端点位于真实矩形边界时，ELK/D2 原生 Section 直接映射为比例端口；端点不在边界时保留明确的正交接线。**主动重新计算线路会释放已有比例端口**，不能同时保留旧比例又按边中点求解新路径。该改造不意味着正式布局器已经实现多端口联合优化，不能为了降低交叉偷偷修改原始关系。
-
-20 组合成样例的 ELK A/B：旧复合原生方案累计交叉 17、独立线重叠 86、穿节点 0；精确端口映射后对应指标为交叉 **17**、重叠 **0**、穿节点 **0**，分区框相交仍为 0，最小适配字号约 **7px**；当前正式布局器仍为交叉 1、重叠 19、穿节点 0。**ELK 原生复合方案仍未通过整体替换门禁**。这一对照只证明端口保真消除了导入失真所致的线路重叠，不能将剩余交叉与可读性问题认定为已解决，尤其不能把机器几何门禁视作人工视觉验收。
-
-初次 20 例实验统计：原引擎累计交叉 5、重叠 44；ELK flat 累计交叉 21、重叠 75；ELK compound 累计交叉 56、重叠 52。当前不得据此替换默认布局引擎，后续应重点验证原生端口、复合分区、不穿节点与复杂图阅读顺序，并在同一准备阶段重新计时。已识别原引擎在合成的 `business-platform-fanout` 有一处穿节点，属于待修复的扩展质量缺陷，不能用放宽门禁掩盖。
-
-ELK 0.12.0 当前只作为 devDependency 引入。其许可标识为 `EPL-2.0 OR GPL-3.0-or-later`，在考虑把 ELK 打包进发行版前，必须完成授权条件与第三方声明核查。
-
-扩展基准还定位了高扇出三段式直角线穿过非端点节点的问题：端口保持型绕行只在碰撞真实发生时作为候选，在节点重新排序后再复检一次。直接砍半高扇出局部交换预算会严重降低微服务图质量，因此未采用；性能治理应优先复用评分计算、减少重复候选而不是降低质量门禁。
-
-高扇出 CPU 采样显示瓶颈集中在 `scoreRoute` 的反复障碍碰撞与已占用线路比较。候选评分现支持基于非负部分代价与当前最优分值的严格上界提前结束，同时节点重叠检测复用已有空间索引。20 个扩展样例优化前后的 Canvas JSON 完全一致（20/20）；单次微服务高扇出本地运行由约 13.2 秒缩短至约 4.8 秒，属于一次对比而非 P95 或跨机器性能承诺。
-
-同源扇出关系支持**多段共用前缀**：从真实端点路径提取连续的最长共同正交线段，并验证分叉后的剩余部分不再重叠。只有合法共线的两条关系才分配一组独立 `from:` Bundle；SVG 和编辑器绘制的主干使用该共同前缀，而不是盲目依赖第一折点。微服务高扇出基准的重叠告警从 15 降至 10，节点/关系、0 交叉与 0 穿节点约束不变；剩余独立线路仍计入质量报告。
-
-架构工作台的缩放区新增“阅读”：根据当前 Desktop 面板实际宽高与标题字体估算推荐放大倍数，最高保留原 400% 上限，只调整当前视口而不修改 Canvas/布局/导出或历史图表；点击“适配”可回到全图。此视图用于解决宽图在窄分栏里看不清的问题，**并非**自动重排或宣称画布紧凑问题已解决。试验过双行压缩数据分区与调整横向分区顺序，但会显著增加交叉，已撤回；后续布局需要基于拓扑的全局路由而不是简单移动分区。
-
-架构布局菜单新增“依赖分区”导航，使用真实 Canvas 关系建立分区级有向图，并以稳定的拓扑次序列出有节点的分区、进出关系数量。点击后复用已有 Scope 下钻，可在宽图中按依赖链逐个查看；循环依赖不会导致死循环，无法确定方向时保留原始分区顺序。返回全局不修改图表文件。快速基准报告同时保存跨分区关系数与分区序列，作为未来全局布局引擎的可检查输入，**目前不会自动改变任何分区坐标或线路**。
-
-全局跨分区路由诊断：`architectureRouteDiagnostics.ts` 以 Canvas 几何为唯一来源，统计总线长、跨区线长、端点直达距离、逆向跨区关系、无关同级分区边界交叠（数量与面积）、穿越无关分区的线路长度与前五条责任关系。诊断结果复用到 `diagram.composeArchitecture` 返回的 `architectureEvaluation.routeDiagnostics`、架构基准和 ELK A/B 报告；不会单独更改节点、路线或旧图。核心数据平台当前仍存在一条 `api → index` 穿越处理区约 336px 的线路；将其移到分区外侧会引入更多交叉或重叠，故暂不自动替换。尝试过结构评分同分时按跨区线长选路，20 例无实际收益，已撤回。下一步需要基于相互关联的多条线路和分区边界约束做协同规划。
-
-核心五例原生路径试验：`elk-native` 在数据平台样例得到交叉 0 / 重叠 0，但该图仍有 4 处语义分区边界相交，画布宽高比为 3.01；微服务、Agent 和部署案例分别还有独立线重叠。它可以作为后续端口与复合层级设计的基础，但尚不具备替代现有引擎的整体质量优势。
-
-### P3 关键依赖阅读与 DeepSeek Harness 验收（2026-10-25）
-
-架构画布菜单增加“依赖关系：全部 / 关键”。纯函数 canvasKeyDependencyLens 只计算已有 primary 箭头或两个 primary 节点间的真实边，返回要强调的实际 ID 和原始关系数；不保存新状态，不改画布 JSON、SVG 或节点/箭头位置。真实 Diagram Plugin 12 模块/26 静态 import 中，目前 3 条关系符合此规则，其余 23 条只在阅读时临时弱化，原始结构与几何指标不变。空主链无标记时入口禁用，避免 AI 猜测。显式悬停/单选一条关系会临时覆盖关键强调，移开后恢复；上/下游 trace 优先；Esc 或文档切换退出临时视图。
-
-真实 Chrome + React 端到端命令：pnpm benchmark:architecture:relation-lens。已验证关键按钮可点、重要边突出、非关键边 computed opacity 为 0.16、1/2 实例的关键数显示、完整两条关系持续在 DOM、单边焦点覆盖后恢复，以及全部模式的正确恢复。该工具为真实宿主 DOM 渲染检查，不会消耗模型配额；并不声称静态图交叉/重叠已消失。
-
-历史说明：本轮之前，用户 Codex 额度耗尽，我们仅用 DeepSeek Harness 做过只读文本方案评审；那一次不能算像素审查。本轮进一步验证 `dsh headless` 真实具备 `read_image` 工具，且 JSONL 可记录实际工具成功事件。因此现在可以让 DSH 直接审查 Chrome PNG，但仍需独立于软件几何验收和人工批准。
-
-### DSH 图片评分重复校准（2026-10-25）
-
-新命令 `pnpm benchmark:architecture:visual:repeat --manifest=test-results/architecture-design-project/manifest.json --case=diagram-plugin-source-imports --samples=3`，移除原 DSH JSON 示例中可能造成锚定的固定 2.5 分，每轮在独立 DSH headless 进程中使用 `read_image` 读取同一 Chrome 截图，经完全一致的六维评分合同验收。最多 5 次，至少 2 次。生成 `<case>.visual-repeat.json` 与可读 Markdown 报告；每次独立的完整 JSON 保存在 `.visual-repeat-samples/<case>/sample-N.json`。采用 `--baseline=<旧重复评分.json>` 可以得到相同案例/Provider 的趋势提示：仅当当前与基线分数区间相隔超过 5 分才视为有方向，重叠或跨 Provider 一律归类“不确定”；`--fail-on-unstable` 只会对同次分数极差超过 10 分发出错误，不代表交付门禁。
-
-固定 12 模块/26 关系 Chrome 图的首次重复评审：45.5、40.0、46.5，总均值 44.0，中位数 45.5，极差 6.5，三个独立评价的关系可追踪性均为 1.5/5。这比之前 55.5 单次评分更能揭示不确定性，两者不同提示词版本、不可直接作为效果提升或下降对照。底层 DSH 实际服务模型可能更换，仍必须用固定截图、算法几何指标及人工视觉批准判断成品。重复评审改善的是 QA 可信度，并未改变布局/布线、Canvas 数据或现有 2 交叉/16 重叠的真实问题。
-
-后续验收补充：重复评分的原始审查记录改为随机唯一的 `.visual-repeat-samples/<case>/<run-id>/sample-N.json`，不再覆盖旧报告所引用的单次样本。若 `--baseline` 路径与 `--out` 完全相同，命令拒绝覆盖旧基线。真实 Chrome 图的再次两次读图为 45.5、46.5，比较原两次评分 42.5、40.0 得到 `inconclusive`；新旧运行的原始样本目录已逐一确认不同，且完整 Markdown 可生成。该结果显示分数存在随机波动、且视觉依赖追踪仍弱，不应以当前评分机制更完善推断静态图视觉更好。
+DeepSeek 插件市场发现需要 npm `dsh-plugin` 关键词、`dsh.bundle` 元数据以及公开 GitHub 仓库 `dsh-plugin` topic；具体字段以构建与检查脚本为准。**不要**为了移除兼容代码而使旧 `.diagram.json` 丢失可读性；涉及真实已发布格式时采用经过验证的显式迁移，不增加永久双轨接口。

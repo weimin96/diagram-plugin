@@ -22,6 +22,7 @@ test('严重真实线路交叉阻断视觉审查，少量交叉仍保留具体�
   const blocked = planArchitectureVisual(composed.scene, composed.semanticComposition,
     quality, composed.presentation, composed.routeDiagnostics)
   assert.equal(blocked.review.readyForVisualReview, false)
+  assert.deepEqual(blocked.review.blockers, ['severe-edge-crossings'])
   assert.ok(blocked.review.concerns.includes('crossing-relationships'))
   assert.ok(blocked.review.repairTargets.some((target) =>
     target.concern === 'crossing-relationships'
@@ -30,7 +31,24 @@ test('严重真实线路交叉阻断视觉审查，少量交叉仍保留具体�
     { ...quality, metrics: { ...quality.metrics, edgeCrossings: 1 } },
     composed.presentation, composed.routeDiagnostics)
   assert.equal(oneCrossing.review.readyForVisualReview, true)
+  assert.deepEqual(oneCrossing.review.blockers, [])
   assert.ok(oneCrossing.review.concerns.includes('crossing-relationships'))
+})
+
+test('独立关系线密集共道会阻断审查，不由节点无遮挡或交叉数掩盖', () => {
+  const composed = composeArchitectureGraph(architectureCases[0].intent)
+  const count = composed.quality.metrics.arrows
+  const blocked = planArchitectureVisual(composed.scene, composed.semanticComposition,
+    { ...composed.quality, metrics: { ...composed.quality.metrics,
+      edgeOverlaps: Math.ceil(count / 2), edgeCrossings: 0 } },
+    composed.presentation, composed.routeDiagnostics)
+  assert.equal(blocked.review.readyForVisualReview, false)
+  assert.deepEqual(blocked.review.blockers, ['severe-independent-overlaps'])
+  const inspectable = planArchitectureVisual(composed.scene, composed.semanticComposition,
+    { ...composed.quality, metrics: { ...composed.quality.metrics,
+      edgeOverlaps: Math.ceil(count / 2) - 1, edgeCrossings: 0 } },
+    composed.presentation, composed.routeDiagnostics)
+  assert.equal(inspectable.review.readyForVisualReview, true)
 })
 
 test('企业系统、微服务与数据平台选择各自专业构图规范，主链 ID 取自真实关系', () => {
