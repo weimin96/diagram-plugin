@@ -194,8 +194,13 @@ test('高扇出分区与多边联合规划解除分区阻断且保留原始关�
   assert.equal(result.quality.metrics.edgeNodeIntersections, 0)
   assert.equal(result.quality.metrics.nodeOverlaps, 0)
   assert.equal(result.quality.metrics.labelNodeIntersections, 0)
+  assert.ok(result.routeDiagnostics.totalRouteLength <= 7950,
+    'bounded precision-port selection must shorten independent perimeter detours without changing the topology')
   const members = new Map(result.scene.elements.filter((item) => item.type === 'node')
     .map((item) => [item.id, item]))
+  assert.ok(result.scene.elements.some((item) => item.type === 'arrow'
+    && item.fromPortRatio !== undefined && !item.bundleKey),
+  'independent relationships can use real proportional boundary ports while genuine trunks remain separate')
   const grouped = result.scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow'
     && item.from === 'orders' && item.bundleKey?.startsWith('from:') === true)
   const paired = grouped.filter((item) => item.bundleKey === grouped[0]?.bundleKey)

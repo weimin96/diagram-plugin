@@ -762,6 +762,48 @@ function repairPartitionCorridors(result: ReturnType<typeof composeArchitectureG
     quality = best.quality
     changes++
   }
+  // Geometry is already safe at this point. Give severely detoured,
+  // independent edges one bounded precise-port pass before publishing the
+  // scene. This reuses the same single-edge router and only keeps a genuine
+  // whole-scene improvement; moving a port may otherwise cut another node.
+  const boxes = new Map(scene.elements.filter((item): item is CanvasNode => item.type === 'node')
+    .map((item) => [item.id, item]))
+  let routeDiagnostics = assessArchitectureRouteDiagnostics(scene)
+  const detoured = scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow' && !item.bundleKey)
+    .map((arrow) => {
+      const source = boxes.get(arrow.from), target = boxes.get(arrow.to)
+      if (!source || !target) return undefined
+      const points = canvasArrowBoxRoute(source, target, arrow)
+      const length = points.slice(1).reduce((sum, point, index) =>
+        sum + Math.abs(point.x - points[index].x) + Math.abs(point.y - points[index].y), 0)
+      const direct = Math.abs(source.x + source.width / 2 - target.x - target.width / 2)
+        + Math.abs(source.y + source.height / 2 - target.y - target.height / 2)
+      return { id: arrow.id, length, direct }
+    })
+    .filter((item): item is { id: string; length: number; direct: number } =>
+      Boolean(item && item.length > 300 && item.length > item.direct * 1.4))
+    .sort((a, b) => b.length / Math.max(1, b.direct) - a.length / Math.max(1, a.direct))
+    .slice(0, 6)
+  for (const { id } of detoured) {
+    const proposed = routeArchitectureArrowIds(scene, [id], true, true)
+    const assessed = assessCanvasVisualQuality(proposed)
+    const current = quality.metrics, next = assessed.metrics
+    if (next.nodeOverlaps > current.nodeOverlaps
+      || next.edgeNodeIntersections > current.edgeNodeIntersections
+      || next.edgeCrossings > current.edgeCrossings
+      || next.edgeOverlaps > current.edgeOverlaps
+      || next.labelOverflows > current.labelOverflows
+      || next.labelOverlaps > current.labelOverlaps
+      || next.labelNodeIntersections > current.labelNodeIntersections) continue
+    const diagnostics = assessArchitectureRouteDiagnostics(proposed)
+    if (diagnostics.totalRouteLength >= routeDiagnostics.totalRouteLength - 12
+      || diagnostics.frameOverlapArea > routeDiagnostics.frameOverlapArea
+      || diagnostics.unrelatedFrameIntrusionLength > routeDiagnostics.unrelatedFrameIntrusionLength) continue
+    scene = proposed
+    quality = assessed
+    routeDiagnostics = diagnostics
+    changes++
+  }
   if (!changes) return result
   scene = annotateSourceFanoutTrunks(scene)
   quality = assessCanvasVisualQuality(scene)
