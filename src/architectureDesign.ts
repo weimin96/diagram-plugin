@@ -15,6 +15,7 @@ import type {
   CanvasStencil,
   CanvasTone,
 } from './canvas.js'
+import { canvasGroupFrames } from './canvas.js'
 import { routeArchitectureEdges } from './architectureRouting.js'
 export { routeArchitectureEdges, routeArchitectureArrowIds, routeArchitectureEdgesIncremental } from './architectureRouting.js'
 
@@ -34,6 +35,8 @@ export interface ArchitectureBeautifyOptions {
   alignedSpacing?: boolean
   /** Trial only: resolve global collisions in planned spatial order. */
   spatialOrder?: boolean
+  /** Opt-in complete-candidate geometry: reserve sibling group envelopes before routing. */
+  partitionFirst?: boolean
   /** Verified semantic intent takes priority over label-based role inference. */
   partitionOverrides?: ReadonlyMap<string, ArchitecturePartition>
   /** An explicitly confirmed directed business path, not an inferred longest path. */
@@ -241,7 +244,7 @@ export function beautifyArchitectureScene(scene: CanvasScene, options: Architect
   if (relayout && repartition) next = layoutArchitectureTopology(
     next, partitionById, theme, resolvedDensity, composition,
     options.peerOrder === 'dependency', options.peerOrder === 'main-path' ? options.primaryPath : undefined,
-    options.alignedSpacing === true, options.spatialOrder === true,
+    options.alignedSpacing === true, options.spatialOrder === true, options.partitionFirst === true,
   )
   next = applyArchitectureTheme(next, theme, partitionById)
   next = applyArchitectureEmphasis(next, partitionById, options.primaryPath)
@@ -420,6 +423,7 @@ function layoutArchitectureTopology(
   mainPath?: readonly string[],
   alignedSpacing = false,
   spatialOrder = false,
+  partitionFirst = false,
 ): CanvasScene {
   const metrics = architectureTopologyMetrics(theme, density, alignedSpacing)
   const boxes = scene.elements.filter((item): item is CanvasNode | CanvasNote => item.type !== 'arrow')
@@ -540,6 +544,7 @@ function layoutArchitectureTopology(
       Math.max(metrics.canvasMargin, compositionY - metrics.rowGap) + metrics.canvasMargin,
       metrics,
       spatialOrder,
+      partitionFirst,
     )
   }
 
@@ -575,6 +580,7 @@ function layoutArchitectureTopology(
     Math.max(metrics.canvasMargin + topHeight, nextRowY) + metrics.canvasMargin,
     metrics,
     spatialOrder,
+    partitionFirst,
   )
 }
 
@@ -638,7 +644,61 @@ function applyArchitectureLayoutPositions(
   unlockedHeight: number,
   metrics: ReturnType<typeof architectureTopologyMetrics>,
   spatialOrder = false,
+  partitionFirst = false,
 ): CanvasScene {
+  // The legacy resolver allocates each node independently, so a blocked late
+  // member can drift across the next semantic region. In the opt-in candidate,
+  // reserve whole sibling group envelopes using actual node sizes, then move
+  // each group as one unit. No saved group geometry or second Canvas protocol.
+  if (partitionFirst && boxes.every((item) => !item.locked && item.groupId?.startsWith('arch-'))) {
+    const planned = boxes.flatMap((item) => {
+      const pos = positionById.get(item.id)
+      return pos ? [{
+        ...item, x: pos.x, y: pos.y,
+        width: Math.max(metrics.nodeMinWidth, Math.min(metrics.nodeMaxWidth, item.width)),
+        height: Math.max(metrics.nodeMinHeight, Math.min(metrics.nodeMaxHeight, item.height)),
+      }] : []
+    })
+    if (planned.length === boxes.length) {
+      const byGroup = new Map<string, (CanvasNode | CanvasNote)[]>()
+      for (const box of planned) byGroup.set(box.groupId!, [...(byGroup.get(box.groupId!) ?? []), box])
+      const plannedById = new Map(planned.map((item) => [item.id, item]))
+      // Canvas owns real boundary geometry, including header/title insets.
+      // Do not duplicate its frame padding constants in the layout solver.
+      const envelopes = canvasGroupFrames({
+        ...scene, elements: scene.elements.map((item) => plannedById.get(item.id) ?? item),
+      }).filter((frame) => byGroup.has(frame.id))
+        .sort((a, b) => a.y - b.y || a.x - b.x || a.id.localeCompare(b.id, 'en'))
+      // Invalid or user-collapsed group geometry stays on the existing solver.
+      if (envelopes.length === byGroup.size && envelopes.every((frame) => !frame.collapsed)) {
+        const allocated: typeof envelopes = []
+        const adjusted = new Map<string, CanvasNode | CanvasNote>()
+        for (const group of envelopes) {
+          let y = group.y
+          // Retain left-to-right order while preserving a small gutter
+          // between actual Canvas sibling frames.
+          while (true) {
+            const clashes = allocated.filter((other) =>
+              group.x < other.x + other.width + 8 && group.x + group.width + 8 > other.x
+              && y < other.y + other.height + 8 && y + group.height + 8 > other.y)
+            if (!clashes.length) break
+            y = Math.max(...clashes.map((other) => other.y + other.height + 8))
+          }
+          const dy = y - group.y
+          allocated.push({ ...group, y })
+          for (const box of byGroup.get(group.id)!) adjusted.set(box.id, { ...box, y: box.y + dy })
+        }
+        const elements = scene.elements.map((item) => adjusted.get(item.id) ?? item)
+        return {
+          ...scene,
+          width: Math.max(960, unlockedWidth, ...planned.map((item) => item.x + item.width + metrics.canvasMargin)),
+          height: Math.max(620, unlockedHeight, ...[...adjusted.values()].map((item) =>
+            item.y + item.height + metrics.canvasMargin)),
+          elements,
+        }
+      }
+    }
+  }
   const locked = boxes.filter((item) => item.locked)
   const lockedRight = Math.max(0, ...locked.map((item) => item.x + item.width + metrics.canvasMargin))
   const lockedBottom = Math.max(0, ...locked.map((item) => item.y + item.height + metrics.canvasMargin))

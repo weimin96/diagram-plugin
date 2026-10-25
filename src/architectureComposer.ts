@@ -234,6 +234,7 @@ function composeArchitectureGraphCandidate(
   relationIds?: readonly string[],
   alignedSpacing = false,
   spatialOrder = false,
+  partitionFirst = false,
 ) {
   const ids = new Set<string>()
   for (const node of intent.nodes) {
@@ -304,6 +305,7 @@ function composeArchitectureGraphCandidate(
     const result = beautifyArchitectureScene(scene, {
       theme: intent.theme, density, composition, peerOrder,
       partitionOverrides, primaryPath: intent.primaryPath, alignedSpacing, spatialOrder,
+      partitionFirst,
     })
     const quality = assessCanvasVisualQuality(result.scene)
     const evaluation = evaluateArchitectureLayout(result.scene, quality, composition, density)
@@ -587,7 +589,7 @@ function composeArchitectureGraphOriginal(intent: ArchitectureIntentGraph) {
 
 /** Compare an alternate collision-resolution order against the *fully*
  * optimized result, never an intermediate geometry that later routing beats. */
-export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
+function composeArchitectureGraphExisting(intent: ArchitectureIntentGraph) {
   const result = compactConflictedGroupMembers(
     packSparseArchitectureRegions(improveCongestedPorts(composeArchitectureGraphOriginal(intent)), intent.primaryPath),
     intent.primaryPath,
@@ -619,6 +621,52 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
     scene: { ...candidate.scene, elements: candidate.scene.elements.slice().sort((a, b) =>
       (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity)) },
     inputOrderStrategy: 'original' as const, layoutOrderingStrategy: 'spatial-order' as const,
+  }
+}
+
+/** Full candidate for seriously overlapping sibling regions. Allocation of
+ * partition envelopes precedes edge routing, and the normal end-to-end gates
+ * decide whether it is safe to replace the historical layout. */
+export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
+  const original = composeArchitectureGraphExisting(intent)
+  if (intent.primaryPath?.length || intent.nodes.length > 26
+    || original.routeDiagnostics.frameOverlapArea < original.scene.width * original.scene.height * 0.1
+    // With no edge overlaps, this bounded candidate cannot strictly improve
+    // routing. Severe fan-out needs a real multi-edge solver, not repeated
+    // full-scene trials of the same single-edge repair.
+    || original.quality.metrics.edgeOverlaps === 0 || original.quality.metrics.edgeOverlaps > 4) return original
+  const layout = composeArchitectureGraphCandidate(intent, 'semantic', undefined, false, false, true)
+  const candidate = improveCongestedPorts({
+    ...layout, inputOrderStrategy: 'original' as const, layoutOrderingStrategy: 'semantic' as const,
+  }, true)
+  const before = original.quality.metrics, after = candidate.quality.metrics
+  // Structural score deliberately does not count sibling frame intersections.
+  // Use the existing presentation penalty rather than weakening geometry
+  // thresholds or hiding overlapping regions in an overview.
+  const originalReviewScore = original.evaluation.structuralScore
+    - architecturePresentationSelectionPenalty(original.presentation, original.routeDiagnostics)
+  const candidateReviewScore = candidate.evaluation.structuralScore
+    - architecturePresentationSelectionPenalty(candidate.presentation, candidate.routeDiagnostics)
+  if (after.nodeOverlaps > before.nodeOverlaps || after.edgeNodeIntersections > before.edgeNodeIntersections
+    || after.edgeCrossings > before.edgeCrossings
+    || after.labelOverflows > before.labelOverflows || after.labelOverlaps > before.labelOverlaps
+    || after.labelNodeIntersections > before.labelNodeIntersections
+    || candidate.routeDiagnostics.unrelatedFrameIntrusionLength > original.routeDiagnostics.unrelatedFrameIntrusionLength
+    || candidate.routeDiagnostics.frameOverlapArea >= original.scene.width * original.scene.height * 0.1
+    || candidate.routeDiagnostics.totalRouteLength > original.routeDiagnostics.totalRouteLength * 1.15
+    || candidate.presentation.estimatedTitlePxAtFit < original.presentation.estimatedTitlePxAtFit
+    || after.edgeOverlaps >= before.edgeOverlaps
+    || !candidate.visualPlan.review.readyForVisualReview
+    || candidateReviewScore <= originalReviewScore + 1) return original
+  const inputIndex = new Map([
+    ...intent.nodes.map((node, index) => [node.id, index] as const),
+    ...intent.relations.map((_, index) => [`__relation-${index + 1}`, intent.nodes.length + index] as const),
+  ])
+  return { ...candidate,
+    scene: { ...candidate.scene, elements: candidate.scene.elements.slice().sort((a, b) =>
+      (inputIndex.get(a.id) ?? Infinity) - (inputIndex.get(b.id) ?? Infinity)) },
+    inputOrderStrategy: 'original' as const,
+    layoutOrderingStrategy: 'partition-first' as const,
   }
 }
 
@@ -804,11 +852,11 @@ function packSparseArchitectureRegions(result: ReturnType<typeof composeArchitec
  * edges using their actual endpoints instead of their region center vectors.
  * Preserve all coordinates, IDs and intentional buses; accept only a strict
  * end-to-end quality improvement. Dense fan-outs never get another relayout. */
-function improveCongestedPorts(result: ReturnType<typeof composeArchitectureGraphOriginal>) {
+function improveCongestedPorts(result: ReturnType<typeof composeArchitectureGraphOriginal>, mildConflicts = false) {
   const nodes = result.scene.elements.filter((item) => item.type === 'node').length
   const arrows = result.scene.elements.filter((item) => item.type === 'arrow')
-  if (nodes < 16 || nodes > 24 || arrows.length > 32
-    || result.quality.metrics.edgeOverlaps < 3) return result
+  if (nodes < (mildConflicts ? 12 : 16) || nodes > 24 || arrows.length > 32
+    || result.quality.metrics.edgeOverlaps < (mildConflicts ? 1 : 3)) return result
   const byId = new Map(arrows.map((arrow) => [arrow.id, arrow]))
   // Fix the edge conflicting with the most independent relationships first.
   // Stable ID tie-breaks prevent the source enumeration order from changing

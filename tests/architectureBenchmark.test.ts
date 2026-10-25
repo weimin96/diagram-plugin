@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { assessCanvasVisualQuality } from '../src/canvasQuality.js'
-import { canvasArrowBoxRoute, canvasBundleTrunks, canvasSharedSourceStem } from '../src/canvas.js'
-import type { CanvasArrow } from '../src/canvas.js'
-import { inferArchitectureComposition } from '../src/architectureDesign.js'
+import { canvasArrowBoxRoute, canvasBundleTrunks, canvasGroupFrames, canvasSharedSourceStem, parseCanvasScene, serializeCanvasScene } from '../src/canvas.js'
+import type { CanvasArrow, CanvasScene } from '../src/canvas.js'
+import { beautifyArchitectureScene, inferArchitectureComposition } from '../src/architectureDesign.js'
 import { architectureCases } from './fixtures/architecture/cases.js'
 import { architectureBenchmarkCases } from '../scripts/architecture-benchmark-cases.js'
 
@@ -79,28 +79,59 @@ test('真实规模虚构拓扑基准不丢失语义关系或穿过节点', () =>
   }
 })
 
-test('P24 仅对低质量多交叉图进行联合分区依赖排布并保留真实关系', () => {
+test('P2 分区优先候选以完整几何质量解锁部署扇出审查，保留所有真实关系', () => {
   const sample = architectureBenchmarkCases('extended').find((item) => item.id === 'deployment-fanout')!
   const original = JSON.stringify(sample.intent)
   const result = composeArchitectureGraph(sample.intent)
-  assert.equal(result.layoutOrderingStrategy, 'dependency')
+  assert.equal(result.layoutOrderingStrategy, 'partition-first')
   assert.equal(result.inputOrderStrategy, 'original')
-  assert.ok(result.evaluation.structuralScore >= 74, 'full-route score improves over 56 baseline')
+  assert.ok(result.evaluation.structuralScore >= 75, 'structural score is independent of frame-overlap diagnostics')
   assert.equal(result.quality.metrics.edgeCrossings, 0)
-  assert.ok(result.quality.metrics.edgeOverlaps <= 6)
+  assert.ok(result.quality.metrics.edgeOverlaps <= 2)
   assert.equal(result.quality.metrics.nodeOverlaps, 0)
   assert.equal(result.quality.metrics.edgeNodeIntersections, 0)
   assert.equal(result.quality.metrics.labelNodeIntersections, 0)
+  assert.equal(result.routeDiagnostics.frameOverlapArea, 0)
+  assert.equal(result.routeDiagnostics.unrelatedFrameIntrusionLength, 0)
+  assert.equal(result.visualPlan.review.readyForVisualReview, true,
+    'passing automated eligibility is not equivalent to human visual approval')
   assert.ok(result.routeDiagnostics.crossPartitionRouteLength <= 6500)
-  assert.ok(result.presentation.estimatedTitlePxAtFit >= 11)
+  assert.ok(result.presentation.estimatedTitlePxAtFit >= 12)
+  const frames = canvasGroupFrames(result.scene)
+  assert.equal(frames.length, 5)
   assert.deepEqual(result.scene.elements.filter((item) => item.type === 'arrow').map(({ from, to }) => [from, to]),
     sample.intent.relations.map(({ from, to }) => [from, to]))
   assert.deepEqual(result.scene.elements.filter((item) => item.type === 'arrow').map((item) => item.id),
     sample.intent.relations.map((_, index) => `__relation-${index + 1}`))
   assert.equal(JSON.stringify(sample.intent), original)
+  const reopened = parseCanvasScene(serializeCanvasScene(result.scene))
+  assert.deepEqual(reopened.elements.filter((item) => item.type === 'arrow').map((item) => [item.from, item.to]),
+    sample.intent.relations.map((item) => [item.from, item.to]))
   const repeated = composeArchitectureGraph(sample.intent)
   assert.deepEqual(repeated.scene, result.scene, 'same graph yields deterministic geometry and ordered elements')
   assert.equal(repeated.layoutOrderingStrategy, result.layoutOrderingStrategy)
+})
+
+test('分区预留仅处理自动生成的无锁节点，已锁定位置沿用原几何约束', () => {
+  const scene: CanvasScene = {
+    type: 'diagram-plugin-canvas', version: 1, title: 'Reserved functional regions',
+    width: 920, height: 700, architecture: { theme: 'enterprise', density: 'comfortable' },
+    elements: [
+      { id: 'external', type: 'node', icon: 'user', text: 'External', x: 70, y: 100, width: 180, height: 80 },
+      { id: 'locked', type: 'node', icon: 'service', text: 'Locked API', x: 520, y: 440,
+        width: 170, height: 82, locked: true },
+      { id: 'data', type: 'node', icon: 'database', text: 'Database', x: 680, y: 540, width: 175, height: 78 },
+      { id: 'edge-a', type: 'arrow', from: 'external', to: 'locked' },
+      { id: 'edge-b', type: 'arrow', from: 'locked', to: 'data' },
+    ],
+  }
+  const baseline = beautifyArchitectureScene(scene, { density: 'comfortable', composition: 'layered' })
+  const alternate = beautifyArchitectureScene(scene, { density: 'comfortable', composition: 'layered', partitionFirst: true })
+  assert.deepEqual(alternate.scene, baseline.scene,
+    'a scene containing locked geometry must use the established placement contract')
+  const locked = alternate.scene.elements.find((item) => item.id === 'locked')
+  assert.ok(locked?.type === 'node')
+  assert.deepEqual([locked.x, locked.y, locked.width, locked.height], [520, 440, 170, 82])
 })
 
 test('P24 不为零交叉高扇出图追加联合布局搜索', () => {
