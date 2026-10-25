@@ -7,6 +7,7 @@ import { promisify } from 'node:util'
 import { pathToFileURL } from 'node:url'
 import { architectureCases } from '../tests/fixtures/architecture/cases.js'
 import { architectureBenchmarkCases } from './architecture-benchmark-cases.js'
+import { projectArchitectureCase } from './architecture-project-cases.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { canvasSceneToSvg, serializeCanvasScene } from '../src/canvas.js'
 
@@ -20,14 +21,16 @@ const humanChecklist = [
   'Canvas 可编辑，SVG 在目标尺寸下清晰可读',
 ]
 const extended = process.argv.includes('--extended')
-const ids = [
+const projectMode = process.argv.includes('--project')
+const ids = projectMode ? ['diagram-plugin-source-imports'] : [
   'business-platform', 'microservices', 'data-platform',
   ...(extended ? ['microservices-fanout', 'data-platform-fanout', 'deployment-fanout'] : []),
 ]
-const referenceCases = extended ? architectureBenchmarkCases('extended') : architectureCases
+const referenceCases = projectMode ? [await projectArchitectureCase()]
+  : extended ? architectureBenchmarkCases('extended') : architectureCases
 const captureScreenshots = process.argv.includes('--screenshots')
 const output = path.resolve(process.argv.find((arg) => arg.startsWith('--out='))?.slice(6)
-  ?? 'test-results/architecture-design-review')
+  ?? (projectMode ? 'test-results/architecture-design-project' : 'test-results/architecture-design-review'))
 await mkdir(output, { recursive: true })
 const chrome = captureScreenshots ? await findChrome() : undefined
 if (captureScreenshots && !chrome) throw new Error('截图验收需要本地 Chrome/Chromium，当前未找到浏览器。')
@@ -44,8 +47,10 @@ for (const id of ids) {
   if (screenshot && chrome) await captureDiagramScreenshot(chrome, output, file, screenshot)
   cases.push({
     id,
-    label: `${result.visualPlan.reference.label}${id.endsWith('-fanout') ? ' · 合成高扇出' : ''}`,
-    source: id.endsWith('-fanout') ? 'synthetic' : 'fictional-reference',
+    label: projectMode ? sample.intent.title
+      : `${result.visualPlan.reference.label}${id.endsWith('-fanout') ? ' · 合成高扇出' : ''}`,
+    source: projectMode ? 'project-source-imports'
+      : id.endsWith('-fanout') ? 'synthetic' : 'fictional-reference',
     scenario: result.visualPlan.scenario,
     readingPattern: result.visualPlan.reference.readingPattern,
     priorities: result.visualPlan.reference.priorities,
@@ -63,18 +68,20 @@ for (const id of ids) {
   })
 }
 await writeFile(path.join(output, 'manifest.json'), JSON.stringify({
-  version: 1, source: extended ? 'fictional-reference-and-synthetic' : 'fictional-reference', rubric: humanChecklist,
+  version: 1, source: projectMode ? 'scoped-real-TypeScript-imports'
+    : extended ? 'fictional-reference-and-synthetic' : 'fictional-reference', rubric: humanChecklist,
   note: 'Browser screenshot capture is visual evidence, not an automatic aesthetic judgment. All human checkboxes are intentionally empty.',
   cases,
 }, null, 2) + '\n')
 await writeFile(path.join(output, 'index.html'), `<!doctype html><html lang="zh-CN"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>架构图视觉审查</title>
 <style>body{margin:0;background:#f4f6f8;color:#1d2732;font:14px/1.6 system-ui,sans-serif}main{max-width:1300px;margin:auto;padding:32px}h1{font-size:25px;margin:0 0 6px}p{color:#536474}section{background:white;border:1px solid #dce2e8;border-radius:12px;margin:24px 0;padding:22px}h2{font-size:19px;margin:0 0 5px}.preview{width:100%;height:auto;display:block}.metadata{font-size:12px;color:#536474;margin:10px 0}.questions{margin:12px 0 0;padding-left:20px}a{color:#135a9c}</style>
-<main><h1>架构图视觉验收</h1><p>以下是虚构系统的真实 Canvas SVG 导出${captureScreenshots ? '及 Chrome 截图' : ''}。截图不代表已经完成视觉审美评价，人工检查保持未勾选。</p>
+<main><h1>架构图视觉验收</h1><p>${projectMode ? '这是 Diagram Plugin 核心模块的实际 TypeScript 静态导入子图，不代表完整运行时依赖。' : '以下是虚构系统的真实 Canvas SVG 导出。'}${captureScreenshots ? ' 已生成 Chrome 截图。' : ''} 截图不代表已经完成视觉审美评价，人工检查保持未勾选。</p>
 ${cases.map((item) => `<section><h2>${item.label}</h2><div class="metadata">${item.readingPattern} · 交叉 ${item.quality.edgeCrossings} · 关系线重叠 ${item.quality.edgeOverlaps} · 适配字号 ${item.presentation.estimatedTitlePxAtFit}px</div><img class="preview" src="${item.screenshot ?? item.svg}" alt="${item.label}"><p><a href="${item.svg}">SVG</a> · <a href="${item.id}.diagram.json">可编辑 Canvas JSON</a></p><strong>人工观察</strong><ul class="questions">${humanChecklist.map((question) => `<li>□ ${question}</li>`).join('')}</ul></section>`).join('')}
 </main></html>\n`)
 const markdown = ['# 专业架构图视觉验收',
-  '案例来自虚构参考系统及明确标识的合成压力图。结构检测自动完成，以下视觉评价必须由人实际查看后勾选。',
+  projectMode ? '案例来自当前仓库实际 TypeScript 静态 import，限定核心模块子图。不能推断完整运行时依赖；自动检查未通过也不应强制通过。人工视觉评价保持未勾选。'
+    : '案例来自虚构参考系统及明确标识的合成压力图。结构检测自动完成，以下视觉评价必须由人实际查看后勾选。',
   ...cases.flatMap((item) => [
     `## ${item.label}`,
     `阅读路径：${item.readingPattern}`,

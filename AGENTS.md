@@ -53,6 +53,8 @@
 
 扩展基准 `pnpm benchmark:architecture --suite=extended`、外部引擎 `pnpm benchmark:architecture:engines` 和 D2 `pnpm benchmark:architecture:d2` 是不同目的的实验；报告必须注明是否是虚构合成数据、是否运行真实浏览器，以及评分/耗时统计的计算口径。合成样例不能替代真实项目拓扑。
 
+真实项目回归：`pnpm benchmark:architecture:project` 使用 TypeScript AST 从当前仓库固定选取的核心 12 个模块提取真实静态 import 关系（包含 type-only 导入，**不等于运行时调用或完整工程依赖**），生成可编辑 JSON、SVG、具体关系冲突与质量报告；`pnpm benchmark:architecture:project:visual` 会额外尝试 Chrome 截图及人工清单，若几何阻断仍存在则如实非零退出。为避免严重关系交叉在无穿节点时误报可审查，3 处及以上独立线交叉阻断自动审查资格；1–2 处交叉仍记录审查目标。不得为了维持 20/20 或真实案例全绿而放宽门禁、删除导入关系或强行虚构分区。
+
 每次布局或布线改动：
 
 - 先记录失败场景和修改前的截图/指标（交叉、重叠、节点遮挡、分区交叠、文字适配、长度、耗时），说明要改善的真实问题。

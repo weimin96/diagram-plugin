@@ -5,13 +5,14 @@ import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { architecturePartitionFlow } from '../src/architecturePartitionFlow.js'
 import { canvasSceneToSvg, serializeCanvasScene } from '../src/canvas.js'
 import { architectureBenchmarkCases } from './architecture-benchmark-cases.js'
+import { projectArchitectureCase } from './architecture-project-cases.js'
 
 const outputFlag = process.argv.indexOf('--out')
 if (outputFlag >= 0 && !process.argv[outputFlag + 1]) throw new Error('--out expects a destination directory')
 const suiteFlag = process.argv.find((arg) => arg.startsWith('--suite='))
 const suiteName = suiteFlag?.slice('--suite='.length) ?? 'core'
-if (!['core', 'extended', 'stress'].includes(suiteName)) throw new Error('Unknown benchmark suite')
-const suite = suiteName as 'core' | 'extended' | 'stress'
+if (!['core', 'extended', 'stress', 'project'].includes(suiteName)) throw new Error('Unknown benchmark suite')
+const suite = suiteName as 'core' | 'extended' | 'stress' | 'project'
 const requireReviewReady = process.argv.includes('--require-review-ready')
 const output = path.resolve(outputFlag < 0
   ? `test-results/architecture-benchmark${suite === 'core' ? '' : '-' + suite}`
@@ -23,7 +24,8 @@ const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => (
 ))
 
 const results = []
-for (const example of architectureBenchmarkCases(suite)) {
+const examples = suite === 'project' ? [await projectArchitectureCase()] : architectureBenchmarkCases(suite)
+for (const example of examples) {
   const started = performance.now()
   const composed = composeArchitectureGraph(example.intent)
   const partitionFlow = architecturePartitionFlow(composed.scene)
@@ -64,7 +66,9 @@ const blockedReviewCases = results.filter((result) => !result.visualPlan.review.
 await writeFile(path.join(output, 'report.json'), JSON.stringify({
   version: 2,
   suite,
-  source: 'deterministic fictional reference and synthetic graphs',
+  source: suite === 'project'
+    ? 'Diagram Plugin source imports; scoped module subgraph, not fictional and not complete runtime dependencies'
+    : 'deterministic fictional reference and synthetic graphs',
   reviewReadiness: {
     status: blockedReviewCases.length ? 'blocked' : 'awaiting-human-review',
     blockedCases: blockedReviewCases.map((result) => result.id),
@@ -85,7 +89,7 @@ h2{font-size:18px;margin:0 0 4px}small{color:#637181}.stats{display:flex;gap:12p
 img{display:block;width:100%;height:auto;background:#f8fafc;border:1px solid #e4e9ee;border-radius:8px}
 .issues{margin:12px 0 0;color:#765322;font-size:12px}
 </style></head><body><main><h1>系统架构图生成基准</h1>
-<p>以下均为虚构参考系统。结构评分上限 90，仅用于对比布局、碰撞和连线；人工视觉质量仍需审查。</p>
+<p>${suite === 'project' ? '来源为 Diagram Plugin 真实 TypeScript 静态导入关系的选定模块子图，不代表全工程运行依赖。' : '以下均为虚构参考系统。'} 结构评分上限 90，仅用于对比布局、碰撞和连线；人工视觉质量仍需审查。</p>
 ${results.map((result) => `<section><header><div><h2>${escapeHtml(result.title)}</h2>
 <small>${escapeHtml(result.description)}</small></div><div class="stats">
 <span>${result.composition}</span><span>${result.density}</span>

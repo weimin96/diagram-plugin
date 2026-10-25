@@ -61,7 +61,7 @@ export const ARCHITECTURE_VISUAL_REFERENCES: readonly ArchitectureVisualReferenc
 export type ArchitectureVisualConcernCode =
   | 'weak-main-path' | 'dense-detail' | 'tiny-overview-text'
   | 'wide-canvas' | 'cross-boundary-intrusion' | 'frame-overlap'
-  | 'overlapping-relationships' | 'perimeter-detour'
+  | 'overlapping-relationships' | 'crossing-relationships' | 'perimeter-detour'
 
 export interface ArchitectureVisualRepairTarget {
   concern: ArchitectureVisualConcernCode
@@ -179,10 +179,20 @@ export function planArchitectureVisual(
   if (geometry.unrelatedFrameIntrusionLength > 0) concerns.push('cross-boundary-intrusion')
   if (geometry.frameOverlaps > 0) concerns.push('frame-overlap')
   if (quality.metrics.edgeOverlaps >= 2) concerns.push('overlapping-relationships')
+  if (quality.metrics.edgeCrossings > 0) concerns.push('crossing-relationships')
   if (geometry.perimeterDetours > 0) concerns.push('perimeter-detour')
   const repairTargets: ArchitectureVisualRepairTarget[] = []
   const existingArrows = new Set(relations.map((edge) => edge.id))
   const existingGroups = new Set((scene.groups ?? []).map((group) => group.id))
+  const crossings = quality.issues.filter((issue) => issue.code === 'edge-crossing'
+    && issue.elementIds.length === 2 && issue.elementIds.every((id) => existingArrows.has(id)))
+  for (const issue of crossings.slice(0, 2)) {
+    repairTargets.push({
+      concern: 'crossing-relationships',
+      elementIds: issue.elementIds,
+      action: `关系 ${issue.elementIds.join(' 与 ')} 的真实正交线路交叉；应联合调整节点、端口和走廊，不能用隐藏关系或假总线消除冲突`,
+    })
+  }
   for (const intrusion of geometry.worstFrameIntrusions.slice(0, 3)) {
     if (!existingArrows.has(intrusion.edgeId) || !existingGroups.has(intrusion.frameId)) continue
     repairTargets.push({
@@ -238,6 +248,7 @@ export function planArchitectureVisual(
   // several local corridor conflicts. Preserve both diagnosis dimensions.
   const reviewPriority: Partial<Record<ArchitectureVisualConcernCode, number>> = {
     'tiny-overview-text': 0,
+    'crossing-relationships': 1,
     'wide-canvas': 1,
     'weak-main-path': 2,
     'cross-boundary-intrusion': 3,
@@ -254,6 +265,9 @@ export function planArchitectureVisual(
       readyForVisualReview: quality.metrics.nodeOverlaps === 0
         && quality.metrics.edgeNodeIntersections === 0
         && quality.metrics.labelNodeIntersections === 0
+        // A handful of crossings can be inspected, but a dense network
+        // with several independent crossings needs routing work first.
+        && quality.metrics.edgeCrossings <= 2
         // Tiny frame intersections can still be visually reviewed; broad
         // overlapping regions need layout repair before meaningful review.
         && geometry.frameOverlapArea < scene.width * scene.height * 0.1,

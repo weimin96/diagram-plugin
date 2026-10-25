@@ -12,6 +12,27 @@ test('专业构图参考规则明确描述阅读路径，而不是虚构审美�
     item.readingPattern.includes('→') && item.priorities.length >= 3 && item.antiPatterns.length >= 2))
 })
 
+test('严重真实线路交叉阻断视觉审查，少量交叉仍保留具体关系告警', () => {
+  const composed = composeArchitectureGraph(architectureCases[0].intent)
+  const arrows = composed.scene.elements.filter((item) => item.type === 'arrow')
+  const extra = { code: 'edge-crossing' as const, severity: 'warning' as const,
+    message: 'Independent relation intersection', elementIds: [arrows[0].id, arrows[1].id] }
+  const quality = { ...composed.quality, issues: [...composed.quality.issues, extra],
+    metrics: { ...composed.quality.metrics, edgeCrossings: 3 } }
+  const blocked = planArchitectureVisual(composed.scene, composed.semanticComposition,
+    quality, composed.presentation, composed.routeDiagnostics)
+  assert.equal(blocked.review.readyForVisualReview, false)
+  assert.ok(blocked.review.concerns.includes('crossing-relationships'))
+  assert.ok(blocked.review.repairTargets.some((target) =>
+    target.concern === 'crossing-relationships'
+      && target.elementIds.join(',') === extra.elementIds.join(',')))
+  const oneCrossing = planArchitectureVisual(composed.scene, composed.semanticComposition,
+    { ...quality, metrics: { ...quality.metrics, edgeCrossings: 1 } },
+    composed.presentation, composed.routeDiagnostics)
+  assert.equal(oneCrossing.review.readyForVisualReview, true)
+  assert.ok(oneCrossing.review.concerns.includes('crossing-relationships'))
+})
+
 test('企业系统、微服务与数据平台选择各自专业构图规范，主链 ID 取自真实关系', () => {
   const expected = {
     'business-platform': 'enterprise-system',
