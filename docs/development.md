@@ -38,7 +38,7 @@ pnpm benchmark:architecture:project:visual # 真实 Chrome 截图及人工审核
 pnpm benchmark:architecture:relation-lens  # 真实 Chrome + React 聚焦交互
 ```
 
-真实项目基准通过 TypeScript AST 解析 `src` 中固定的 12 个核心模块，提取 26 条直接静态 import（包含 type-only），不猜测运行时完整调用图。2026-10-25 当前基线：**12 节点、26 关系、2 处交叉、16 处独立重叠、32.6/90 结构分、0 穿节点**。审查资格已经正确阻断为 `severe-independent-overlaps`；在解决真实拥塞之前发布工作流有意失败。不要删真实关系、换成虚构案例或调低门禁换取发布绿灯。
+真实项目基准通过 TypeScript AST 解析 `src` 中固定的 12 个核心模块，提取 26 条直接静态 import（包含 type-only），不猜测运行时完整调用图。整改前基线：**12 节点、26 关系、2 处交叉、16 处独立重叠、32.6/90 结构分、0 穿节点**。同日经有界的**走廊协商 → 同分区节点槽位协商 → 再次走廊协商**（复用现有正交求解器与修复候选，并在每次采纳前检查完整 Canvas）后，机器实测变为 **1 处交叉、9 处独立重叠、56.9/90、0 穿节点、12.5px 适配字号**，总路线 13,581→13,414px；真实图机器审查资格不再阻断。该图仍存在外围大折返和视觉主次不清的问题，**真实 Chrome 截图的 DSH read_image 独立模型评分仅 51.5/100，无人工批准**，不应因机器门禁变绿就声明具备正式展示质量。不要删真实关系、换成虚构案例或调低门禁换取发布绿灯。
 
 `benchmark:architecture:review` 检查合成数据的防退化，不证明真实系统质量。所有图的自动报告必须保留节点/关系数、独立线路重叠、交叉、穿节点、分区框、适配字体、绕线长度和耗时；更改布局前后比较同一实际图与扩展集。机器准入只允许进入人工视觉审查。
 
@@ -87,7 +87,7 @@ CI 配置为 `.github/workflows/publish-plugin.yml`，正式包 `@weimin96/diagr
 - 核心、扩展与真实项目架构审查资格；
 - 构建、冒烟与双宿主 npm tarball 验证。
 
-当前实际项目的严重独立重叠未解决，**CI 的 acceptance 阶段会阻断下一次正式发布**。不能为了发布而跳过该阶段；先取得可验证的布局改善再重启发布。正式安装及发布确认不等同于 Git commit 或本地构建。新包需要预先配置 npm Trusted Publishing 与 GitHub Actions OIDC。
+当前真实项目已通过机器几何审查资格，**但独立像素评价仍低、人工尚未批准**；CI 的 acceptance 是自动几何门禁，不是人工签署，触发发布前必须完成真实 Chrome/DSH/人工复核。不要把自动门禁通过冒充专业视觉交付。正式安装及发布确认不等同于 Git commit 或本地构建。新包需要预先配置 npm Trusted Publishing 与 GitHub Actions OIDC。
 
 本地校验发布包：
 

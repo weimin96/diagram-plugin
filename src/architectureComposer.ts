@@ -656,10 +656,13 @@ function composeArchitectureGraphExisting(intent: ArchitectureIntentGraph) {
   }
 }
 
-/** Full candidate for seriously overlapping sibling regions. Allocation of
- * partition envelopes precedes edge routing, and the normal end-to-end gates
- * decide whether it is safe to replace the historical layout. */
-function negotiateDenseCorridors(result: ReturnType<typeof composeArchitectureGraphCandidate>) {
+/** One bounded conflict-routing sweep over real relation IDs.
+ * The dense candidate alternates route negotiation, same-region node-slot
+ * planning and another route negotiation. Every phase scores the whole
+ * editable scene rather than fixing a single edge at others' expense.
+ * Candidate generation uses the one existing router and corridor repairer.
+ */
+function optimizeCongestedRoutes(result: ReturnType<typeof composeArchitectureGraphCandidate>, maxRounds = 4) {
   let scene = result.scene
   let quality = result.quality
   let evaluation = result.evaluation
@@ -669,7 +672,6 @@ function negotiateDenseCorridors(result: ReturnType<typeof composeArchitectureGr
   let changes = 0
   // Rip up one contested relation and re-evaluate its route against all the
   // others. A bounded negotiation, not another router or invented edge.
-  const maxRounds = 4
   const maxAffectedEdges = 14
   for (let round = 0; round < maxRounds; round++) {
     const affected = [...new Set(quality.issues
@@ -677,10 +679,15 @@ function negotiateDenseCorridors(result: ReturnType<typeof composeArchitectureGr
       .flatMap((issue) => issue.elementIds))].slice(0, maxAffectedEdges)
     let best: { scene: CanvasScene; quality: CanvasVisualQualityAssessment; evaluation: ArchitectureLayoutAssessment } | undefined
     for (const id of affected) {
-      if (!scene.elements.some((item) => item.id === id && item.type === 'arrow')) continue
-      const seen = new Set<string>()
-      for (const spacedPorts of [true, false]) {
-        const candidate = routeArchitectureArrowIds(scene, [id], spacedPorts)
+      const currentArrow = scene.elements.find((item) => item.id === id && item.type === 'arrow')
+      if (!currentArrow) continue
+      // An unchanged route cannot improve the globally assessed graph.
+      const seen = new Set<string>([JSON.stringify(currentArrow)])
+      for (const candidate of [
+        routeArchitectureArrowIds(scene, [id], true),
+        routeArchitectureArrowIds(scene, [id], false),
+        ...nudgeArchitectureCorridors(scene, id),
+      ]) {
         const arrow = candidate.elements.find((item) => item.id === id)
         const signature = JSON.stringify(arrow)
         if (seen.has(signature)) continue
@@ -791,8 +798,12 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
     && intent.relations.length >= intent.nodes.length * 1.5 && intent.relations.length <= 48
     && original.evaluation.structuralScore === 0 && originalMetrics.edgeCrossings >= 3
     && regions.size === 1 && !original.scene.elements.some((item) => item.type === 'node' && item.locked)) {
-    const candidate = negotiateDenseNodeSlots(negotiateDenseCorridors(composeArchitectureGraphCandidate(intent, 'semantic',
-      undefined, false, false, false, false, true)))
+    // Alternating coordinate descent: negotiate corridors on the complete
+    // graph, try node slots without modifying authored semantics, then
+    // reconcile all affected corridors once more. No second routing engine.
+    const candidate = optimizeCongestedRoutes(negotiateDenseNodeSlots(optimizeCongestedRoutes(
+      composeArchitectureGraphCandidate(intent, 'semantic', undefined, false, false, false, false, true),
+    )), 8)
     const next = candidate.quality.metrics
     if (next.nodeOverlaps <= originalMetrics.nodeOverlaps
       && next.edgeNodeIntersections <= originalMetrics.edgeNodeIntersections

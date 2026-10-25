@@ -37,10 +37,10 @@ test('真实依赖密集图不能因不穿节点就获得错误的自动审查�
   const composed = composeArchitectureGraph(sample.intent)
   const q = composed.quality.metrics
   assert.equal(q.edgeNodeIntersections, 0)
-  assert.ok(q.edgeCrossings <= 2,
-    'joint node placement and shared source corridors must resolve more severe crossings')
-  assert.ok(q.edgeOverlaps <= 16,
-    'node placement must improve real independent wire overlap as well as crossings')
+  assert.ok(q.edgeCrossings <= 1,
+    'alternating constrained placement/routing must prevent the original real-source crossing regression')
+  assert.ok(q.edgeOverlaps <= Math.floor(q.arrows * 0.4),
+    'real independent wire overlap must remain meaningfully below the severe-congestion threshold')
   assert.ok(canvasBundleTrunks(composed.scene).length >= 2,
     'negotiating independent corridors must not erase genuine shared source trunks')
   assert.ok(composed.routeDiagnostics.totalRouteLength <= 13_600,
@@ -51,6 +51,9 @@ test('真实依赖密集图不能因不穿节点就获得错误的自动审查�
     && candidate.rawSelectionScore === composed.evaluation.rawSelectionScore),
   'candidate evaluation exposed to hosts must match the negotiated editable scene')
   assert.equal(composed.presentation.estimatedTitlePxAtFit, 12.5)
+  assert.deepEqual(composed.visualPlan.review.blockers, [])
+  assert.equal(composed.visualPlan.review.readyForVisualReview, true,
+    'resolved geometry is eligible for visual inspection, not yet human-approved')
   assert.ok(composed.evaluation.structuralScore >= 0 && composed.evaluation.structuralScore <= 90)
   assert.ok(composed.evaluation.rawSelectionScore <= composed.evaluation.structuralScore,
     'display-score clipping must not conceal worse raw geometry in candidate selection')
