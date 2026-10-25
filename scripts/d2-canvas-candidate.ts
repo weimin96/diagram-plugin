@@ -1,6 +1,7 @@
-import { anchorPoint, type CanvasAnchor, type CanvasArrow, type CanvasNode, type CanvasPoint, type CanvasScene } from '../src/canvas.js'
+import type { CanvasArrow, CanvasNode, CanvasPoint, CanvasScene } from '../src/canvas.js'
 import { routeArchitectureEdges } from '../src/architectureDesign.js'
 import { architectureSceneToD2 } from './d2-architecture-fixture.js'
+import { canvasNativeOrthogonalRoute } from './canvas-native-route.js'
 
 type Position = { x: number; y: number }
 
@@ -81,23 +82,6 @@ export function d2RelationAliases(scene: CanvasScene): Array<{ canvasId: string;
     counts.set(label, index + 1)
     return { canvasId: relation.canvasId, alias: `${label}[${index}]` }
   })
-}
-
-function closestSide(node: CanvasNode, point: CanvasPoint): CanvasAnchor {
-  const sides: Array<[CanvasAnchor, number]> = [
-    ['left', Math.abs(point.x - node.x)], ['right', Math.abs(point.x - node.x - node.width)],
-    ['top', Math.abs(point.y - node.y)], ['bottom', Math.abs(point.y - node.y - node.height)],
-  ]
-  return sides.sort((a, b) => a[1] - b[1])[0][0]
-}
-
-/** The saved Canvas contract has side-center anchors, not arbitrary D2 port
- * offsets. Connect those to the original D2 path by an explicit orthogonal
- * adapter, instead of introducing diagonal segments on import. */
-function orthogonalBridge(from: CanvasPoint, to: CanvasPoint, axis: 'x' | 'y'): CanvasPoint[] {
-  const corner = axis === 'x' ? { x: to.x, y: from.y } : { x: from.x, y: to.y }
-  return [from, corner, to].filter((point, index, points) =>
-    index === 0 || point.x !== points[index - 1].x || point.y !== points[index - 1].y)
 }
 
 /** Read only the geometry of explicit rectangular D2 nodes. A missing or
@@ -188,22 +172,8 @@ export function d2SvgToNativeBendCanvas(scene: CanvasScene, svg: string): Canvas
     if (item.type !== 'arrow') return item
     const route = paths.get(item.id)!
     const fromNode = byId.get(item.from)!, toNode = byId.get(item.to)!
-    const fromAnchor = closestSide(fromNode, route[0])
-    const toAnchor = closestSide(toNode, route.at(-1)!)
-    const first = anchorPoint(fromNode, fromAnchor, route[0])
-    const last = anchorPoint(toNode, toAnchor, route.at(-1)!)
-    const fromAxis = fromAnchor === 'left' || fromAnchor === 'right' ? 'x' : 'y'
-    const toAxis = toAnchor === 'left' || toAnchor === 'right' ? 'y' : 'x'
-    const bridged = [
-      ...orthogonalBridge(first, route[0], fromAxis),
-      ...route.slice(1),
-      ...orthogonalBridge(route.at(-1)!, last, toAxis).slice(1),
-    ].filter((point, index, points) =>
-      index === 0 || point.x !== points[index - 1].x || point.y !== points[index - 1].y)
     return {
-      ...item, routing: 'orthogonal' as const,
-      fromAnchor, toAnchor,
-      points: bridged.slice(1, -1),
+      ...item, ...canvasNativeOrthogonalRoute(fromNode, toNode, route),
       bundleKey: undefined,
       labelPosition: undefined,
     }
