@@ -60,3 +60,28 @@ test('incremental reroute only changes incident edge geometry, preserving unrela
   assert.deepEqual(updated.elements.filter((item) => item.type !== 'arrow'),
     source.elements.filter((item) => item.type !== 'arrow'))
 })
+
+test('incremental routing detects a moved obstacle against an authored noncentral port', () => {
+  const original: CanvasScene = {
+    type: 'diagram-plugin-canvas', version: 1, title: 'Native-port clearance',
+    width: 1250, height: 600,
+    architecture: { theme: 'technical' },
+    elements: [
+      { id: 'from', type: 'node', x: 100, y: 100, width: 180, height: 80, text: 'Source' },
+      { id: 'to', type: 'node', x: 800, y: 100, width: 180, height: 80, text: 'Target' },
+      { id: 'moved', type: 'node', x: 410, y: 95, width: 100, height: 12, text: 'Moved obstacle' },
+      { id: 'wire', type: 'arrow', from: 'from', to: 'to', routing: 'orthogonal',
+        fromAnchor: 'right', toAnchor: 'left', fromPortRatio: 0.25, toPortRatio: 0.25 },
+    ],
+  }
+  const originalArrow = original.elements.find((item) => item.id === 'wire')
+  assert.ok(originalArrow?.type === 'arrow')
+  assert.equal(canvasArrowBoxRoute(original.elements[0] as Extract<CanvasScene['elements'][number], { type: 'node' }>,
+    original.elements[1] as Extract<CanvasScene['elements'][number], { type: 'node' }>, originalArrow)[0].y, 120)
+  const updated = routeArchitectureEdgesIncremental(original, ['moved'])
+  const arrow = updated.elements.find((item) => item.id === 'wire')
+  assert.ok(arrow?.type === 'arrow')
+  assert.notDeepEqual(arrow, originalArrow, 'obstacle intersects only the actual y=120 port, not the old y=140 center')
+  assert.equal(arrow.fromPortRatio, undefined)
+  assert.equal(arrow.toPortRatio, undefined)
+})

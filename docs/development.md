@@ -248,6 +248,8 @@ P25 大图阅读：Desktop 缩放区的原“阅读”改为“主链”，保�
 - 压力样例：`pnpm benchmark:architecture --suite=stress`，30/50/80 节点，运行成本较高，不放到默认 CI。
 - 对比试验：`pnpm benchmark:architecture:engines`，或 `pnpm benchmark:architecture:engines --suite=extended`。输出 `test-results/architecture-engines/index.html`、`report.json` 及各候选的可编辑 Canvas JSON 与 SVG。支持 `--case=data-platform` 只跑单例。
 
+P2 领域职责收敛（2026-10-25）：将 `architectureDesign.ts` 中原有整段布线逻辑移动到 `architectureRouting.ts`，并把正交走廊候选搜索、矩形相交、折线简化、占用评分拆到纯几何 `architectureOrthogonalSolver.ts`；`architectureComposer.ts`、`CanvasEditor.tsx`、`canvasPatch.ts` 直接调用共同的路由接口，旧 `architectureDesign.ts` 公共入口保留兼容再导出。这是**一个实现拆分成职责明确的模块**，不是增加 LayoutEngine SPI 或第二套引擎。原先增量路由计算既有关系几何时重复使用边中点，可能漏检不在中点上的原生端口；现在直接调用 `canvasArrowBoxRoute`，新增端口偏移与移动遮挡回归测试。拆分前后 20 例扩展生成指标及最终场景结果逐字段对比一致（不含耗时），原有 3 个视觉审查阻断案例不变。后续优化先调整统一路由模块的端口容量和走廊约束，必须通过相同的整图指标及视觉检查，不能因职责拆分宣称生成质量已提高。
+
 ELK 平铺与复合分组候选只修改节点坐标，然后复用当前 Canvas 正交路由；`elk-native` 与 `elk-native-compound` 导入原生 Section、端口和折点为可编辑 Canvas 箭头，不修改默认生成路径。复合候选先按 `edge.container` 找到 ELK 边线的局部坐标原点，再转换为世界坐标；不能直接对根 `edges` 的所有 Section 统一加画布边距。节点边界上的端口现直接记录 `fromPortRatio/toPortRatio`，无需强制回到边中点；边界外端点仍由共享正交接线适配，因此不宣称所有原生端口都无损移植。锁定节点明确拒绝原生重新排布。报告在原有尺寸、分区与字体指标上补充非正交线段、分区相交面积和同一 Canvas 的候选拒绝原因。时间字段口径不同：`current` 包含整套候选搜索与优化；`elk-*` 仅包含在已完成的 Canvas 图上再次布局，不能当作整体生成速度 A/B 结论。
 
 2026-10-25 修正 `edge.container` 后，微服务高扇出合成拓扑的 `elk-native-compound` 由错误映射的 **24 交叉、16 穿节点**变为 **0 交叉、0 穿节点**，分区框重叠仍为 0；但独立关系重叠由 1 增至 12（正式自研引擎为 5）。因此该候选尚未通过整体几何门禁，不能直接切换；下一步应把分区联合排布与边线独立走廊视为同一约束问题，而非继续对单根线增加局部补丁。这是实验样例的机器检查，不是人工视觉验收。
