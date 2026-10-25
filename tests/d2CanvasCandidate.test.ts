@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { d2SvgNodePositions, d2SvgToEditableCanvas } from '../scripts/d2-canvas-candidate.js'
+import { d2OrthogonalPath, d2RelationAliases, d2SvgEdgePaths, d2SvgNodePositions, d2SvgToEditableCanvas, d2SvgToNativeBendCanvas } from '../scripts/d2-canvas-candidate.js'
+import { canvasArrowBoxRoute, parseCanvasScene, serializeCanvasScene } from '../src/canvas.js'
 import type { CanvasScene } from '../src/canvas.js'
 
 const scene: CanvasScene = {
@@ -50,4 +51,48 @@ test('D2 geometry rejects missing duplicate corrupt or unrecognized node shapes'
   assert.throws(() => d2SvgToEditableCanvas({ ...scene,
     elements: scene.elements.map((item) => item.id === 'api' ? { ...item, locked: true } : item),
   }, svg), /未锁定/)
+})
+
+test('D2 原生 SVG 折线映射保留语义关系和多折点，遇到曲线显式拒绝', () => {
+  const [edge] = d2RelationAliases(scene)
+  assert.equal(edge.canvasId, 'wire')
+  assert.equal(edge.alias, '(g0.n0 -> n1)[0]')
+  const nativePath = 'M 580 300 L 700 300 S 710 300 710 310 L 710 90 S 710 80 720 80 L 800 80'
+  // One native relation group, with D2 0.9's escaped arrow in the base64 class.
+  const connection = `<g class="${Buffer.from(edge.alias.replace('->', '-&gt;')).toString('base64')}"><path d="${nativePath}" class="connection stroke-B1" /></g>`
+  const source = svg.replace('</svg>', `${connection}</svg>`)
+  assert.deepEqual(d2SvgEdgePaths(source, [edge.alias]).get(edge.alias), d2OrthogonalPath(nativePath))
+  const before = serializeCanvasScene(scene)
+  const candidate = d2SvgToNativeBendCanvas(scene, source)
+  const actual = candidate.elements.find((item) => item.id === 'wire')
+  assert.ok(actual?.type === 'arrow' && actual.points && actual.points.length > 4)
+  assert.equal(actual.label, '读写')
+  assert.equal(actual.from, 'api')
+  assert.equal(actual.to, 'db')
+  assert.equal(actual.bundleKey, undefined)
+  const nodes = new Map(candidate.elements.filter((item) => item.type === 'node').map((item) => [item.id, item]))
+  const route = canvasArrowBoxRoute(nodes.get(actual.from)!, nodes.get(actual.to)!, actual)
+  assert.ok(route.slice(1).every((point, index) =>
+    point.x === route[index].x || point.y === route[index].y), 'Canvas port bridge must remain orthogonal')
+  assert.equal(parseCanvasScene(serializeCanvasScene(candidate)).elements.length, scene.elements.length)
+  assert.equal(serializeCanvasScene(scene), before)
+  assert.throws(() => d2SvgEdgePaths(source + connection, [edge.alias]), /不存在或重复/)
+  assert.throws(() => d2SvgEdgePaths(source.replace('connection stroke-B1', 'stroke-B1'), [edge.alias]), /路径缺失/)
+  assert.throws(() => d2OrthogonalPath('M 10 0 C 30 0 30 20 50 20'), /不支持的命令/)
+  assert.throws(() => d2OrthogonalPath('M 10 0 L 40 30'), /不是正交/)
+  assert.throws(() => d2OrthogonalPath('M 10 0 L 10 0'), /退化为空路径/)
+  assert.throws(() => d2OrthogonalPath('M 10 0 L 20 0 invalid'), /不识别的内容/)
+})
+
+test('同组与重复关系使用确定性 D2 别名，防止错误映射箭头', () => {
+  const duplicate: CanvasScene = {
+    ...scene,
+    elements: [
+      ...scene.elements,
+      { id: 'second', type: 'arrow', from: 'api', to: 'db' },
+      { id: 'third', type: 'arrow', from: 'api', to: 'api' },
+    ],
+  }
+  assert.deepEqual(d2RelationAliases(duplicate).map((item) => item.alias),
+    ['(g0.n0 -> n1)[0]', '(g0.n0 -> n1)[1]', 'g0.(n0 -> n0)[0]'])
 })

@@ -71,9 +71,13 @@ pnpm check:hosts
 
 `pnpm benchmark:architecture:engines --case=microservices` 继续用于现有 Canvas 布局与三种 ELK 实验候选的几何质量对照。**不直接开启 ELK 正式路由。**
 
-`pnpm benchmark:architecture:d2` 将同一架构图中的真实节点、节点尺寸、功能容器和有向关系转换为 D2 测试输入，输出 `test-results/architecture-d2-review/` 下的 `.d2`、当前引擎 SVG 和对照画廊。安装 D2 0.9.0+，使用 `d2 layout` 确认 TALA 已内置，再运行 `pnpm benchmark:architecture:d2 --render` 实际生成 TALA、D2 ELK、Dagre。支持 `--case=...` 和 `D2_BIN=/path/to/d2`。实验额外解析 D2 SVG 的真实节点位置（支持 0.9.0 的 base64 CSS 类名），保留原始 Canvas 图元、尺寸、业务关系和标签，以现有 Canvas 布线器生成独立的 `--canvas.svg` 和 `--canvas.diagram.json`，再使用相同的质量指标比较布局。
+`pnpm benchmark:architecture:d2` 将同一架构图中的真实节点、节点尺寸、功能容器和有向关系转换为 D2 测试输入，输出 `test-results/architecture-d2-review/` 下的 `.d2`、当前引擎 SVG 和对照画廊。安装 D2 0.9.0+，使用 `d2 layout` 确认 TALA 已内置，再运行 `pnpm benchmark:architecture:d2 --render` 实际生成 TALA、D2 ELK、Dagre。支持 `--case=...` 和 `D2_BIN=/path/to/d2`。实验解析 D2 SVG 的真实节点位置（支持 0.9.0 的 base64 CSS 类名），保留原始 Canvas 图元、尺寸、业务关系和标签：`*-placement-only` 仅导入位置并交给 Canvas 布线器；`*-native-bends` 则从 D2 真实关系 ID 逐条读取原生正交折点，映射为可编辑 Canvas 并检查几何质量。两种候选都可单独导出 SVG/JSON，不影响正式引擎。
 
-**重要限制：**原生 D2 SVG 使用 D2 自己的主题与连线；回灌的 Canvas 只取 D2 的节点位置，**不保留 D2 边线折点或端口优化**，不能用这项实验直接评价 TALA 原生边线的质量。当前项目生成器耗时包含候选搜索，而 D2 CLI 耗时包含进程启动、布局及 SVG 渲染，两者不可直接当作布局速度比较。锁定节点、异常或缺失的坐标明确拒绝导入。所有路径都只在 `scripts/` 实验中使用，不新增正式运行依赖、保存格式或默认模型路由。
+**重要限制：**原生 D2 SVG 使用 D2 自己的主题、边线与端口。新 native-bends 导入保留 TALA/ELK 的可解析正交折点，但圆角转换为直角，起止端口仍需通过 Canvas 四侧居中锚点进行正交衔接，原生关系标签位置也无法原样保留；包含 `C/Q` 等无法表示的曲线路径时**明确拒绝该候选**，不静默回退本地布线。因此它是“原生折点 + Canvas 锚点/标签”的混合实现，**不等于 D2 原生几何已无损导入**。报告新增非正交线段门禁。只有 Canvas 对照图满足门禁并接受人工观察，才能考虑进一步试用。当前生成器耗时包含候选搜索，而 D2 CLI 耗时包含进程启动、布局及 SVG 渲染，不能直接作为速度 A/B；native-bends 显示的仅是额外导入耗时。锁定节点、异常或缺失的坐标明确拒绝导入。所有路径仍只在 `scripts/` 实验中使用，不新增正式运行依赖、保存格式或默认模型路由。
+
+如果机器暂时没有 D2，可以用 `pnpm benchmark:architecture:d2 --reuse-svg-dir=/绝对路径/已保存的architecture-d2-review` 重放先前生成的 D2 SVG。脚本要求每个样例的 `.d2` 源码和本次完全一致，否则直接报错；报告标明 `sourceMode=matching-saved-d2-svg-replay`，只证明旧 D2 结果在当前 Canvas 上的再导入效果，**不能冒充本轮重新运行了 D2 CLI**。
+
+2026-10-25 五组已保存 D2 0.9 SVG 的重放结果：TALA 原生折点经 Canvas 锚点正交衔接后，五组均可导出可编辑 JSON 和 SVG，非正交线段均为 0；其中数据平台样例通过“可进入人工视觉审查”的几何门禁，其余四组仍因适配字号下降、重叠或新增交叉被拒绝。这并非新跑的 TALA 生成性能数据，也不是视觉交付批准。额外试验发现 ELK Native + compound 在未正确处理分区局部边线坐标时，会引入 16 处穿节点；该分支已撤回，不作为布局候选。后续若研究 ELK 复合原生线路，必须先正确变换边线的坐标空间，而不是增添碰撞补丁。
 
 在 macOS ARM64 上实测官方 D2 v0.9.0（release SHA-256：`eaf6c0c143e56dd9fa97bfb6df25ea9c1ebce40245f056a0768cf1a6c15d3064`），五组结果均成功回灌可编辑 Canvas。以下为「交叉 / 重叠 / 适配字号」；不是主观审美打分：
 
