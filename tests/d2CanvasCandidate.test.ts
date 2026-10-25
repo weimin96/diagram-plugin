@@ -96,3 +96,20 @@ test('同组与重复关系使用确定性 D2 别名，防止错误映射箭头'
   assert.deepEqual(d2RelationAliases(duplicate).map((item) => item.alias),
     ['(g0.n0 -> n1)[0]', '(g0.n0 -> n1)[1]', 'g0.(n0 -> n0)[0]'])
 })
+
+test('D2 原生边界端口无须绕回节点中点，Canvas JSON/SVG 保留不同端口', () => {
+  const [edge] = d2RelationAliases(scene)
+  const native = 'M 400 290 L 300 290 L 300 90'
+  const connection = `<g class="${Buffer.from(edge.alias.replace('->', '-&gt;')).toString('base64')}"><path d="${native}" class="connection stroke-B1" /></g>`
+  const output = d2SvgToNativeBendCanvas(scene, svg.replace('</svg>', `${connection}</svg>`))
+  const from = output.elements.find((item) => item.id === 'api')
+  const to = output.elements.find((item) => item.id === 'db')
+  const arrow = output.elements.find((item) => item.id === 'wire')
+  assert.ok(from?.type === 'node' && to?.type === 'node' && arrow?.type === 'arrow')
+  assert.deepEqual([arrow.fromAnchor, arrow.toAnchor], ['left', 'right'])
+  assert.deepEqual([arrow.fromPortRatio, arrow.toPortRatio], [0.375, 0.5])
+  const coords = canvasArrowBoxRoute(from, to, arrow)
+  assert.deepEqual(coords, [{ x: 376, y: 410 }, { x: 276, y: 410 }, { x: 276, y: 210 }])
+  assert.deepEqual(canvasArrowBoxRoute(from, to, parseCanvasScene(serializeCanvasScene(output))
+    .elements.find((item) => item.id === 'wire') as typeof arrow), coords)
+})

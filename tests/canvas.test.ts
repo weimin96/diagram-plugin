@@ -55,6 +55,28 @@ test('正交路由在混合锚点时沿各自锚点法线进出', () => {
   assert.equal(route.at(-2)!.y, route.at(-1)!.y)
 })
 
+test('精确端口沿节点边界按比例定位，保存、重新打开及 SVG 导出使用同一路径', () => {
+  const from = { id: 'from', type: 'node' as const, x: 100, y: 100, width: 180, height: 80, text: '起点' }
+  const to = { id: 'to', type: 'node' as const, x: 500, y: 100, width: 180, height: 80, text: '终点' }
+  const arrow = { id: 'edge', type: 'arrow' as const, from: from.id, to: to.id,
+    routing: 'orthogonal' as const, fromAnchor: 'right' as const, toAnchor: 'left' as const,
+    fromPortRatio: 0.25, toPortRatio: 0.25 }
+  const scene: CanvasScene = {
+    type: 'diagram-plugin-canvas', version: 1, title: '精确端口', width: 900, height: 350,
+    elements: [from, to, arrow],
+  }
+  assert.deepEqual(canvasArrowBoxRoute(from, to, arrow), [{ x: 280, y: 120 }, { x: 390, y: 120 }, { x: 500, y: 120 }])
+  const restored = parseCanvasScene(serializeCanvasScene(scene))
+  assert.equal((restored.elements[2] as typeof arrow).fromPortRatio, 0.25)
+  assert.equal((restored.elements[2] as typeof arrow).toPortRatio, 0.25)
+  assert.match(canvasSceneToSvg(restored), /M 280 120 L 390 120 L 500 120/)
+  assert.deepEqual(canvasArrowBoxRoute(from, to, { ...arrow, fromPortRatio: undefined, toPortRatio: undefined }),
+    [{ x: 280, y: 140 }, { x: 390, y: 140 }, { x: 500, y: 140 }])
+  const invalid = parseCanvasScene(JSON.stringify({ ...scene, elements: [from, to, { ...arrow, fromPortRatio: -0.2, toAnchor: 'auto' }] }))
+  const clean = invalid.elements[2]
+  assert.ok(clean.type === 'arrow' && clean.fromPortRatio === undefined && clean.toPortRatio === undefined)
+})
+
 test('round-trips a Canvas scene and renders standalone SVG', () => {
   const source = createCanvasSource('Architecture')
   const scene = parseCanvasScene(source)

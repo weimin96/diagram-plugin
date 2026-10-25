@@ -58,13 +58,13 @@ const boxFields = new Set([
   'rotation', 'textOnly', 'fontSize', 'fontWeight', 'textColor',
 ])
 const arrowFields = new Set([
-  'from', 'to', 'label', 'lineStyle', 'routing', 'fromAnchor', 'toAnchor', 'points', 'labelPosition', 'emphasis', 'bundleKey',
+  'from', 'to', 'label', 'lineStyle', 'routing', 'fromAnchor', 'toAnchor', 'fromPortRatio', 'toPortRatio', 'points', 'labelPosition', 'emphasis', 'bundleKey',
   'start', 'end', 'markerEnd', 'strokeColor', 'strokeWidth', 'opacity',
 ])
 const requiredBoxFields = new Set(['x', 'y', 'width', 'height', 'text'])
 const requiredArrowFields = new Set(['from', 'to'])
 const geometryFields = new Set(['x', 'y', 'width', 'height', 'rotation'])
-const arrowRouteFields = ['routing', 'fromAnchor', 'toAnchor', 'lineStyle', 'points', 'labelPosition', 'bundleKey'] as const
+const arrowRouteFields = ['routing', 'fromAnchor', 'toAnchor', 'fromPortRatio', 'toPortRatio', 'lineStyle', 'points', 'labelPosition', 'bundleKey'] as const
 
 export function buildCanvasSubgraphPatch(base: CanvasScene, patch: CanvasSubgraphPatchInput): CanvasSubgraphPatchResult {
   base = normalizeStrict(base)
@@ -514,6 +514,17 @@ function applyElementChanges(item: CanvasElement, changes: Record<string, unknow
   }
   if (item.type === 'arrow') {
     const endpointsChanged = ('from' in changes && changes.from !== item.from) || ('to' in changes && changes.to !== item.to)
+    for (const endpoint of ['from', 'to'] as const) {
+      const field = `${endpoint}PortRatio`
+      if ((endpoint in changes && changes[endpoint] !== item[endpoint])
+        || (`${endpoint}Anchor` in changes && changes[`${endpoint}Anchor`] !== item[`${endpoint}Anchor`])) {
+        if (!(field in changes)) delete next[field]
+      }
+      const ratio = next[field]
+      if (ratio !== undefined && !['top', 'right', 'bottom', 'left'].includes(String(next[`${endpoint}Anchor`]))) {
+        throw new Error(`Canvas patch 精确端口需要明确的非 auto 锚点：${item.id}.${field}`)
+      }
+    }
     if (endpointsChanged) {
       if (!('points' in changes)) delete next.points
       if (!('labelPosition' in changes)) delete next.labelPosition
@@ -563,6 +574,12 @@ function buildAddedArrow(add: CanvasPatchAddInput): CanvasArrow {
     if (value !== null) validatePatchField('arrow', key, value, add.id)
   }
   if (typeof properties.from !== 'string' || typeof properties.to !== 'string') throw new Error(`Canvas patch 新关系必须提供 from/to：${add.id}`)
+  for (const endpoint of ['from', 'to'] as const) {
+    if (properties[`${endpoint}PortRatio`] !== undefined && properties[`${endpoint}PortRatio`] !== null
+      && !['top', 'right', 'bottom', 'left'].includes(String(properties[`${endpoint}Anchor`]))) {
+      throw new Error(`Canvas patch 精确端口需要明确的非 auto 锚点：${add.id}.${endpoint}PortRatio`)
+    }
+  }
   return { id: add.id, type: 'arrow', ...properties } as CanvasArrow
 }
 
@@ -800,6 +817,10 @@ function validatePatchField(type: CanvasElement['type'], key: string, value: unk
   }
   if (key === 'fromAnchor' || key === 'toAnchor') {
     if (!['auto', 'top', 'right', 'bottom', 'left'].includes(String(value))) fail()
+    return
+  }
+  if (key === 'fromPortRatio' || key === 'toPortRatio') {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) fail()
     return
   }
   if (key === 'points') {

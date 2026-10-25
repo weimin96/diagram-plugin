@@ -34,7 +34,8 @@ export function buildGenerationPrompt(workspacePath: string, request: DiagramGen
         '3. 只调用一次 diagram.composeArchitecture：传入 title、nodes、relations 和必要 theme；如果可以从真实有向依赖确认主要业务链路，按入口到结果填写 primaryPath，必须逐段对应已有关系，不要为凑主链造边。无需再额外创建文件或整图更新，也不要手动编写 x/y/width/height、line routing、重复颜色或整份 Canvas JSON。',
         '4. 由插件自动处理 layered、hub-spoke、event-driven 等架构布局、语义分区与正交连线，提供设计质量检查。节点标签使用短标题，技术栈只有确认后才使用 stencil。',
         '5. 同时检查 quality（已执行 diagram.inspectQuality 同级检查）和 visualPlan.review.readyForVisualReview：基础几何检查合格不代表视觉合格，review=false 表示布局仍存在阻断问题，只能称为待整改草稿；review=true 也只代表待人工视觉审查。诚实说明具体缺陷，不得为过关发明跨域边、降低检查阈值或反复全量重画。',
-        '6. 给用户图表路径和极简结果摘要，不输出冗长 JSON。',
+      '6. 编辑已有 Canvas 时，保留真实箭头的 fromPortRatio/toPortRatio（指定边界侧沿边界 0..1 的位置）；只在已有精确几何证据时使用，不为普通自动生成编造端口比例。重新连接节点应清除已失效的端口位置。',
+      '7. 给用户图表路径和极简结果摘要，不输出冗长 JSON。',
       ].filter(Boolean).join('\n')
     }
     const workbenchRule = workbench === 'architecture'

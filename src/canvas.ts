@@ -167,6 +167,9 @@ export interface CanvasArrow {
   routing?: CanvasRouting
   fromAnchor?: CanvasAnchor
   toAnchor?: CanvasAnchor
+  /** Proportion along the chosen side (0=start, 1=end); omitted means center. */
+  fromPortRatio?: number
+  toPortRatio?: number
   points?: CanvasPoint[]
   labelPosition?: CanvasPoint
   emphasis?: CanvasEmphasis
@@ -603,7 +606,7 @@ export function canvasBundleTrunks(scene: CanvasScene): CanvasBundleTrunk[] {
         const box = boxes.get(first.from)
         const end = first.points?.[0]
         if (!box || !end) continue
-        const start = anchorPoint(box, first.fromAnchor, end)
+        const start = anchorPoint(box, first.fromAnchor, end, first.fromPortRatio)
         result.push({ id: `${bundleKey}:${clusterKey}`,
           path: `M ${start.x} ${start.y} L ${end.x} ${end.y}`,
           emphasis: strongestEmphasis(members), count: members.length })
@@ -622,7 +625,7 @@ export function canvasBundleTrunks(scene: CanvasScene): CanvasBundleTrunk[] {
         const box = boxes.get(first.to)
         const start = first.points?.at(-1)
         if (!box || !start) continue
-        const end = anchorPoint(box, first.toAnchor, start)
+        const end = anchorPoint(box, first.toAnchor, start, first.toPortRatio)
         result.push({ id: `${bundleKey}:${clusterKey}`, path: `M ${start.x} ${start.y} L ${end.x} ${end.y}`, emphasis: strongestEmphasis(members), count: members.length })
       }
     } else if (bundleKey.startsWith('group:')) {
@@ -631,8 +634,8 @@ export function canvasBundleTrunks(scene: CanvasScene): CanvasBundleTrunk[] {
         const from = boxes.get(arrow.from)
         const to = boxes.get(arrow.to)
         if (!from || !to) continue
-        const start = anchorPoint(from, arrow.fromAnchor, centerOfCanvasBox(to))
-        const end = anchorPoint(to, arrow.toAnchor, centerOfCanvasBox(from))
+        const start = anchorPoint(from, arrow.fromAnchor, centerOfCanvasBox(to), arrow.fromPortRatio)
+        const end = anchorPoint(to, arrow.toAnchor, centerOfCanvasBox(from), arrow.toPortRatio)
         const route = canvasArrowRoutePoints(start, end, arrow)
         for (let index = 0; index < route.length - 1; index += 1) {
           const a = route[index]
@@ -1402,16 +1405,18 @@ function edgePoint(item: CanvasAnchorBox, toward: CanvasPoint) {
   }
 }
 
-export function anchorPoint(item: CanvasAnchorBox, anchor: CanvasAnchor | undefined, toward: CanvasPoint): CanvasPoint {
+export function anchorPoint(item: CanvasAnchorBox, anchor: CanvasAnchor | undefined, toward: CanvasPoint, portRatio?: number): CanvasPoint {
   const center = centerOfCanvasBox(item)
   if (!anchor || anchor === 'auto') return edgePoint(item, toward)
+  const ratio = typeof portRatio === 'number' && Number.isFinite(portRatio) && portRatio >= 0 && portRatio <= 1
+    ? portRatio : 0.5
   const local = anchor === 'top'
-    ? { x: center.x, y: item.y }
+    ? { x: item.x + item.width * ratio, y: item.y }
     : anchor === 'right'
-      ? { x: item.x + item.width, y: center.y }
+      ? { x: item.x + item.width, y: item.y + item.height * ratio }
       : anchor === 'bottom'
-        ? { x: center.x, y: item.y + item.height }
-        : { x: item.x, y: center.y }
+        ? { x: item.x + item.width * ratio, y: item.y + item.height }
+        : { x: item.x, y: item.y + item.height * ratio }
   const rotation = ((item.rotation ?? 0) * Math.PI) / 180
   if (!rotation) return local
   const dx = local.x - center.x
@@ -1443,12 +1448,12 @@ export function canvasArrowRoutePath(route: CanvasPoint[], freehand?: boolean): 
 export function canvasArrowBoxRoute(
   from: CanvasAnchorBox,
   to: CanvasAnchorBox,
-  arrow: Pick<CanvasArrow, 'routing' | 'points' | 'fromAnchor' | 'toAnchor' | 'freehand'>,
+  arrow: Pick<CanvasArrow, 'routing' | 'points' | 'fromAnchor' | 'toAnchor' | 'fromPortRatio' | 'toPortRatio' | 'freehand'>,
   selfLoop = false,
 ): CanvasPoint[] {
   const loop = selfLoop ? selfLoopPoints(from) : undefined
-  const start = anchorPoint(from, arrow.fromAnchor, arrow.points?.[0] ?? loop?.[0] ?? centerOfCanvasBox(to))
-  const end = anchorPoint(to, arrow.toAnchor, arrow.points?.at(-1) ?? loop?.at(-1) ?? centerOfCanvasBox(from))
+  const start = anchorPoint(from, arrow.fromAnchor, arrow.points?.[0] ?? loop?.[0] ?? centerOfCanvasBox(to), arrow.fromPortRatio)
+  const end = anchorPoint(to, arrow.toAnchor, arrow.points?.at(-1) ?? loop?.at(-1) ?? centerOfCanvasBox(from), arrow.toPortRatio)
   return canvasArrowRoutePoints(start, end, loop ? { ...arrow, points: loop } : arrow)
 }
 
@@ -1757,6 +1762,10 @@ function normalizeCanvasElement(item: CanvasElement): CanvasElement {
       ...(item.routing === 'straight' || item.routing === 'orthogonal' ? { routing: item.routing } : {}),
       ...(['auto', 'top', 'right', 'bottom', 'left'].includes(item.fromAnchor ?? '') ? { fromAnchor: item.fromAnchor } : {}),
       ...(['auto', 'top', 'right', 'bottom', 'left'].includes(item.toAnchor ?? '') ? { toAnchor: item.toAnchor } : {}),
+      ...((['top', 'right', 'bottom', 'left'].includes(item.fromAnchor ?? '') && normalizedUnitInterval(item.fromPortRatio) !== undefined)
+        ? { fromPortRatio: normalizedUnitInterval(item.fromPortRatio) } : {}),
+      ...((['top', 'right', 'bottom', 'left'].includes(item.toAnchor ?? '') && normalizedUnitInterval(item.toPortRatio) !== undefined)
+        ? { toPortRatio: normalizedUnitInterval(item.toPortRatio) } : {}),
       ...(Array.isArray(item.points) ? { points: item.points.filter((point) => point && Number.isFinite(point.x) && Number.isFinite(point.y)).slice(0, 480).map((point) => ({ x: point.x, y: point.y })) } : {}),
       ...(item.labelPosition && Number.isFinite(item.labelPosition.x) && Number.isFinite(item.labelPosition.y) ? { labelPosition: { x: item.labelPosition.x, y: item.labelPosition.y } } : {}),
       ...(item.emphasis && emphases.includes(item.emphasis) ? { emphasis: item.emphasis } : {}),

@@ -377,7 +377,7 @@ export function reconnectCanvasArrow(
       if (item.type !== 'arrow' || item.id !== arrowId) return item
       const next: CanvasArrow = {
         ...item,
-        ...(endpoint === 'from' ? { from: nodeId, fromAnchor: anchor } : { to: nodeId, toAnchor: anchor }),
+        ...(endpoint === 'from' ? { from: nodeId, fromAnchor: anchor, fromPortRatio: undefined } : { to: nodeId, toAnchor: anchor, toPortRatio: undefined }),
         points: undefined,
         labelPosition: undefined,
         bundleKey: undefined,
@@ -398,6 +398,8 @@ export function reverseCanvasArrow(scene: CanvasScene, arrowId: string): CanvasS
         to: item.from,
         fromAnchor: item.toAnchor,
         toAnchor: item.fromAnchor,
+        fromPortRatio: item.toPortRatio,
+        toPortRatio: item.fromPortRatio,
         points: item.points?.slice().reverse(),
         bundleKey: undefined,
       }
@@ -414,6 +416,7 @@ export function insertCanvasNodeOnArrow(scene: CanvasScene, nodeId: string, arro
     ...arrow,
     to: nodeId,
     toAnchor: undefined,
+    toPortRatio: undefined,
     points: undefined,
     bundleKey: undefined,
     labelPosition: undefined,
@@ -423,6 +426,7 @@ export function insertCanvasNodeOnArrow(scene: CanvasScene, nodeId: string, arro
     id: newArrowId,
     from: nodeId,
     fromAnchor: undefined,
+    fromPortRatio: undefined,
     label: undefined,
     labelPosition: undefined,
     points: undefined,

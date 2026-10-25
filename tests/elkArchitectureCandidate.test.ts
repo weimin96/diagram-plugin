@@ -49,6 +49,7 @@ test('ELK 原生路径保留可编辑折点、端点和 SVG/JSON 兼容', async 
     assert.ok(route.slice(1).every((point, index) =>
       point.x === route[index].x || point.y === route[index].y), arrow.id)
   }
+  assert.ok(arrows.some((arrow) => arrow.fromPortRatio !== undefined || arrow.toPortRatio !== undefined))
   assert.equal(parseCanvasScene(serializeCanvasScene(result)).elements.length, result.elements.length)
 })
 

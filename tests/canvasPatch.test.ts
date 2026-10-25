@@ -87,6 +87,35 @@ test('reconnecting an arrow through a patch clears stale authored route metadata
   assert.notDeepEqual(edge.points, [{ x: 840, y: 228 }])
 })
 
+test('精确端口 patch 校验边界、锚点依赖与关系重连后的端口释放', () => {
+  const base = scene()
+  const result = buildCanvasSubgraphPatch(base, {
+    scopeElementIds: ['api-db'],
+    updates: [{ id: 'api-db', changes: {
+      fromAnchor: 'right', toAnchor: 'left', fromPortRatio: 0.15, toPortRatio: 0.85,
+    } }],
+  })
+  const arrow = result.scene.elements.find((item) => item.id === 'api-db')
+  assert.ok(arrow?.type === 'arrow')
+  assert.deepEqual([arrow.fromPortRatio, arrow.toPortRatio], [0.15, 0.85])
+  assert.deepEqual(parseCanvasScene(serializeCanvasScene(result.scene)).elements
+    .filter((item): item is CanvasArrow => item.type === 'arrow' && item.id === 'api-db')
+    .map((item) => item.fromPortRatio), [0.15])
+  assert.throws(() => buildCanvasSubgraphPatch(base, {
+    scopeElementIds: ['api-db'], updates: [{ id: 'api-db', changes: { fromPortRatio: 1.5 } }],
+  }), /fromPortRatio/)
+  assert.throws(() => buildCanvasSubgraphPatch(base, {
+    scopeElementIds: ['api-db'], updates: [{ id: 'api-db', changes: { fromPortRatio: 0.15 } }],
+  }), /精确端口需要明确/)
+  const cleared = buildCanvasSubgraphPatch(result.scene, {
+    scopeElementIds: ['api-db'], updates: [{ id: 'api-db', changes: { to: 'locked' } }],
+  })
+  const rerouted = cleared.scene.elements.find((item) => item.id === 'api-db')
+  assert.ok(rerouted?.type === 'arrow')
+  assert.equal(rerouted.fromPortRatio, undefined) // Auto-reroute resets both ports.
+  assert.equal(rerouted.toPortRatio, undefined)
+})
+
 test('relationship text-only updates preserve authored route and label geometry', () => {
   const result = buildCanvasSubgraphPatch(scene(), {
     scopeElementIds: ['api-db'],

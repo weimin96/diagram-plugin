@@ -15,9 +15,19 @@ function bridge(from: CanvasPoint, to: CanvasPoint, axis: 'x' | 'y'): CanvasPoin
   return [from, corner, to]
 }
 
-/** Both D2 and ELK have arbitrary boundary ports; the current Canvas contract
- * only has four side-center anchors. Translate genuine orthogonal waypoints
- * without inventing a diagonal segment, and report the port approximation.
+function boundaryRatio(node: CanvasNode, side: CanvasAnchor, point: CanvasPoint): number | undefined {
+  if (side === 'auto') return undefined
+  const along = side === 'left' || side === 'right' ? (point.y - node.y) / node.height : (point.x - node.x) / node.width
+  const distance = side === 'left' ? Math.abs(point.x - node.x)
+    : side === 'right' ? Math.abs(point.x - node.x - node.width)
+      : side === 'top' ? Math.abs(point.y - node.y) : Math.abs(point.y - node.y - node.height)
+  // A small tolerance accounts for ELK / SVG rounding, not ports inside boxes.
+  return distance <= 1 && along >= 0 && along <= 1 ? along : undefined
+}
+
+/** Translate genuine orthogonal native bends. When ELK/D2 endpoints lie on the
+ * node boundary, persist their exact relative port positions. For unsupported
+ * endpoints the prior center-anchor + orthogonal bridge remains explicit.
  * Used solely by the isolated external-layout experiments. */
 export function canvasNativeOrthogonalRoute(from: CanvasNode, to: CanvasNode, route: CanvasPoint[]) {
   if (route.length < 2 || route.some((point) => !Number.isFinite(point.x) || !Number.isFinite(point.y))
@@ -26,8 +36,10 @@ export function canvasNativeOrthogonalRoute(from: CanvasNode, to: CanvasNode, ro
   }
   const fromAnchor = closestSide(from, route[0])
   const toAnchor = closestSide(to, route.at(-1)!)
-  const start = anchorPoint(from, fromAnchor, route[0])
-  const end = anchorPoint(to, toAnchor, route.at(-1)!)
+  const fromPortRatio = boundaryRatio(from, fromAnchor, route[0])
+  const toPortRatio = boundaryRatio(to, toAnchor, route.at(-1)!)
+  const start = anchorPoint(from, fromAnchor, route[0], fromPortRatio)
+  const end = anchorPoint(to, toAnchor, route.at(-1)!, toPortRatio)
   const fromAxis = fromAnchor === 'left' || fromAnchor === 'right' ? 'x' : 'y'
   const toAxis = toAnchor === 'left' || toAnchor === 'right' ? 'y' : 'x'
   const connected = [
@@ -36,5 +48,6 @@ export function canvasNativeOrthogonalRoute(from: CanvasNode, to: CanvasNode, ro
     ...bridge(route.at(-1)!, end, toAxis).slice(1),
   ].filter((point, index, points) =>
     index === 0 || point.x !== points[index - 1].x || point.y !== points[index - 1].y)
-  return { routing: 'orthogonal' as const, fromAnchor, toAnchor, points: connected.slice(1, -1) }
+  return { routing: 'orthogonal' as const, fromAnchor, toAnchor,
+    fromPortRatio, toPortRatio, points: connected.slice(1, -1) }
 }

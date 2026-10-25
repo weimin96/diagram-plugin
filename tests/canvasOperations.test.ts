@@ -40,6 +40,25 @@ test('copies and pastes a connected canvas selection with unique remapped arrows
   }
 })
 
+test('反转关系保留精确端口归属，换节点时只清理被替换端口', () => {
+  const base = scene()
+  const fixed: CanvasScene = {
+    ...base,
+    elements: base.elements.map((item) => item.id === 'arrow-1' && item.type === 'arrow'
+      ? { ...item, fromAnchor: 'right', fromPortRatio: 0.25, toAnchor: 'left', toPortRatio: 0.75 } : item),
+  }
+  const reversed = reverseCanvasArrow(fixed, 'arrow-1').elements.find((item) => item.id === 'arrow-1')
+  assert.ok(reversed?.type === 'arrow')
+  assert.deepEqual([reversed.fromPortRatio, reversed.toPortRatio], [0.75, 0.25])
+  const reconnected = reconnectCanvasArrow(fixed, 'arrow-1', 'to', 'node-3', 'left')
+    .elements.find((item) => item.id === 'arrow-1')
+  assert.ok(reconnected?.type === 'arrow')
+  assert.equal(reconnected.fromPortRatio, 0.25)
+  assert.equal(reconnected.toPortRatio, undefined)
+  assert.equal(insertCanvasNodeOnArrow(fixed, 'node-3', 'arrow-1').scene.elements
+    .filter((item): item is CanvasArrow => item.type === 'arrow' && item.from === 'node-3')[0]?.fromPortRatio, undefined)
+})
+
 test('smart snap aligns edges and centers against nearby shapes and boundary targets', () => {
   const edge = computeCanvasSmartSnap(
     { x: 292, y: 210, width: 100, height: 80 },

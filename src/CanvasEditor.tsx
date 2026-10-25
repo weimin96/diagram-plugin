@@ -1465,11 +1465,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
     const from = live.elements.find((item): item is CanvasNode | CanvasNote => item.type !== 'arrow' && item.id === arrow.from)
     const to = live.elements.find((item): item is CanvasNode | CanvasNote => item.type !== 'arrow' && item.id === arrow.to)
     if (!from || !to) return
-    const fromCenter = center(from)
-    const toCenter = center(to)
-    const start = anchorPoint(from, arrow.fromAnchor, arrow.points?.[0] ?? toCenter)
-    const end = anchorPoint(to, arrow.toAnchor, arrow.points?.at(-1) ?? fromCenter)
-    const midpoint = polylineMidpoint(canvasArrowRoutePoints(start, end, arrow))
+    const midpoint = polylineMidpoint(canvasArrowBoxRoute(from, to, arrow, arrow.from === arrow.to))
     const nodeId = nextCanvasElementId('node', live.elements)
     const node: CanvasNode = {
       id: nodeId,
@@ -2592,10 +2588,9 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
     const from = live.elements.find((item): item is CanvasNode | CanvasNote => item.type !== 'arrow' && item.id === arrow.from)
     const to = live.elements.find((item): item is CanvasNode | CanvasNote => item.type !== 'arrow' && item.id === arrow.to)
     if (!from || !to) return
-    const fromCenter = center(from)
-    const toCenter = center(to)
-    const start = anchorPoint(from, arrow.fromAnchor, arrow.points?.[0] ?? toCenter)
-    const end = anchorPoint(to, arrow.toAnchor, arrow.points?.at(-1) ?? fromCenter)
+    const route = canvasArrowBoxRoute(from, to, arrow, arrow.from === arrow.to)
+    const start = route[0]
+    const end = route.at(-1)!
     const points = [...(arrow.points ?? []), { x: snap((start.x + end.x) / 2), y: snap((start.y + end.y) / 2) }]
     updateElement(arrow.id, (item) => item.type === 'arrow' ? { ...item, points } : item)
   }
@@ -3682,8 +3677,8 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                 </div> : null}
                 <label className="freeform-style-range"><span>透明度</span><input aria-label="连线透明度" type="range" min="10" max="100" value={Math.round((selectedSingle.opacity ?? 1) * 100)} onChange={(event) => updateElement(selectedSingle.id, (item) => item.type === 'arrow' ? { ...item, opacity: Number(event.target.value) / 100 } : item)} /><b>{Math.round((selectedSingle.opacity ?? 1) * 100)}</b></label>
                 {selectedSingle.start && selectedSingle.end ? null : <div className="freeform-property-row">
-                  <label><span>起点</span><select aria-label="连线起点锚点" value={selectedSingle.fromAnchor ?? 'auto'} onChange={(event) => updateElement(selectedSingle.id, (item) => item.type === 'arrow' ? { ...item, fromAnchor: event.target.value as CanvasAnchor } : item)}>{anchorOptions()}</select></label>
-                  <label><span>终点</span><select aria-label="连线终点锚点" value={selectedSingle.toAnchor ?? 'auto'} onChange={(event) => updateElement(selectedSingle.id, (item) => item.type === 'arrow' ? { ...item, toAnchor: event.target.value as CanvasAnchor } : item)}>{anchorOptions()}</select></label>
+                  <label><span>起点</span><select aria-label="连线起点锚点" value={selectedSingle.fromAnchor ?? 'auto'} onChange={(event) => updateElement(selectedSingle.id, (item) => item.type === 'arrow' ? { ...item, fromAnchor: event.target.value as CanvasAnchor, fromPortRatio: undefined } : item)}>{anchorOptions()}</select></label>
+                  <label><span>终点</span><select aria-label="连线终点锚点" value={selectedSingle.toAnchor ?? 'auto'} onChange={(event) => updateElement(selectedSingle.id, (item) => item.type === 'arrow' ? { ...item, toAnchor: event.target.value as CanvasAnchor, toPortRatio: undefined } : item)}>{anchorOptions()}</select></label>
                 </div>}
                 {!selectedSingle.freehand ? <div className="freeform-align-row">
                   <button type="button" onClick={() => addArrowPoint(selectedSingle)}>添加折点</button>
@@ -4164,11 +4159,7 @@ function nearestArrowTarget(scene: CanvasScene, point: CanvasPoint, excludedNode
     const from = boxes.get(arrow.from)
     const to = boxes.get(arrow.to)
     if (!from || !to) continue
-    const fromCenter = center(from)
-    const toCenter = center(to)
-    const start = anchorPoint(from, arrow.fromAnchor, arrow.points?.[0] ?? toCenter)
-    const end = anchorPoint(to, arrow.toAnchor, arrow.points?.at(-1) ?? fromCenter)
-    const route = canvasArrowRoutePoints(start, end, arrow)
+    const route = canvasArrowBoxRoute(from, to, arrow, arrow.from === arrow.to)
     for (let index = 0; index < route.length - 1; index += 1) {
       const closest = closestPointOnSegment(point, route[index], route[index + 1])
       const distance = Math.hypot(closest.x - point.x, closest.y - point.y)
