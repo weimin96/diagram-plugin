@@ -780,9 +780,10 @@ function negotiateFinalCorridors(result: ReturnType<typeof composeArchitectureGr
   let selected = result
   const requiredTrunks = canvasBundleTrunks(result.scene).length
   // Allocate search budget by information value: resolve measured conflicts
-  // first, inspect every real relation before committing, then cheaply
-  // reconcile residual overlaps/ports. Every accepted scene still passes the
-  // same complete Canvas quality, route, readability and trunk gates.
+  // first, inspect every relation, and cheaply reconcile residual overlaps.
+  // The final pass must inspect ALL real relations again: earlier conflict
+  // repairs can free a shorter lane for a previously non-conflicting edge.
+  // Keep the same total round budget and complete-scene acceptance gates.
   const focusedRounds = 4, completeRounds = 2, residualRounds = 4
   for (let round = 0; round < focusedRounds + completeRounds + residualRounds; round++) {
     let best: typeof result | undefined
@@ -793,6 +794,7 @@ function negotiateFinalCorridors(result: ReturnType<typeof composeArchitectureGr
       .flatMap((issue) => issue.elementIds),
       ...selected.routeDiagnostics.worstPerimeterDetours.map((detour) => detour.edgeId)])
     const residualConflictOnly = round >= focusedRounds + completeRounds
+      && round < focusedRounds + completeRounds + residualRounds - 1
     const conflicts = new Set(selected.quality.issues
       .filter((issue) => ['edge-crossing', 'edge-overlap'].includes(issue.code))
       .flatMap((issue) => issue.elementIds))

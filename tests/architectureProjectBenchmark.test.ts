@@ -43,8 +43,8 @@ test('真实依赖密集图不能因不穿节点就获得错误的自动审查�
     'joint terminal and corridor negotiation must preserve the real independent-overlap improvement')
   assert.ok(canvasBundleTrunks(composed.scene).length >= 2,
     'negotiating independent corridors must not erase genuine shared source trunks')
-  assert.ok(composed.routeDiagnostics.totalRouteLength <= 12_100,
-    'joint corridor negotiation must preserve the measured total-route improvement')
+  assert.ok(composed.routeDiagnostics.totalRouteLength <= 11_800,
+    'final all-relation review must shorten independent free corridors after conflict repair')
   assert.ok(composed.routeDiagnostics.perimeterDetours <= 8,
     'joint optimization must actually reduce real same-region exterior detours')
   assert.ok(composed.evaluation.structuralScore >= 81,
