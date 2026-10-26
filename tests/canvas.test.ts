@@ -3,7 +3,9 @@ import test from 'node:test'
 import { anchorPoint, canvasArchitectureCardTemplate, canvasArchitectureProjection, canvasArchitectureScopeProjection, canvasArrowBoxRoute, canvasArrowLabelLayouts, canvasArrowRoutePath, canvasBundleTrunks, canvasCollapsedConnections, canvasIconRefMarkup, canvasSemanticLodProjection, canvasSceneToSvg, createCanvasSource, parseCanvasScene, resolveCanvasSemanticLod, serializeCanvasScene, type CanvasScene } from '../src/canvas.js'
 import { canvasArrowLabelText } from '../src/canvasLabelText.js'
 
-test('关系标签按显示宽度换行，中文、英文和超长文本保持有界', () => {
+test("关系标签布局与避让", () => {
+  // 场景 1: '关系标签按显示宽度换行，中文、英文和超长文本保持有界'
+  {
   for (const label of ['事务提交后持久化订单及关联审批记录', 'Validate authorization and persist approved order transaction', '审批处理'.repeat(80)]) {
     const layout = canvasArrowLabelText(label)
     assert.equal(layout.lines.length, 2)
@@ -12,9 +14,10 @@ test('关系标签按显示宽度换行，中文、英文和超长文本保持�
   }
   assert.ok(canvasArrowLabelText('审批处理'.repeat(80)).lines[1].endsWith('…'))
   assert.equal(canvasArrowLabelText('HTTP').lines.join(''), 'HTTP')
-})
 
-test('自动标签避让人工位置，并为独立连线生成相同的标签布局', () => {
+  }
+  // 场景 2: '自动标签避让人工位置，并为独立连线生成相同的标签布局'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas', version: 1, title: '标签占用', width: 1000, height: 600,
     elements: [
@@ -33,9 +36,13 @@ test('自动标签避让人工位置，并为独立连线生成相同的标签�
   assert.ok(Math.abs(automatic.x - manual.x) >= (automatic.width + manual.width) / 2
     || Math.abs(automatic.y - manual.y) >= (automatic.height + manual.height) / 2)
   assert.equal(serializeCanvasScene(scene), source)
+
+  }
 })
 
-test('自环关系绕出节点，而不是塌成一个点', () => {
+test("正交路由和真实端口", () => {
+  // 场景 3: '自环关系绕出节点，而不是塌成一个点'
+  {
   const box = { x: 100, y: 100, width: 120, height: 60 }
   const route = canvasArrowBoxRoute(box, box, { routing: 'orthogonal' }, true)
   assert.equal(route.length, 5)
@@ -43,9 +50,10 @@ test('自环关系绕出节点，而不是塌成一个点', () => {
   assert.deepEqual(route.at(-1), { x: 160, y: 100 })
   const path = canvasArrowRoutePath(route)
   assert.equal(path, 'M 220 130 L 256 130 L 256 64 L 160 64 L 160 100')
-})
 
-test('正交路由在混合锚点时沿各自锚点法线进出', () => {
+  }
+  // 场景 4: '正交路由在混合锚点时沿各自锚点法线进出'
+  {
   const from = { x: 100, y: 100, width: 100, height: 60 }
   const to = { x: 400, y: 300, width: 100, height: 60 }
   const route = canvasArrowBoxRoute(from, to, { routing: 'orthogonal', fromAnchor: 'top', toAnchor: 'left' })
@@ -53,9 +61,10 @@ test('正交路由在混合锚点时沿各自锚点法线进出', () => {
   assert.deepEqual(route.at(-1), { x: 400, y: 330 })
   assert.equal(route[1].x, route[0].x)
   assert.equal(route.at(-2)!.y, route.at(-1)!.y)
-})
 
-test('精确端口沿节点边界按比例定位，保存、重新打开及 SVG 导出使用同一路径', () => {
+  }
+  // 场景 5: '精确端口沿节点边界按比例定位，保存、重新打开及 SVG 导出使用同一路径'
+  {
   const from = { id: 'from', type: 'node' as const, x: 100, y: 100, width: 180, height: 80, text: '起点' }
   const to = { id: 'to', type: 'node' as const, x: 500, y: 100, width: 180, height: 80, text: '终点' }
   const arrow = { id: 'edge', type: 'arrow' as const, from: from.id, to: to.id,
@@ -75,9 +84,13 @@ test('精确端口沿节点边界按比例定位，保存、重新打开及 SVG 
   const invalid = parseCanvasScene(JSON.stringify({ ...scene, elements: [from, to, { ...arrow, fromPortRatio: -0.2, toAnchor: 'auto' }] }))
   const clean = invalid.elements[2]
   assert.ok(clean.type === 'arrow' && clean.fromPortRatio === undefined && clean.toPortRatio === undefined)
+
+  }
 })
 
-test('round-trips a Canvas scene and renders standalone SVG', () => {
+test("Canvas 序列化及工作台类型", () => {
+  // 场景 6: 'round-trips a Canvas scene and renders standalone SVG'
+  {
   const source = createCanvasSource('Architecture')
   const scene = parseCanvasScene(source)
   assert.equal(scene.type, 'diagram-plugin-canvas')
@@ -95,9 +108,10 @@ test('round-trips a Canvas scene and renders standalone SVG', () => {
   assert.match(svg, /^<svg /)
   assert.match(svg, /Architecture/)
   assert.match(svg, /marker-end="url\(#arrow\)"/)
-})
 
-test('persists Canvas workbench mode while keeping legacy canvases compatible', () => {
+  }
+  // 场景 7: 'persists Canvas workbench mode while keeping legacy canvases compatible'
+  {
   const architecture = parseCanvasScene(createCanvasSource('Architecture', 'architecture'))
   assert.equal(architecture.workbench, 'architecture')
   assert.equal(architecture.architecture?.theme, 'enterprise')
@@ -112,9 +126,13 @@ test('persists Canvas workbench mode while keeping legacy canvases compatible', 
     type: 'diagram-plugin-canvas', version: 1, title: 'Legacy', width: 800, height: 600, elements: [], architecture: { theme: 'enterprise' },
   }))
   assert.equal(legacyArchitecture.workbench, 'architecture')
+
+  }
 })
 
-test('round-trips registered shape refs and renders their geometry', () => {
+test("节点形状与自由绘图的存储", () => {
+  // 场景 8: 'round-trips registered shape refs and renders their geometry'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -135,9 +153,10 @@ test('round-trips registered shape refs and renders their geometry', () => {
 
   const invalid = parseCanvasScene(JSON.stringify({ ...scene, elements: [{ ...scene.elements[0], shapeRef: 'flowchart:not-real' }] }))
   assert.equal(invalid.elements[0].type === 'node' ? invalid.elements[0].shapeRef : undefined, undefined)
-})
 
-test('auto anchors respect ellipse and decision geometry instead of the bounding rectangle', () => {
+  }
+  // 场景 9: 'auto anchors respect ellipse and decision geometry instead of the bounding rectangle'
+  {
   const decision = { x: 100, y: 100, width: 140, height: 100, shapeRef: 'flowchart:decision' as const }
   const decisionPoint = anchorPoint(decision, 'auto', { x: 300, y: 220 })
   const decisionCenter = { x: 170, y: 150 }
@@ -153,9 +172,10 @@ test('auto anchors respect ellipse and decision geometry instead of the bounding
   const right = anchorPoint(rotated, 'right', { x: 400, y: 150 })
   assert.ok(Math.abs(right.x - 200) < 1e-9)
   assert.ok(Math.abs(right.y - 250) < 1e-9)
-})
 
-test('round-trips free drawing lines and explicit style overrides', () => {
+  }
+  // 场景 10: 'round-trips free drawing lines and explicit style overrides'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -205,14 +225,19 @@ test('round-trips free drawing lines and explicit style overrides', () => {
   assert.match(svg, /href="data:image\/png;base64,iVBORw0KGgo="/)
   assert.match(svg, /preserveAspectRatio="xMidYMid slice"/)
   assert.equal((svg.match(/marker-end="url\(#arrow\)"/g) ?? []).length, 1)
+
+  }
 })
 
-test('rejects malformed Canvas documents', () => {
+test("不合法场景与架构版本数据", () => {
+  // 场景 11: 'rejects malformed Canvas documents'
+  {
   assert.throws(() => parseCanvasScene('{bad json'), /JSON 格式无效/)
   assert.throws(() => parseCanvasScene('{"type":"other","version":1,"elements":[]}'), /受支持/)
-})
 
-test('round-trips optional architecture presentation metadata on version 1 canvases', () => {
+  }
+  // 场景 12: 'round-trips optional architecture presentation metadata on version 1 canvases'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -226,9 +251,13 @@ test('round-trips optional architecture presentation metadata on version 1 canva
   const parsed = parseCanvasScene(serializeCanvasScene(scene))
   assert.equal(parsed.version, 1)
   assert.deepEqual(parsed.architecture, { theme: 'presentation', presentation: true, view: 'overview', density: 'compact' })
+
+  }
 })
 
-test('round-trips every built-in architecture visual theme', () => {
+test("主题、品牌图标与语义身份", () => {
+  // 场景 13: 'round-trips every built-in architecture visual theme'
+  {
   for (const theme of ['enterprise', 'technical', 'presentation', 'cloud', 'editorial', 'sketch'] as const) {
     const scene: CanvasScene = {
       type: 'diagram-plugin-canvas',
@@ -241,18 +270,20 @@ test('round-trips every built-in architecture visual theme', () => {
     }
     assert.equal(parseCanvasScene(serializeCanvasScene(scene)).architecture?.theme, theme)
   }
-})
 
-test('renders selected AWS Azure and GCP architecture pack icons as embedded SVG images', () => {
+  }
+  // 场景 14: 'renders selected AWS Azure and GCP architecture pack icons as embedded SVG images'
+  {
   for (const ref of ['aws:lambda', 'azure:functionapps', 'gcp:cloud_run'] as const) {
     const markup = canvasIconRefMarkup(ref)
     assert.match(markup, /<image /)
     assert.match(markup, /data:image\/svg\+xml;base64,/)
     assert.match(markup, new RegExp(`data-icon-ref="${ref}"`))
   }
-})
 
-test('round-trips a visual icon override without changing node role or technology semantics', () => {
+  }
+  // 场景 15: 'round-trips a visual icon override without changing node role or technology semantics'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -277,9 +308,10 @@ test('round-trips a visual icon override without changing node role or technolog
   const invalidNode = invalid.elements.find((item) => item.id === 'api')
   assert.ok(invalidNode && invalidNode.type === 'node')
   assert.equal(invalidNode.iconRef, undefined)
-})
 
-test('architecture themes produce distinct SVG treatments without changing node semantics', () => {
+  }
+  // 场景 16: 'architecture themes produce distinct SVG treatments without changing node semantics'
+  {
   const base: Omit<CanvasScene, 'architecture'> = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -309,9 +341,13 @@ test('architecture themes produce distinct SVG treatments without changing node 
     assert.equal((output.match(/fill-opacity="0\.94"/g) ?? []).length, 2, 'every technology node has a solid-enough card')
     assert.match(output, /markerUnits="userSpaceOnUse" markerWidth="12"/)
   }
+
+  }
 })
 
-test('places relationship labels on routed segments without stacking them at the same point', () => {
+test("关系标签位置和手动布局", () => {
+  // 场景 17: 'places relationship labels on routed segments without stacking them at the same point'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -333,9 +369,10 @@ test('places relationship labels on routed segments without stacking them at the
   assert.ok(persist)
   assert.ok(query)
   assert.notDeepEqual({ x: persist.x, y: persist.y }, { x: query.x, y: query.y })
-})
 
-test('round-trips and honors a manually positioned relationship label', () => {
+  }
+  // 场景 18: 'round-trips and honors a manually positioned relationship label'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -355,9 +392,13 @@ test('round-trips and honors a manually positioned relationship label', () => {
   const layout = canvasArrowLabelLayouts(parsed).get('edge')
   assert.ok(layout)
   assert.deepEqual({ x: layout.x, y: layout.y }, { x: 510, y: 140 })
+
+  }
 })
 
-test('renders compact presentation architecture without dashboard metadata in SVG export', () => {
+test("架构卡片与展示渲染", () => {
+  // 场景 19: 'renders compact presentation architecture without dashboard metadata in SVG export'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -381,9 +422,10 @@ test('renders compact presentation architecture without dashboard metadata in SV
   assert.doesNotMatch(svg, />写入</)
   assert.match(svg, /fill="#4169E1"/)
   assert.doesNotMatch(svg, />PG</)
-})
 
-test('enterprise architecture renders visible aligned cards and a legible primary arrow', () => {
+  }
+  // 场景 20: 'enterprise architecture renders visible aligned cards and a legible primary arrow'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas', version: 1, title: 'Main business path',
     width: 960, height: 620, architecture: { theme: 'enterprise', view: 'detail' },
@@ -403,9 +445,10 @@ test('enterprise architecture renders visible aligned cards and a legible primar
   assert.match(svg, /stroke-width="2\.6" marker-end="url\(#arrow\)"/)
   const technical = canvasSceneToSvg({ ...scene, architecture: { theme: 'technical' } })
   assert.doesNotMatch(technical, /font-weight="730"[^>]*>Core API<\/text>/)
-})
 
-test('architecture actors, branded nodes and manual fill share card geometry and readable arrows', () => {
+  }
+  // 场景 21: 'architecture actors, branded nodes and manual fill share card geometry and readable arrows'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas', version: 1, title: 'Unified architectural glyphs', width: 980, height: 480,
     architecture: { theme: 'enterprise', view: 'detail' },
@@ -425,9 +468,10 @@ test('architecture actors, branded nodes and manual fill share card geometry and
     'muted architecture relations retain arrow style while exposing actual hover endpoints')
   for (const label of ['用户', 'PostgreSQL', '手工底色']) assert.match(svg, new RegExp(`>${label}<\\/text>`))
   assert.equal(serializeCanvasScene(scene), before)
-})
 
-test('architecture style preset must not convert primary cards into opaque tone fills', () => {
+  }
+  // 场景 22: 'architecture style preset must not convert primary cards into opaque tone fills'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas', version: 1, title: 'Styled architecture', width: 940, height: 420,
     style: 'nord', architecture: { theme: 'enterprise', view: 'detail' },
@@ -443,9 +487,13 @@ test('architecture style preset must not convert primary cards into opaque tone 
   assert.match(svg, /fill="#243247"[^>]*>PostgreSQL<\/text>/)
   assert.deepEqual(scene.elements.filter((element) => element.type === 'node').map((node) => node.fillColor),
     [undefined, undefined, undefined])
+
+  }
 })
 
-test('overview projection keeps source data intact while reducing low-priority architecture detail', () => {
+test("架构总览投影与区域折叠", () => {
+  // 场景 23: 'overview projection keeps source data intact while reducing low-priority architecture detail'
+  {
   const nodes = Array.from({ length: 30 }, (_, index) => ({
     id: `node-${index}`,
     type: 'node' as const,
@@ -483,9 +531,10 @@ test('overview projection keeps source data intact while reducing low-priority a
   assert.ok(projection.scene.elements.some((item) => item.id === 'node-0'))
   assert.ok(projection.scene.elements.some((item) => item.id === 'node-29'))
   assert.ok(projection.scene.elements.length < scene.elements.length)
-})
 
-test('architecture overview collapses dense semantic regions and aggregates their relationships', () => {
+  }
+  // 场景 24: 'architecture overview collapses dense semantic regions and aggregates their relationships'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -540,16 +589,21 @@ test('architecture overview collapses dense semantic regions and aggregates thei
   assert.equal(canvasBundleTrunks(projection.scene).length, 0)
   assert.ok(projection.hiddenNodes >= 10)
   assert.ok(projection.hiddenArrows >= 4)
+
+  }
 })
 
-test('architecture cards map roles into stable semantic templates', () => {
+test("架构组件与总览 SVG 导出", () => {
+  // 场景 25: 'architecture cards map roles into stable semantic templates'
+  {
   assert.equal(canvasArchitectureCardTemplate({ id: 'u', type: 'node', x: 0, y: 0, width: 100, height: 80, text: 'User', icon: 'user' }).kind, 'actor')
   assert.equal(canvasArchitectureCardTemplate({ id: 'g', type: 'node', x: 0, y: 0, width: 100, height: 80, text: 'Gateway', icon: 'gateway' }).kind, 'entry')
   assert.equal(canvasArchitectureCardTemplate({ id: 'q', type: 'node', x: 0, y: 0, width: 100, height: 80, text: 'Kafka', icon: 'queue' }).kind, 'messaging')
   assert.equal(canvasArchitectureCardTemplate({ id: 'd', type: 'node', x: 0, y: 0, width: 100, height: 80, text: 'Postgres', icon: 'database' }).kind, 'data')
-})
 
-test('SVG export honors architecture overview projection', () => {
+  }
+  // 场景 26: 'SVG export honors architecture overview projection'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -573,9 +627,13 @@ test('SVG export honors architecture overview projection', () => {
   assert.match(svg, />DB</)
   assert.doesNotMatch(svg, />Muted 19</)
   assert.doesNotMatch(svg, /SYSTEM ARCHITECTURE/)
+
+  }
 })
 
-test('architecture group drill-down collapses immediate child boundaries and keeps boundary dependencies', () => {
+test("分区下钻与节点聚焦", () => {
+  // 场景 27: 'architecture group drill-down collapses immediate child boundaries and keeps boundary dependencies'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -607,9 +665,10 @@ test('architecture group drill-down collapses immediate child boundaries and kee
   assert.equal(projection.scene.groups?.find((group) => group.id === 'data')?.collapsed, true)
   assert.ok(projection.scene.elements.some((item) => item.id === 'oidc'))
   assert.ok(projection.scene.elements.some((item) => item.id === 'web-oidc'))
-})
 
-test('architecture node focus keeps a bounded neighborhood and group breadcrumbs', () => {
+  }
+  // 场景 28: 'architecture node focus keeps a bounded neighborhood and group breadcrumbs'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -636,18 +695,23 @@ test('architecture node focus keeps a bounded neighborhood and group breadcrumbs
   assert.deepEqual(projection.breadcrumbs.map((item) => item.label), ['System', 'Runtime', 'B'])
   assert.deepEqual(projection.scene.elements.filter((item) => item.type !== 'arrow').map((item) => item.id).sort(), ['a', 'b', 'c'])
   assert.ok(!projection.scene.elements.some((item) => item.id === 'd'))
+
+  }
 })
 
-test('semantic LOD becomes more aggressive for large scenes at the same zoom', () => {
+test("语义缩放的区域折叠", () => {
+  // 场景 29: 'semantic LOD becomes more aggressive for large scenes at the same zoom'
+  {
   assert.equal(resolveCanvasSemanticLod(0.7, 40), 'compact')
   assert.equal(resolveCanvasSemanticLod(0.7, 1400), 'overview')
   assert.equal(resolveCanvasSemanticLod(1, 3000), 'overview')
   assert.equal(resolveCanvasSemanticLod(1.2, 3000), 'compact')
   assert.equal(resolveCanvasSemanticLod(1.4, 3000), 'detail')
   assert.equal(resolveCanvasSemanticLod(0.34, 40), 'regions')
-})
 
-test('region LOD temporarily collapses semantic boundaries without mutating source state', () => {
+  }
+  // 场景 30: 'region LOD temporarily collapses semantic boundaries without mutating source state'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -675,9 +739,13 @@ test('region LOD temporarily collapses semantic boundaries without mutating sour
   assert.equal(projection.scene.groups?.find((group) => group.id === 'system')?.collapsed, true)
   assert.ok(projection.hiddenNodes >= 4)
   assert.equal(serializeCanvasScene(scene), before)
+
+  }
 })
 
-test('region LOD keeps the selected region expanded', () => {
+test("大型画布的细节层级与选择保持", () => {
+  // 场景 31: 'region LOD keeps the selected region expanded'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -694,9 +762,10 @@ test('region LOD keeps the selected region expanded', () => {
   const projection = canvasSemanticLodProjection(scene, 0.25, ['b'])
   assert.deepEqual(projection.autoCollapsedGroupIds, [])
   assert.equal(projection.scene.groups?.[0].collapsed, undefined)
-})
 
-test('semantic LOD samples very large ungrouped canvases while preserving selected nodes', () => {
+  }
+  // 场景 32: 'semantic LOD samples very large ungrouped canvases while preserving selected nodes'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -728,9 +797,10 @@ test('semantic LOD samples very large ungrouped canvases while preserving select
   assert.equal(regions.level, 'regions')
   assert.ok(regions.scene.elements.filter((item) => item.type !== 'arrow').length <= 220)
   assert.equal(serializeCanvasScene(scene), before)
-})
 
-test('semantic LOD accepts the resolved tier without altering projection geometry', () => {
+  }
+  // 场景 33: 'semantic LOD accepts the resolved tier without altering projection geometry'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas', version: 1, title: 'Tier projection', width: 1000, height: 700,
     groups: [{ id: 'services', label: 'Services', kind: 'boundary' }],
@@ -739,6 +809,8 @@ test('semantic LOD accepts the resolved tier without altering projection geometr
   }
   for (const [zoom, level] of [[1, 'detail'], [0.75, 'compact'], [0.5, 'overview'], [0.2, 'regions']] as const) {
     assert.deepEqual(canvasSemanticLodProjection(scene, level, ['n-4']), canvasSemanticLodProjection(scene, zoom, ['n-4']))
+  }
+
   }
 })
 

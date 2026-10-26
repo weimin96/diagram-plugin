@@ -43,7 +43,9 @@ function sampleScene(): CanvasScene {
   }
 }
 
-test('beautifies architecture into semantic partitions with technology roles', () => {
+test("角色分区与结构识别", () => {
+  // 场景 2: 'beautifies architecture into semantic partitions with technology roles'
+  {
   const result = beautifyArchitectureScene(sampleScene(), { theme: 'enterprise' })
   const scene = result.scene
   const nodes = new Map(scene.elements.filter((item) => item.type !== 'arrow').map((item) => [item.id, item]))
@@ -61,9 +63,10 @@ test('beautifies architecture into semantic partitions with technology roles', (
   assert.notEqual(nodes.get('web')?.groupId, nodes.get('db')?.groupId)
   assert.ok(result.summary.partitions >= 4)
   assert.equal(result.summary.composition, 'layered')
-})
 
-test('infers architecture composition from topology and semantic roles', () => {
+  }
+  // 场景 3: 'infers architecture composition from topology and semantic roles'
+  {
   const node = (id: string, icon: 'user' | 'web' | 'gateway' | 'api' | 'service' | 'worker' | 'database' | 'queue' | 'search' | 'file' | 'ai' | 'mcp' | 'external' | 'cloud', stencil?: 'kafka' | 'postgres' | 'qdrant' | 'minio' | 'kubernetes' | 'docker' | 'nginx' | 'openai' | 'mcp') => ({
     id, type: 'node' as const, x: 0, y: 0, width: 170, height: 72, text: id, icon, ...(stencil ? { stencil } : {}),
   })
@@ -133,9 +136,13 @@ test('infers architecture composition from topology and semantic roles', () => {
   const cloudCenters = centers(composed.get('cloud-native')!)
   assert.ok(cloudCenters.get('arch-processing')!.x > cloudCenters.get('arch-application')!.x)
   assert.ok(cloudCenters.get('arch-data')!.y > cloudCenters.get('arch-application')!.y)
+
+  }
 })
 
-test('spreads architecture relationships with orthogonal channels and async styling', () => {
+test("正交关系和锁定几何", () => {
+  // 场景 4: 'spreads architecture relationships with orthogonal channels and async styling'
+  {
   const scene = beautifyArchitectureScene(sampleScene()).scene
   const arrows = new Map(scene.elements.filter((item) => item.type === 'arrow').map((item) => [item.id, item]))
 
@@ -144,9 +151,10 @@ test('spreads architecture relationships with orthogonal channels and async styl
   assert.ok(['left', 'right', 'top', 'bottom'].includes(arrows.get('a2')?.toAnchor ?? ''))
   assert.equal(arrows.get('a3')?.lineStyle, 'dashed')
   assert.ok(['left', 'right', 'top', 'bottom'].includes(arrows.get('a4')?.fromAnchor ?? ''))
-})
 
-test('keeps locked architecture nodes at their authored coordinates', () => {
+  }
+  // 场景 5: 'keeps locked architecture nodes at their authored coordinates'
+  {
   const scene = sampleScene()
   const client = scene.elements.find((item) => item.id === 'client')
   if (!client || client.type === 'arrow') throw new Error('missing client')
@@ -159,6 +167,8 @@ test('keeps locked architecture nodes at their authored coordinates', () => {
   assert.ok(after && after.type !== 'arrow')
   assert.equal(after.x, 77)
   assert.equal(after.y, 233)
+
+  }
 })
 
 test('marks a connected entry-to-data backbone as the primary architecture path', () => {
@@ -180,7 +190,9 @@ test('marks a connected entry-to-data backbone as the primary architecture path'
   assert.equal(asyncBranch.emphasis, 'secondary')
 })
 
-test('bundles fan-out relationships through a shared source trunk when the corridor is clear', () => {
+test("短直连与源头主干共存", () => {
+  // 场景 7: 'bundles fan-out relationships through a shared source trunk when the corridor is clear'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -206,9 +218,10 @@ test('bundles fan-out relationships through a shared source trunk when the corri
   assert.ok(firstPoints.length >= 2)
   assert.ok(firstPoints.every((point) => point?.x === firstPoints[0]?.x))
   assert.ok(canvasBundleTrunks(result).some((trunk) => trunk.count >= 2))
-})
 
-test('keeps short intra-boundary relationships direct while preserving event-bus fanout bundling', () => {
+  }
+  // 场景 8: 'keeps short intra-boundary relationships direct while preserving event-bus fanout bundling'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas', version: 1, title: 'Local bundle policy', width: 1100, height: 620,
     groups: [{ id: 'runtime', label: 'Runtime', kind: 'boundary' }],
@@ -232,9 +245,13 @@ test('keeps short intra-boundary relationships direct while preserving event-bus
   assert.equal(arrows.get('api-b')?.bundleKey, undefined)
   assert.equal(arrows.get('queue-a')?.bundleKey, 'from:queue')
   assert.equal(arrows.get('queue-b')?.bundleKey, 'from:queue')
+
+  }
 })
 
-test('routes downward fan-out into one architecture group through a shared data bus', () => {
+test("同组多目标共享线路约束", () => {
+  // 场景 9: 'routes downward fan-out into one architecture group through a shared data bus'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -261,9 +278,10 @@ test('routes downward fan-out into one architecture group through a shared data 
   const firstBends = arrows.map((arrow) => arrow.points?.[0]).filter(Boolean)
   assert.equal(firstBends.length, 3)
   assert.ok(firstBends.every((point) => point?.x === firstBends[0]?.x && point?.y === firstBends[0]?.y))
-})
 
-test('does not route a shared downward fanout through sibling targets in a multi-row group', () => {
+  }
+  // 场景 10: 'does not route a shared downward fanout through sibling targets in a multi-row group'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -289,9 +307,10 @@ test('does not route a shared downward fanout through sibling targets in a multi
   const quality = assessCanvasVisualQuality(result)
   assert.equal(quality.metrics.edgeNodeIntersections, 0)
   assert.equal(quality.metrics.nodeOverlaps, 0)
-})
 
-test('shared data bus can exit a dense service cluster without falling back to crossing straight lines', () => {
+  }
+  // 场景 11: 'shared data bus can exit a dense service cluster without falling back to crossing straight lines'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -321,9 +340,13 @@ test('shared data bus can exit a dense service cluster without falling back to c
   assert.equal(quality.metrics.edgeNodeIntersections, 0)
   assert.equal(quality.metrics.edgeCrossings, 0)
   assert.ok(result.elements.filter((item) => item.type === 'arrow').every((item) => item.type === 'arrow' && item.routing === 'orthogonal'))
+
+  }
 })
 
-test('routes common architecture topology families without crossing nodes', () => {
+test("典型图拓扑与跨分区走廊", () => {
+  // 场景 12: 'routes common architecture topology families without crossing nodes'
+  {
   const node = (id: string, x: number, y: number, icon: 'service' | 'gateway' | 'api' | 'database' | 'external' | 'ai' | 'web' | 'mcp' | 'queue' | 'worker' | 'search' = 'service') => ({
     id,
     type: 'node' as const,
@@ -380,9 +403,10 @@ test('routes common architecture topology families without crossing nodes', () =
     assert.equal(quality.metrics.edgeNodeIntersections, 0, `${scene.title}: relationships should not cross nodes`)
     assert.equal(quality.metrics.edgeCrossings, 0, `${scene.title}: common topology should route cleanly`)
   }
-})
 
-test('dense cross-boundary relationships share a corridor and avoid unrelated boundaries', () => {
+  }
+  // 场景 13: 'dense cross-boundary relationships share a corridor and avoid unrelated boundaries'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -428,9 +452,13 @@ test('dense cross-boundary relationships share a corridor and avoid unrelated bo
       assert.equal(segmentCutsBox(route[index], route[index + 1], processingFrame), false)
     }
   }
+
+  }
 })
 
-test('uses tight local architecture boundaries by default while keeping external providers separate', () => {
+test("局部和系统语义边界", () => {
+  // 场景 14: 'uses tight local architecture boundaries by default while keeping external providers separate'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -458,9 +486,10 @@ test('uses tight local architecture boundaries by default while keeping external
   assert.equal(nodes.get('api')?.groupId, 'arch-application')
   assert.equal(nodes.get('db')?.groupId, 'arch-data')
   assert.ok(result.groups?.filter((group) => group.id.startsWith('arch-')).every((group) => !group.parentId))
-})
 
-test('preserves an explicit software-system boundary around generated local architecture groups', () => {
+  }
+  // 场景 15: 'preserves an explicit software-system boundary around generated local architecture groups'
+  {
   const scene = sampleScene()
   scene.groups = [{ id: 'platform', label: 'Platform', kind: 'boundary', c4Type: 'software-system' }]
 
@@ -470,9 +499,13 @@ test('preserves an explicit software-system boundary around generated local arch
   const internalGroups = result.groups?.filter((group) => group.id.startsWith('arch-') && group.id !== 'arch-external') ?? []
   assert.ok(internalGroups.length >= 3)
   assert.ok(internalGroups.every((group) => group.parentId === 'platform'))
+
+  }
 })
 
-test('routes architecture relationships around blocking nodes', () => {
+test("阻挡节点的绕行与多走廊", () => {
+  // 场景 16: 'routes architecture relationships around blocking nodes'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -499,9 +532,10 @@ test('routes architecture relationships around blocking nodes', () => {
   for (let index = 0; index < route.length - 1; index += 1) {
     assert.equal(segmentCutsBox(route[index], route[index + 1], boxes.get('blocker')!), false)
   }
-})
 
-test('routes through two corridors when an intermediate node and stacked target column block simple doglegs', () => {
+  }
+  // 场景 17: 'routes through two corridors when an intermediate node and stacked target column block simple doglegs'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -544,9 +578,13 @@ test('routes through two corridors when an intermediate node and stacked target 
       assert.equal(segmentCutsBox(route[index], route[index + 1], obstacle), false, `${obstacleId} should not be crossed`)
     }
   }
+
+  }
 })
 
-test('incremental routing preserves unrelated relationship geometry', () => {
+test("增量关系几何与明确 ID", () => {
+  // 场景 18: 'incremental routing preserves unrelated relationship geometry'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -572,9 +610,10 @@ test('incremental routing preserves unrelated relationship geometry', () => {
   assert.ok(unrelated?.type === 'arrow' && affected?.type === 'arrow')
   assert.deepEqual(unrelated.points, [{ x: 420, y: 565 }])
   assert.notDeepEqual(affected.points, [{ x: 420, y: 165 }])
-})
 
-test('routes only explicitly requested relationship ids', () => {
+  }
+  // 场景 19: 'routes only explicitly requested relationship ids'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -596,9 +635,13 @@ test('routes only explicitly requested relationship ids', () => {
   assert.ok(ab?.type === 'arrow' && cd?.type === 'arrow')
   assert.equal(ab.routing, 'orthogonal')
   assert.deepEqual(cd.points, [{ x: 520, y: 465 }])
+
+  }
 })
 
-test('incremental routing reroutes a relationship that a moved node now blocks', () => {
+test("移动障碍与增量更新", () => {
+  // 场景 20: 'incremental routing reroutes a relationship that a moved node now blocks'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -620,9 +663,10 @@ test('incremental routing reroutes a relationship that a moved node now blocks',
   const edge = result.elements.find((item) => item.id === 'edge')
   assert.ok(edge?.type === 'arrow')
   assert.notDeepEqual(edge.points, [{ x: 520, y: 225 }])
-})
 
-test('incremental routing detects a moved obstacle crossing an existing straight relationship', () => {
+  }
+  // 场景 21: 'incremental routing detects a moved obstacle crossing an existing straight relationship'
+  {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -644,6 +688,8 @@ test('incremental routing detects a moved obstacle crossing an existing straight
   const edge = result.elements.find((item) => item.id === 'edge')
   assert.ok(edge?.type === 'arrow')
   assert.equal(edge.routing, 'orthogonal')
+
+  }
 })
 
 test('recognizes architecture-specific roles beyond generic service and database', () => {
@@ -670,7 +716,9 @@ test('recognizes architecture-specific roles beyond generic service and database
   assert.equal(nodes.get('auth')?.icon, 'auth')
 })
 
-test('persists presentation architecture appearance without dashboard chrome', () => {
+test("展示主题进入和退出", () => {
+  // 场景 23: 'persists presentation architecture appearance without dashboard chrome'
+  {
   const result = beautifyArchitectureScene(sampleScene(), { theme: 'presentation' }).scene
   const nodes = result.elements.filter((item) => item.type !== 'arrow')
 
@@ -679,31 +727,39 @@ test('persists presentation architecture appearance without dashboard chrome', (
   assert.ok(result.height >= 620)
   assert.ok(result.width < 1440)
   assert.ok(nodes.every((item) => item.locked || item.y >= 50))
-})
 
-test('switching away from presentation removes presentation chrome without changing canvas version', () => {
+  }
+  // 场景 24: 'switching away from presentation removes presentation chrome without changing canvas version'
+  {
   const presentation = beautifyArchitectureScene(sampleScene(), { theme: 'presentation' }).scene
   const technical = beautifyArchitectureScene(presentation, { theme: 'technical', relayout: false }).scene
 
   assert.equal(technical.version, 1)
   assert.deepEqual(technical.architecture, { theme: 'technical', view: 'detail', density: 'auto' })
+
+  }
 })
 
-test('applies all architecture themes without changing the canvas protocol', () => {
+test("全部主题的外观与手动几何保护", () => {
+  // 场景 25: 'applies all architecture themes without changing the canvas protocol'
+  {
   for (const theme of ['enterprise', 'technical', 'presentation', 'cloud', 'editorial', 'sketch'] as const) {
     const result = beautifyArchitectureScene(sampleScene(), { theme, relayout: false }).scene
     assert.equal(result.version, 1)
     assert.equal(result.architecture?.theme, theme)
   }
-})
 
-test('theme-only appearance updates preserve authored geometry', () => {
+  }
+  // 场景 26: 'theme-only appearance updates preserve authored geometry'
+  {
   const scene = beautifyArchitectureScene(sampleScene(), { theme: 'enterprise' }).scene
   const before = new Map(scene.elements.filter((item) => item.type !== 'arrow').map((item) => [item.id, { x: item.x, y: item.y, width: item.width, height: item.height }]))
   const themed = applyArchitectureTheme(scene, 'editorial')
   for (const item of themed.elements) {
     if (item.type === 'arrow') continue
     assert.deepEqual({ x: item.x, y: item.y, width: item.width, height: item.height }, before.get(item.id))
+  }
+
   }
 })
 

@@ -59,7 +59,9 @@ test('反转关系保留精确端口归属，换节点时只清理被替换端�
     .filter((item): item is CanvasArrow => item.type === 'arrow' && item.from === 'node-3')[0]?.fromPortRatio, undefined)
 })
 
-test('smart snap aligns edges and centers against nearby shapes and boundary targets', () => {
+test("智能吸附、间距与同尺寸引导", () => {
+  // 场景 3: 'smart snap aligns edges and centers against nearby shapes and boundary targets'
+  {
   const edge = computeCanvasSmartSnap(
     { x: 292, y: 210, width: 100, height: 80 },
     [{ x: 400, y: 100, width: 120, height: 80 }],
@@ -77,9 +79,10 @@ test('smart snap aligns edges and centers against nearby shapes and boundary tar
   )
   assert.equal(boundary.delta.x, 6)
   assert.equal(boundary.xGuide, 100)
-})
 
-test('smart snap equalizes spacing between neighboring shapes and reports matching size', () => {
+  }
+  // 场景 4: 'smart snap equalizes spacing between neighboring shapes and reports matching size'
+  {
   const result = computeCanvasSmartSnap(
     { x: 205, y: 100, width: 100, height: 80 },
     [
@@ -93,9 +96,13 @@ test('smart snap equalizes spacing between neighboring shapes and reports matchi
   assert.deepEqual(result.spacingGuides.map((guide) => guide.distance), [100, 100])
   assert.equal(result.sameWidth, true)
   assert.equal(result.sameHeight, true)
+
+  }
 })
 
-test('resizes from directional handles and preserves the opposite edge', () => {
+test("单节点和批量尺寸调整", () => {
+  // 场景 5: 'resizes from directional handles and preserves the opposite edge'
+  {
   const east = resizeCanvasTransformBox(
     { x: 100, y: 100, width: 200, height: 100 },
     'e',
@@ -124,9 +131,10 @@ test('resizes from directional handles and preserves the opposite edge', () => {
     { x: 200, y: 310 },
   )
   assert.deepEqual(rotated, { x: 70, y: 130, width: 260, height: 100, rotation: 90 })
-})
 
-test('keeps aspect ratio for corner resize and scales a multi selection as one frame', () => {
+  }
+  // 场景 6: 'keeps aspect ratio for corner resize and scales a multi selection as one frame'
+  {
   const aspect = resizeCanvasTransformBox(
     { x: 100, y: 100, width: 200, height: 100 },
     'se',
@@ -152,15 +160,20 @@ test('keeps aspect ratio for corner resize and scales a multi selection as one f
   const scaled = scaleCanvasTransformBoxes(boxes, { x: 0, y: 0, width: 300, height: 180 }, 'se', { x: 600, y: 360 })
   assert.deepEqual(scaled.get('a'), { x: 0, y: 0, width: 200, height: 160 })
   assert.deepEqual(scaled.get('b'), { x: 400, y: 200, width: 200, height: 160 })
+
+  }
 })
 
-test('rotates from pointer angle and snaps rotation when requested', () => {
+test("旋转与自由绘制拷贝", () => {
+  // 场景 7: 'rotates from pointer angle and snaps rotation when requested'
+  {
   const center = { x: 100, y: 100 }
   assert.equal(canvasRotationFromPointer(center, { x: 100, y: 0 }, { x: 200, y: 100 }), 90)
   assert.equal(canvasRotationFromPointer(center, { x: 100, y: 0 }, { x: 180, y: 40 }, 0, 15), 60)
-})
 
-test('copies standalone drawing lines with their absolute geometry', () => {
+  }
+  // 场景 8: 'copies standalone drawing lines with their absolute geometry'
+  {
   const source = scene()
   source.elements.push({ id: 'free-line', type: 'arrow', from: '', to: '', start: { x: 160, y: 560 }, end: { x: 520, y: 620 }, markerEnd: 'arrow', strokeColor: '#2f73d9' })
   const copied = copyCanvasSelection(source, ['free-line'])
@@ -171,23 +184,29 @@ test('copies standalone drawing lines with their absolute geometry', () => {
   assert.deepEqual(duplicated.start, { x: 192, y: 592 })
   assert.deepEqual(duplicated.end, { x: 552, y: 652 })
   assert.equal(duplicated.strokeColor, '#2f73d9')
+
+  }
 })
 
-test('moves selected boxes one layer at a time without changing arrows', () => {
+test("图层、删除及嵌套组 ID 生命周期", () => {
+  // 场景 9: 'moves selected boxes one layer at a time without changing arrows'
+  {
   const source = scene()
   const forward = reorderCanvasSelection(source, ['node-1'], 'forward')
   assert.deepEqual(forward.elements.filter((item) => item.type !== 'arrow').map((item) => item.id), ['node-2', 'node-1', 'node-3'])
   const backward = reorderCanvasSelection(forward, ['node-1'], 'backward')
   assert.deepEqual(backward.elements.filter((item) => item.type !== 'arrow').map((item) => item.id), ['node-1', 'node-2', 'node-3'])
   assert.deepEqual(backward.elements.filter((item) => item.type === 'arrow').map((item) => item.id), ['arrow-1', 'arrow-2'])
-})
 
-test('deleting a canvas node also deletes connected arrows', () => {
+  }
+  // 场景 10: 'deleting a canvas node also deletes connected arrows'
+  {
   const deleted = deleteCanvasSelection(scene(), ['node-2'])
   assert.deepEqual(deleted.elements.map((item) => item.id).sort(), ['node-1', 'node-3'])
-})
 
-test('keeps ancestor groups that only contain nested groups when deleting an element', () => {
+  }
+  // 场景 11: 'keeps ancestor groups that only contain nested groups when deleting an element'
+  {
   const source = scene()
   source.groups = [
     { id: 'group-1', label: 'Parent' },
@@ -196,15 +215,20 @@ test('keeps ancestor groups that only contain nested groups when deleting an ele
   source.elements = source.elements.map((item) => item.id === 'node-1' || item.id === 'node-2' ? { ...item, groupId: 'group-2' } : item)
   const deleted = deleteCanvasSelection(source, ['node-3'])
   assert.deepEqual(deleted.groups?.map((group) => group.id), ['group-1', 'group-2'])
-})
 
-test('never reuses a group id that already exists on the scene', () => {
+  }
+  // 场景 12: 'never reuses a group id that already exists on the scene'
+  {
   const source = scene()
   source.groups = [{ id: 'group-1', label: 'Existing' }]
   assert.equal(nextCanvasGroupId(source), 'group-2')
+
+  }
 })
 
-test('architecture node templates cover builtin and selected cloud providers', () => {
+test("架构节点模板和技术角色", () => {
+  // 场景 13: 'architecture node templates cover builtin and selected cloud providers'
+  {
   assert.ok(ARCHITECTURE_NODE_TEMPLATES.length >= 60)
   for (const provider of ['builtin', 'aws', 'azure', 'gcp'] as const) {
     assert.ok(ARCHITECTURE_NODE_TEMPLATES.some((item) => item.provider === provider))
@@ -215,9 +239,10 @@ test('architecture node templates cover builtin and selected cloud providers', (
   assert.deepEqual(searchArchitectureNodeTemplates('serverless', 'aws', 4).map((item) => item.id), ['aws:lambda'])
   assert.ok(searchArchitectureNodeTemplates('kubernetes', 'all', 10).some((item) => item.id === 'builtin:kubernetes'))
   assert.ok(searchArchitectureNodeTemplates('kubernetes', 'all', 10).some((item) => item.id === 'gcp:google_kubernetes_engine'))
-})
 
-test('inserts an architecture node template without conflating role, technology and visual icon', () => {
+  }
+  // 场景 14: 'inserts an architecture node template without conflating role, technology and visual icon'
+  {
   const source = scene()
   source.architecture = { theme: 'enterprise', view: 'detail', density: 'auto' }
   source.groups = [{ id: 'arch-application', label: 'Application', kind: 'boundary' }]
@@ -246,9 +271,13 @@ test('inserts an architecture node template without conflating role, technology 
   const droppedNode = dropped.scene.elements.find((item) => item.id === dropped.selectedIds[0])
   assert.ok(droppedNode && droppedNode.type === 'node')
   assert.equal(droppedNode.groupId, 'custom-boundary')
+
+  }
 })
 
-test('aligns selected canvas boxes while retaining unrelated elements', () => {
+test("对齐选中元素与不同尺寸节点", () => {
+  // 场景 15: 'aligns selected canvas boxes while retaining unrelated elements'
+  {
   const aligned = alignCanvasSelection(scene(), ['node-1', 'node-2'], 'x', 16)
   const first = aligned.elements.find((item) => item.id === 'node-1')
   const second = aligned.elements.find((item) => item.id === 'node-2')
@@ -256,9 +285,10 @@ test('aligns selected canvas boxes while retaining unrelated elements', () => {
   assert.ok(second && second.type === 'node')
   assert.equal(first.x, second.x)
   assert.deepEqual(aligned.elements.find((item) => item.id === 'node-3'), scene().elements.find((item) => item.id === 'node-3'))
-})
 
-test('aligns boxes of different sizes on a shared center line', () => {
+  }
+  // 场景 16: 'aligns boxes of different sizes on a shared center line'
+  {
   const source = scene()
   source.elements = [
     { id: 'node-1', type: 'node', x: 100, y: 120, width: 200, height: 90, text: 'A' },
@@ -268,9 +298,13 @@ test('aligns boxes of different sizes on a shared center line', () => {
   const centers = aligned.elements.map((item) => item.type === 'arrow' ? Number.NaN : item.x + item.width / 2)
   assert.equal(centers[0], centers[1])
   assert.equal(centers[0] % 16, 0)
+
+  }
 })
 
-test('reconnects an arrow endpoint and clears stale manual routing', () => {
+test("关系重连与中间插入节点", () => {
+  // 场景 17: 'reconnects an arrow endpoint and clears stale manual routing'
+  {
   const source = scene()
   source.elements = source.elements.map((item) => item.id === 'arrow-1' && item.type === 'arrow'
     ? { ...item, points: [{ x: 320, y: 200 }], labelPosition: { x: 350, y: 170 }, bundleKey: 'from:node-1' }
@@ -283,9 +317,10 @@ test('reconnects an arrow endpoint and clears stale manual routing', () => {
   assert.equal(arrow.points, undefined)
   assert.equal(arrow.labelPosition, undefined)
   assert.equal(arrow.bundleKey, undefined)
-})
 
-test('inserts a node into an existing relationship without duplicating its label', () => {
+  }
+  // 场景 18: 'inserts a node into an existing relationship without duplicating its label'
+  {
   const source = scene()
   source.elements = source.elements.map((item) => item.id === 'arrow-1' && item.type === 'arrow' ? { ...item, label: 'request' } : item)
   const result = insertCanvasNodeOnArrow(source, 'node-3', 'arrow-1')
@@ -300,9 +335,13 @@ test('inserts a node into an existing relationship without duplicating its label
   assert.equal(second.from, 'node-3')
   assert.equal(second.to, 'node-2')
   assert.equal(second.label, undefined)
+
+  }
 })
 
-test('separates overlapping selected nodes while leaving unrelated nodes fixed', () => {
+test("相交分离及箭头反向", () => {
+  // 场景 19: 'separates overlapping selected nodes while leaving unrelated nodes fixed'
+  {
   const source = scene()
   source.elements = source.elements.map((item) => {
     if (item.id === 'node-1' && item.type === 'node') return { ...item, x: 100, y: 100 }
@@ -321,9 +360,10 @@ test('separates overlapping selected nodes while leaving unrelated nodes fixed',
     && first.y + first.height + 24 > second.y
   assert.equal(overlaps, false)
   assert.deepEqual(next.elements.find((item) => item.id === 'node-3'), beforeThird)
-})
 
-test('reverses relationship direction while preserving manual bend geometry', () => {
+  }
+  // 场景 20: 'reverses relationship direction while preserving manual bend geometry'
+  {
   const source = scene()
   source.elements = source.elements.map((item) => item.id === 'arrow-1' && item.type === 'arrow'
     ? { ...item, fromAnchor: 'right', toAnchor: 'left', points: [{ x: 320, y: 160 }, { x: 420, y: 260 }] }
@@ -336,9 +376,13 @@ test('reverses relationship direction while preserving manual bend geometry', ()
   assert.equal(arrow.fromAnchor, 'left')
   assert.equal(arrow.toAnchor, 'right')
   assert.deepEqual(arrow.points, [{ x: 420, y: 260 }, { x: 320, y: 160 }])
+
+  }
 })
 
-test('reflows only the collision neighborhood while keeping the dragged anchor and distant nodes stable', () => {
+test("局部自动避让、泳道与拓扑布局", () => {
+  // 场景 21: 'reflows only the collision neighborhood while keeping the dragged anchor and distant nodes stable'
+  {
   const source = scene()
   source.elements = source.elements.map((item) => {
     if (item.id === 'node-1' && item.type === 'node') return { ...item, x: 100, y: 100 }
@@ -360,9 +404,10 @@ test('reflows only the collision neighborhood while keeping the dragged anchor a
     && first.y < second.y + second.height + 24
     && first.y + first.height + 24 > second.y
   assert.equal(overlaps, false)
-})
 
-test('neighborhood reflow keeps nodes inside their assigned vertical lane', () => {
+  }
+  // 场景 22: 'neighborhood reflow keeps nodes inside their assigned vertical lane'
+  {
   const source = scene()
   source.lanes = [{ id: 'lane-a', label: 'A', axis: 'vertical', start: 80, size: 360 }]
   source.elements = source.elements.map((item) => item.type === 'node'
@@ -373,9 +418,10 @@ test('neighborhood reflow keeps nodes inside their assigned vertical lane', () =
   assert.ok(second && second.type === 'node')
   assert.ok(second.x >= 88)
   assert.ok(second.x + second.width <= 432)
-})
 
-test('lays out only the local graph neighborhood and preserves the selected anchor center', () => {
+  }
+  // 场景 23: 'lays out only the local graph neighborhood and preserves the selected anchor center'
+  {
   const source = scene()
   source.elements.push({ id: 'node-4', type: 'node', x: 1040, y: 620, width: 120, height: 70, text: 'Distant' })
   const anchor = source.elements.find((item) => item.id === 'node-2')
@@ -391,6 +437,8 @@ test('lays out only the local graph neighborhood and preserves the selected anch
   assert.ok(Math.abs(after.x + after.width / 2 - beforeCenter.x) <= 16)
   assert.ok(Math.abs(after.y + after.height / 2 - beforeCenter.y) <= 16)
   assert.deepEqual(result.scene.elements.find((item) => item.id === 'node-4'), distant)
+
+  }
 })
 
 test('switches persisted C4 hierarchy between system, container and expanded levels', () => {

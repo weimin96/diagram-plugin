@@ -9,7 +9,8 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --import tsx --test tests/*.test.ts",
+    "test": "node scripts/check-test-budget.mjs && node --import tsx --test tests/*.test.ts",
+    "test:budget": "node scripts/check-test-budget.mjs",
     "smoke": "node scripts/smoke.mjs",
     "visual:smoke": "node scripts/visual-smoke.mjs",
     "visual:styles": "node --import tsx scripts/visual-styles.ts",
@@ -34,7 +35,7 @@
     "visual:verify": "pnpm visual:smoke && pnpm visual:benchmark && pnpm visual:styles && pnpm visual:regression",
     "plugin:install": "pnpm build && node scripts/install-codex-plugin.mjs",
     "plugin:install:desktop": "pnpm plugin:install && node scripts/reload-codex-desktop.mjs",
-    "check:hosts": "node --test tests/integration/*.test.mjs"
+    "check:hosts": "node scripts/check-test-budget.mjs && node --test tests/integration/*.test.mjs"
   },
   "dependencies": {
     "@codemirror/language": "^6.11.3",

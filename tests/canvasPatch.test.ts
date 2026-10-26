@@ -41,7 +41,9 @@ test('semantic patch preserves authored geometry and unrelated relationship geom
   assert.deepEqual(result.automaticElementIds, [])
 })
 
-test('adds a stable node without authored coordinates and routes its declared relationship', () => {
+test("新增节点的自动位置和分区继承", () => {
+  // 场景 2: 'adds a stable node without authored coordinates and routes its declared relationship'
+  {
   const result = buildCanvasSubgraphPatch(scene(), {
     scopeElementIds: ['api'],
     adds: [
@@ -57,9 +59,10 @@ test('adds a stable node without authored coordinates and routes its declared re
   assert.equal(edge.routing, 'orthogonal')
   assert.ok(result.addedElementIds.includes('cache'))
   assert.ok(result.addedElementIds.includes('api-cache'))
-})
 
-test('new nodes inherit an unambiguous group and lane and stay inside that lane', () => {
+  }
+  // 场景 3: 'new nodes inherit an unambiguous group and lane and stay inside that lane'
+  {
   const source = scene()
   source.lanes = [{ id: 'runtime', label: 'Runtime', axis: 'vertical', start: 400, size: 420 }]
   source.elements = source.elements.map((item) => item.id === 'api' && item.type === 'node' ? { ...item, laneId: 'runtime' } : item)
@@ -73,9 +76,13 @@ test('new nodes inherit an unambiguous group and lane and stay inside that lane'
   assert.equal(worker.laneId, 'runtime')
   assert.ok(worker.x >= 412)
   assert.ok(worker.x + worker.width <= 808)
+
+  }
 })
 
-test('reconnecting an arrow through a patch clears stale authored route metadata', () => {
+test("重连与标签更新保持端口语义", () => {
+  // 场景 4: 'reconnecting an arrow through a patch clears stale authored route metadata'
+  {
   const result = buildCanvasSubgraphPatch(scene(), {
     scopeElementIds: ['api-db'],
     updates: [{ id: 'api-db', changes: { to: 'locked' } }],
@@ -85,9 +92,10 @@ test('reconnecting an arrow through a patch clears stale authored route metadata
   assert.equal(edge.to, 'locked')
   assert.equal(edge.labelPosition, undefined)
   assert.notDeepEqual(edge.points, [{ x: 840, y: 228 }])
-})
 
-test('精确端口 patch 校验边界、锚点依赖与关系重连后的端口释放', () => {
+  }
+  // 场景 5: '精确端口 patch 校验边界、锚点依赖与关系重连后的端口释放'
+  {
   const base = scene()
   const result = buildCanvasSubgraphPatch(base, {
     scopeElementIds: ['api-db'],
@@ -114,9 +122,10 @@ test('精确端口 patch 校验边界、锚点依赖与关系重连后的端口�
   assert.ok(rerouted?.type === 'arrow')
   assert.equal(rerouted.fromPortRatio, undefined) // Auto-reroute resets both ports.
   assert.equal(rerouted.toPortRatio, undefined)
-})
 
-test('relationship text-only updates preserve authored route and label geometry', () => {
+  }
+  // 场景 6: 'relationship text-only updates preserve authored route and label geometry'
+  {
   const result = buildCanvasSubgraphPatch(scene(), {
     scopeElementIds: ['api-db'],
     updates: [{ id: 'api-db', changes: { label: 'read/write SQL' } }],
@@ -127,9 +136,13 @@ test('relationship text-only updates preserve authored route and label geometry'
   assert.deepEqual(edge.points, [{ x: 840, y: 228 }])
   assert.deepEqual(edge.labelPosition, { x: 830, y: 190 })
   assert.equal(edge.bundleKey, 'from:api')
+
+  }
 })
 
-test('removing a node automatically removes its incident relationships and reports impact', () => {
+test("删除、作用域和锁定字段拒绝", () => {
+  // 场景 7: 'removing a node automatically removes its incident relationships and reports impact'
+  {
   const result = buildCanvasSubgraphPatch(scene(), {
     scopeElementIds: ['api'],
     removeIds: ['api'],
@@ -140,23 +153,26 @@ test('removing a node automatically removes its incident relationships and repor
   assert.equal(ids.has('api-db'), false)
   assert.ok(result.automaticElementIds.includes('web-api'))
   assert.ok(result.automaticElementIds.includes('api-db'))
-})
 
-test('rejects updates outside the declared subgraph scope', () => {
+  }
+  // 场景 8: 'rejects updates outside the declared subgraph scope'
+  {
   assert.throws(() => buildCanvasSubgraphPatch(scene(), {
     scopeElementIds: ['api'],
     updates: [{ id: 'db', changes: { text: 'Other DB' } }],
   }), /scope 外元素/)
-})
 
-test('rejects AI geometry changes to locked nodes', () => {
+  }
+  // 场景 9: 'rejects AI geometry changes to locked nodes'
+  {
   assert.throws(() => buildCanvasSubgraphPatch(scene(), {
     scopeElementIds: ['locked'],
     updates: [{ id: 'locked', changes: { x: 700 } }],
   }), /锁定节点/)
-})
 
-test('rejects invalid semantic values instead of silently normalizing them away', () => {
+  }
+  // 场景 10: 'rejects invalid semantic values instead of silently normalizing them away'
+  {
   assert.throws(() => buildCanvasSubgraphPatch(scene(), {
     scopeElementIds: ['api'],
     updates: [{ id: 'api', changes: { tone: 'ultraviolet' } }],
@@ -177,9 +193,13 @@ test('rejects invalid semantic values instead of silently normalizing them away'
     scopeElementIds: ['api'],
     updates: [{ id: 'api', changes: { shapeRef: 'flowchart:not-real' } }],
   }), /字段值无效/)
+
+  }
 })
 
-test('applies registered drawing geometry independently from semantic role fields', () => {
+test("形状、样式和独立文字补丁", () => {
+  // 场景 11: 'applies registered drawing geometry independently from semantic role fields'
+  {
   const result = buildCanvasSubgraphPatch(scene(), {
     scopeElementIds: ['api'],
     updates: [{ id: 'api', changes: { shapeRef: 'flowchart:process' } }],
@@ -188,9 +208,10 @@ test('applies registered drawing geometry independently from semantic role field
   assert.ok(node && node.type === 'node')
   assert.equal(node.icon, 'api')
   assert.equal(node.shapeRef, 'flowchart:process')
-})
 
-test('applies explicit visual style overrides without changing node semantics', () => {
+  }
+  // 场景 12: 'applies explicit visual style overrides without changing node semantics'
+  {
   const result = buildCanvasSubgraphPatch(scene(), {
     scopeElementIds: ['api'],
     updates: [{ id: 'api', changes: { fillColor: '#ffffff', strokeColor: '#2f73d9', strokeWidth: 3, opacity: 0.75, cornerRadius: 18, rotation: 24 } }],
@@ -206,9 +227,10 @@ test('applies explicit visual style overrides without changing node semantics', 
     scopeElementIds: ['api'],
     updates: [{ id: 'api', changes: { strokeColor: 'red' } }],
   }), /字段值无效/)
-})
 
-test('adds standalone text with bounded typography fields', () => {
+  }
+  // 场景 13: 'adds standalone text with bounded typography fields'
+  {
   const result = buildCanvasSubgraphPatch(scene(), {
     scopeElementIds: [],
     adds: [{ id: 'caption', type: 'note', properties: { x: 640, y: 120, width: 240, height: 56, text: '阶段说明', textOnly: true, fontSize: 24, fontWeight: 600, textColor: '#2f73d9' } }],
@@ -224,9 +246,13 @@ test('adds standalone text with bounded typography fields', () => {
     scopeElementIds: [],
     adds: [{ id: 'bad-caption', type: 'note', properties: { x: 640, y: 120, width: 240, height: 56, text: 'Bad', textOnly: true, fontSize: 120 } }],
   }), /字段值无效/)
+
+  }
 })
 
-test('applies a visual icon override without changing semantic role fields', () => {
+test("品牌图标语义隔离", () => {
+  // 场景 14: 'applies a visual icon override without changing semantic role fields'
+  {
   const result = buildCanvasSubgraphPatch(scene(), {
     scopeElementIds: ['api'],
     updates: [{ id: 'api', changes: { iconRef: 'lucide:server' } }],
@@ -235,9 +261,10 @@ test('applies a visual icon override without changing semantic role fields', () 
   assert.ok(node && node.type === 'node')
   assert.equal(node.icon, 'api')
   assert.equal(node.iconRef, 'lucide:server')
-})
 
-test('applies a cloud provider icon override without changing semantic role fields', () => {
+  }
+  // 场景 15: 'applies a cloud provider icon override without changing semantic role fields'
+  {
   const result = buildCanvasSubgraphPatch(scene(), {
     scopeElementIds: ['api'],
     updates: [{ id: 'api', changes: { iconRef: 'aws:apigateway' } }],
@@ -246,16 +273,21 @@ test('applies a cloud provider icon override without changing semantic role fiel
   assert.ok(node && node.type === 'node')
   assert.equal(node.icon, 'api')
   assert.equal(node.iconRef, 'aws:apigateway')
+
+  }
 })
 
-test('new nodes must provide both coordinates or let the patch engine place them', () => {
+test("节点坐标与局部布局审计", () => {
+  // 场景 16: 'new nodes must provide both coordinates or let the patch engine place them'
+  {
   assert.throws(() => buildCanvasSubgraphPatch(scene(), {
     scopeElementIds: ['api'],
     adds: [{ id: 'partial-position', type: 'node', properties: { text: 'Partial', x: 700 } }],
   }), /同时提供 x\/y/)
-})
 
-test('local layout reports moved neighbors as automatic impact and preserves locked geometry', () => {
+  }
+  // 场景 17: 'local layout reports moved neighbors as automatic impact and preserves locked geometry'
+  {
   const source = scene()
   const lockedBefore = source.elements.find((item) => item.id === 'locked')
   const result = buildCanvasSubgraphPatch(source, {
@@ -265,9 +297,13 @@ test('local layout reports moved neighbors as automatic impact and preserves loc
   })
   assert.ok(result.automaticElementIds.some((id) => id === 'web' || id === 'db' || id === 'web-api' || id === 'api-db'))
   assert.deepEqual(result.scene.elements.find((item) => item.id === 'locked'), lockedBefore)
+
+  }
 })
 
-test('strict partial acceptance repairs required architecture relationship geometry', () => {
+test("严格和旧版局部批准边界", () => {
+  // 场景 18: 'strict partial acceptance repairs required architecture relationship geometry'
+  {
   const base = scene()
   const candidate = buildCanvasSubgraphPatch(base, {
     scopeElementIds: ['api'],
@@ -285,9 +321,10 @@ test('strict partial acceptance repairs required architecture relationship geome
   assert.ok(api && api.type === 'node')
   assert.equal(api.x, 620)
   assert.notDeepEqual(mergedEdge, baseEdge)
-})
 
-test('partial acceptance rejects a relationship whose new endpoint was not selected', () => {
+  }
+  // 场景 19: 'partial acceptance rejects a relationship whose new endpoint was not selected'
+  {
   const base = scene()
   const candidate = buildCanvasSubgraphPatch(base, {
     scopeElementIds: ['api'],
@@ -310,9 +347,10 @@ test('partial acceptance rejects a relationship whose new endpoint was not selec
   ))
   assert.ok(merged.elements.some((item) => item.id === 'cache'))
   assert.ok(merged.elements.some((item) => item.id === 'api-cache'))
-})
 
-test('legacy partial acceptance can still include related relationship changes', () => {
+  }
+  // 场景 20: 'legacy partial acceptance can still include related relationship changes'
+  {
   const base = scene()
   const candidate = buildCanvasSubgraphPatch(base, {
     scopeElementIds: ['api'],
@@ -327,9 +365,13 @@ test('legacy partial acceptance can still include related relationship changes',
   const baseEdge = base.elements.find((item) => item.id === 'api-db')
   const mergedEdge = merged.elements.find((item) => item.id === 'api-db')
   assert.notDeepEqual(mergedEdge, baseEdge)
+
+  }
 })
 
-test('subgraph context returns direct relationships and only relevant metadata', () => {
+test("子图直接关联与选中范围", () => {
+  // 场景 21: 'subgraph context returns direct relationships and only relevant metadata'
+  {
   const source = scene()
   source.lanes = [{ id: 'lane-runtime', label: 'Runtime', axis: 'vertical', start: 0, size: 1400 }]
   source.elements = source.elements.map((item) => item.type !== 'arrow' && ['web', 'api', 'db'].includes(item.id) ? { ...item, laneId: 'lane-runtime' } : item)
@@ -348,17 +390,22 @@ test('subgraph context returns direct relationships and only relevant metadata',
   assert.ok(context.contextElementIds.includes('web'))
   assert.ok(context.contextElementIds.includes('db'))
   assert.equal(context.contextElementIds.includes('web-api'), false)
-})
 
-test('selecting only an arrow does not promote its endpoint nodes into editable scope', () => {
+  }
+  // 场景 22: 'selecting only an arrow does not promote its endpoint nodes into editable scope'
+  {
   const context = buildCanvasSubgraphContext(scene(), ['api-db'], 0, 20)
   assert.deepEqual(context.scopeNodeIds, [])
   assert.deepEqual(context.directRelationshipIds, ['api-db'])
   assert.ok(context.contextElementIds.includes('api'))
   assert.ok(context.contextElementIds.includes('db'))
+
+  }
 })
 
-test('subgraph context bounds high fan-out neighborhoods', () => {
+test("高扇出和密集关系的子图预算", () => {
+  // 场景 23: 'subgraph context bounds high fan-out neighborhoods'
+  {
   const source: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -378,9 +425,10 @@ test('subgraph context bounds high fan-out neighborhoods', () => {
   assert.ok(context.elements.some((item) => item.id === 'node-0'))
   assert.ok(context.hiddenNodes > 0)
   assert.ok(context.hiddenArrows > 0)
-})
 
-test('subgraph context also bounds dense relationship sets', () => {
+  }
+  // 场景 24: 'subgraph context also bounds dense relationship sets'
+  {
   const source: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -401,9 +449,13 @@ test('subgraph context also bounds dense relationship sets', () => {
   const arrowCount = context.elements.filter((item) => item.type === 'arrow').length
   assert.ok(arrowCount <= 120)
   assert.ok(context.hiddenArrows > 0)
+
+  }
 })
 
-test('5000-node canvases keep subgraph context bounded and patch only the requested element', () => {
+test("超大画布和增量更新边界", () => {
+  // 场景 25: '5000-node canvases keep subgraph context bounded and patch only the requested element'
+  {
   const source: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -430,9 +482,10 @@ test('5000-node canvases keep subgraph context bounded and patch only the reques
   const distant = result.scene.elements.find((item) => item.id === 'n-4999')
   assert.ok(distant && distant.type === 'node')
   assert.equal(distant.text, 'N4999')
-})
 
-test('incremental patch refuses to degrade into a hidden whole-graph reroute', () => {
+  }
+  // 场景 26: 'incremental patch refuses to degrade into a hidden whole-graph reroute'
+  {
   const source: CanvasScene = {
     type: 'diagram-plugin-canvas',
     version: 1,
@@ -450,9 +503,13 @@ test('incremental patch refuses to degrade into a hidden whole-graph reroute', (
     scopeElementIds: ['hub'],
     updates: [{ id: 'hub', changes: { x: 180 } }],
   }), /自动重排影响过大/)
+
+  }
 })
 
-test('rebases a semantic patch over unrelated concurrent edits', () => {
+test("并发字段无冲突合并", () => {
+  // 场景 27: 'rebases a semantic patch over unrelated concurrent edits'
+  {
   const base = scene()
   const current = scene()
   current.elements = current.elements.map((item) => item.id === 'db' && item.type === 'node'
@@ -469,9 +526,10 @@ test('rebases a semantic patch over unrelated concurrent edits', () => {
   assert.equal(db.text, 'Primary DB')
   assert.equal(db.x, 1040)
   assert.equal(result.rebased, true)
-})
 
-test('rebases changes to a different field on the same element', () => {
+  }
+  // 场景 28: 'rebases changes to a different field on the same element'
+  {
   const base = scene()
   const current = scene()
   current.elements = current.elements.map((item) => item.id === 'api' && item.type === 'node'
@@ -485,9 +543,13 @@ test('rebases changes to a different field on the same element', () => {
   assert.ok(api && api.type === 'node')
   assert.equal(api.text, 'Public API')
   assert.equal(api.subtitle, 'Concurrent subtitle')
+
+  }
 })
 
-test('rejects rebase when the same owned field changed concurrently', () => {
+test("同字段及路径冲突拒绝", () => {
+  // 场景 29: 'rejects rebase when the same owned field changed concurrently'
+  {
   const base = scene()
   const current = scene()
   current.elements = current.elements.map((item) => item.id === 'api' && item.type === 'node'
@@ -497,9 +559,10 @@ test('rejects rebase when the same owned field changed concurrently', () => {
     scopeElementIds: ['api'],
     updates: [{ id: 'api', changes: { text: 'Public API' } }],
   }), /api\.text/)
-})
 
-test('rejects rebase when automatic route geometry was edited concurrently', () => {
+  }
+  // 场景 30: 'rejects rebase when automatic route geometry was edited concurrently'
+  {
   const base = scene()
   const original = buildCanvasSubgraphPatch(base, {
     scopeElementIds: ['api'],
@@ -513,9 +576,13 @@ test('rejects rebase when automatic route geometry was edited concurrently', () 
     scopeElementIds: ['api'],
     updates: [{ id: 'api', changes: { x: 620 } }],
   }, original.automaticElementIds), /api-db\.points/)
+
+  }
 })
 
-test('rejects local-layout rebase when neighborhood geometry changed concurrently', () => {
+test("局部位置与自动路由重放冲突", () => {
+  // 场景 31: 'rejects local-layout rebase when neighborhood geometry changed concurrently'
+  {
   const base = scene()
   const original = buildCanvasSubgraphPatch(base, {
     scopeElementIds: ['api'],
@@ -531,9 +598,10 @@ test('rejects local-layout rebase when neighborhood geometry changed concurrentl
     updates: [{ id: 'api', changes: { subtitle: 'Restructure' } }],
     layout: 'local',
   }, original.automaticElementIds), /web\.y/)
-})
 
-test('rebase drift asks for review when automatic routing geometry changes', () => {
+  }
+  // 场景 32: 'rebase drift asks for review when automatic routing geometry changes'
+  {
   const base = scene()
   const patch = {
     scopeElementIds: ['api'],
@@ -545,9 +613,13 @@ test('rebase drift asks for review when automatic routing geometry changes', () 
   const rebased = rebaseCanvasSubgraphPatch(base, current, patch, original.automaticElementIds)
   const reviewIds = canvasPatchRebaseReviewIds(original.scene, rebased.scene, original.automaticElementIds, original.addedElementIds)
   assert.ok(reviewIds.some((id) => original.automaticElementIds.includes(id)))
+
+  }
 })
 
-test('rebase drift ignores concurrent semantic fields on automatic relationships', () => {
+test("并发关系语义与新节点布局漂移", () => {
+  // 场景 33: 'rebase drift ignores concurrent semantic fields on automatic relationships'
+  {
   const base = scene()
   const patch = {
     scopeElementIds: ['api'],
@@ -559,9 +631,10 @@ test('rebase drift ignores concurrent semantic fields on automatic relationships
   const rebased = rebaseCanvasSubgraphPatch(base, current, patch, original.automaticElementIds)
   const reviewIds = canvasPatchRebaseReviewIds(original.scene, rebased.scene, original.automaticElementIds, original.addedElementIds)
   assert.equal(reviewIds.includes('api-db'), false)
-})
 
-test('rebase drift asks for review when concurrent nodes change automatic placement of a new node', () => {
+  }
+  // 场景 34: 'rebase drift asks for review when concurrent nodes change automatic placement of a new node'
+  {
   const base = scene()
   const patch = {
     scopeElementIds: ['api'],
@@ -578,4 +651,6 @@ test('rebase drift asks for review when concurrent nodes change automatic placem
   assert.notDeepEqual({ x: rebasedCache.x, y: rebasedCache.y }, { x: cache.x, y: cache.y })
   const reviewIds = canvasPatchRebaseReviewIds(original.scene, rebased.scene, original.automaticElementIds, original.addedElementIds)
   assert.ok(reviewIds.includes('cache'))
+
+  }
 })

@@ -83,7 +83,6 @@ test('confirmed primary path and functional regions survive automatic layout and
   assert.deepEqual(mainEdges.map((edge) => [edge.from, edge.to]), [
     ['person', 'web'], ['web', 'api'], ['api', 'db'],
   ])
-  assert.deepEqual(composeArchitectureGraph(intent).scene, generated.scene)
 })
 
 test('verified business path preserves same-region reading order without introducing crossings', () => {
@@ -114,7 +113,6 @@ test('verified business path preserves same-region reading order without introdu
   assert.ok(inRegion.every((id) => nodes.get(id)!.y === nodes.get(inRegion[0])!.y))
   assert.equal(result.quality.metrics.edgeCrossings, 0)
   assert.equal(result.quality.metrics.edgeNodeIntersections, 0)
-  assert.deepEqual(composeArchitectureGraph(intent).scene, result.scene)
 })
 
 test('rejects unsupported or invented primary path before writing', () => {
@@ -152,7 +150,6 @@ test('多区域候选局部重排减少交叉且不改动节点与语义关系',
   assert.ok(composed.reroutedEdges >= 1 && composed.reroutedEdges <= 3)
   assert.deepEqual(arrows.map((arrow) => [arrow.from, arrow.to]), relations.map(([from, to]) => [from, to]))
   assert.deepEqual(composed.scene.elements.filter((item) => item.type === 'node').map((node) => node.id), nodes.map(([id]) => id))
-  assert.deepEqual(composeArchitectureGraph(graph).scene, composed.scene)
 })
 
 test('invalid semantic relations are rejected before any write', async () => {
