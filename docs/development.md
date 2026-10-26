@@ -135,6 +135,8 @@ DeepSeek Harness 需要执行真实 `read_image` 工具调用并在原始 JSONL 
 
 **展示参数自动 A/B 选择（第三阶段）**：`pnpm visual:quality:ab` 在同一套 Chrome/真实 SVG 测量链路中，针对有证据的雷达图文字碰撞、流程图关系标签重叠分别生成至多两个局部展示参数候选；候选仍使用相同 Mermaid 源码、真实数据、主题、语义和渲染器。两个主题同时比较文字溢出、节点/标签/文本重叠，要求各项不退化、总改善严格大于零、画布宽高最多增加 15%，并优先选择等效收益下的较小面积。推荐仅写入忽略目录 `test-results/diagram-quality/presentation-ab.json`，`applied=false`，**不自动覆盖图表、不改生产配置、不宣称视觉审批**。在当前全部 20 个复杂案例上没有额外几何候选，0 项改动是正确结果。为证明流程确实能选出方案，通过明确实验旗标 `node scripts/visual-smoke.mjs --source-dir tests/fixtures/visual-stress --quality-benchmark --presentation-ab --ab-radar-margin=44 --report-file=test-results/diagram-quality/reproduced-radar-ab.json` 复现旧雷达图 44px 布局，两主题各有 1 处碰撞，Chrome 自动从 56/72px 方案中选择 56px，冲突均归零，并拒绝改变 Mermaid 源码。禁止将实验旗标产生的质量信号混称为当前生产质量。
 
+**更多语义图复用与真实 SVG 证据修复**：A/B 增加状态图、类图、ER 图的节点拥挤与关系标签拥挤的有界间距候选，仍仅由**实际浏览器已报告的重叠**触发，不改变源图。原候选检查错误地把 Mermaid `width="100%"` 的合法 SVG 误判为 100×0；已将标准 `viewBox` 解析集中到 `diagramGeometry.readSvgDimensions`，加入百分比根尺寸和空白字符回归。根据本机 Mermaid 11 类图 v3 的真实代码，节点/层次间距从 `state` 配置读取而非 `class` 配置（安装依赖 `chunk-TICWLB2K.mjs` 的 `draw`），修正候选实际写入路径。通过**临时注入探针信号且立即还原代码**的 Chrome 验证：状态图原尺寸 900×874，节点间距候选变为 912×874/924×874；ER 原尺寸 1478×916，候选变为 1550×916/1622×916；类图原尺寸 2665×541，候选变为 2665×571/2665×601。全部有效 SVG，但由于原场景没有真实碰撞，这些候选**均未采纳**。探针文件仅存于忽略的测试结果，不得将模拟问题信号视作产品真实质量问题。
+
 **Codex：** `pnpm plugin:install` 安装源码版本；Desktop 已开启时使用 `pnpm plugin:install:desktop` 刷新。公开 npm 版通过 `npx -y @weimin96/diagram-plugin@latest install --codex` 安装。注意不要同时开启 `diagram-plugin-local` 与 `diagram-plugin-npm`。
 
 **DSH Desktop：** 退出 Desktop、运行 `pnpm build`，再执行：

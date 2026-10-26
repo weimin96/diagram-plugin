@@ -3,7 +3,7 @@ import test from 'node:test'
 import { assessCanvasVisualQuality } from '../src/canvasQuality.js'
 import { parseCanvasScene, createCanvasSource } from '../src/canvas.js'
 import { summarizeCanvasQuality, summarizeMermaidQuality } from '../src/diagramQuality.js'
-import { countOverlappingRects, rectContains, rectsOverlapWithInset } from '../src/diagramGeometry.js'
+import { countOverlappingRects, readSvgDimensions, rectContains, rectsOverlapWithInset } from '../src/diagramGeometry.js'
 import { proposePresentationCandidates, selectPresentationCandidate, withPresentationCandidate } from '../src/diagramPresentationAB.js'
 import { assessMermaidVisualQuality } from '../src/mermaidQuality.js'
 import { mermaidDiagramTypes } from '../src/types.js'
@@ -89,6 +89,14 @@ test('shared rectangle semantics preserve Canvas insets and browser-pixel strict
   assert.equal(countOverlappingRects([a, overlaps], 4), 1)
   assert.equal(countOverlappingRects([a, overlaps, overlaps], 4), 3,
     'each browser-rendered text pair is counted exactly once')
+  assert.deepEqual(readSvgDimensions('0 0 2665.4609375 540.75', '100%', null),
+    { width: 2665.4609375, height: 540.75 }, 'percent-sized Mermaid SVG uses real viewBox')
+  assert.deepEqual(readSvgDimensions('0   0\n912.4453125\t873.5', null, null),
+    { width: 912.4453125, height: 873.5 }, 'SVG viewBox may contain arbitrary whitespace')
+  assert.deepEqual(readSvgDimensions(null, '100%', '100%'),
+    { width: 0, height: 0 }, 'never accept 100x0 fallback as valid browser geometry')
+  assert.deepEqual(readSvgDimensions(null, '720px', '400'),
+    { width: 720, height: 400 })
 })
 
 test('reversible presentation A/B requires a strict improvement on two themes without side effects', () => {
@@ -129,4 +137,29 @@ test('reversible presentation A/B requires a strict improvement on two themes wi
   ]).selected?.id, proposed[1].id, 'reject any candidate that inflates width beyond the geometric cap')
   assert.deepEqual(proposePresentationCandidates(type, summarizeMermaidQuality(type, quality), baseConfig), [],
     'source-only evidence must not propose browser-dependent changes')
+
+  for (const diagram of ['state', 'class', 'er'] as const) {
+    for (const [kind, axis] of [['node-overlap', 'nodeSpacing'], ['label-overlap', 'rankSpacing']] as const) {
+      const source = createTemplate(diagram, 'Demo')
+      const assessed = summarizeMermaidQuality(diagram, assessMermaidVisualQuality(diagram, source), {
+        width: 900, height: 700, contentOverflow: 0,
+        nodeOverlaps: kind === 'node-overlap' ? 1 : 0,
+        labelOverlaps: kind === 'label-overlap' ? 1 : 0,
+      })
+      const config = { [diagram === 'class' ? 'state' : diagram]: {
+        nodeSpacing: 32, rankSpacing: 42,
+      } } as Parameters<typeof withPresentationCandidate>[0]
+      const pristine = JSON.stringify(config)
+      const proposals = proposePresentationCandidates(diagram, assessed, config)
+      assert.deepEqual(proposals.map((item) => item.id),
+        [`${diagram}-${axis}+12`, `${diagram}-${axis}+24`])
+      const configPath = diagram === 'class' ? 'state' : diagram
+      assert.equal(withPresentationCandidate(config, proposals[0])[configPath]?.[axis],
+        (config[configPath]?.[axis] ?? 0) + 12, diagram)
+      assert.equal(JSON.stringify(config), pristine, 'candidate evaluation must not mutate config')
+      assert.equal(proposePresentationCandidates(diagram, summarizeMermaidQuality(diagram,
+        assessMermaidVisualQuality(diagram, source)), config).length, 0,
+      'a source-only quality warning cannot trigger browser geometry alterations')
+    }
+  }
 })

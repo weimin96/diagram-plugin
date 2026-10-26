@@ -242,7 +242,7 @@ import mermaid from 'mermaid'
 import { fitMermaidSvgToContent } from ${JSON.stringify(path.join(root, 'src/mermaidSvg.ts'))}
 import { summarizeMermaidQuality } from ${JSON.stringify(path.join(root, 'src/diagramQuality.ts'))}
 import { proposePresentationCandidates, withPresentationCandidate, selectPresentationCandidate } from ${JSON.stringify(path.join(root, 'src/diagramPresentationAB.ts'))}
-import { rectContains, countOverlappingRects } from ${JSON.stringify(path.join(root, 'src/diagramGeometry.ts'))}
+import { rectContains, countOverlappingRects, readSvgDimensions } from ${JSON.stringify(path.join(root, 'src/diagramGeometry.ts'))}
 import { createTemplate } from ${JSON.stringify(templates)}
 import { mermaidDiagramTypes } from ${JSON.stringify(types)}
 import { mermaidVisualConfig, normalizeMermaidSourceForRender } from ${JSON.stringify(grammar)}
@@ -270,9 +270,7 @@ for (const mode of ['light', 'dark']) {
       const svg = fitMermaidSvgToContent(renderedSvg, config.themeVariables?.background)
       const doc = new DOMParser().parseFromString(svg, 'image/svg+xml')
       const root = doc.documentElement
-      const viewBox = (root.getAttribute('viewBox') || '').split(/\\s+/).map(Number)
-      const width = viewBox.length === 4 ? viewBox[2] : Number.parseFloat(root.getAttribute('width') || '0')
-      const height = viewBox.length === 4 ? viewBox[3] : Number.parseFloat(root.getAttribute('height') || '0')
+      const { width, height } = readSvgDimensions(root.getAttribute('viewBox'), root.getAttribute('width'), root.getAttribute('height'))
       const geometry = inspectRenderedSvg(svg, type)
       const quality = assessMermaidVisualQuality(type, source)
       const qualityReport = summarizeMermaidQuality(type, quality, { width, height, ...geometry })
@@ -288,9 +286,8 @@ for (const mode of ['light', 'dark']) {
           const { svg: candidateSvg } = await mermaid.render('ab-' + mode + '-' + type + '-' + safeId + '-' + Math.random().toString(36).slice(2), renderSource)
           const adjusted = fitMermaidSvgToContent(candidateSvg, alternative.themeVariables?.background)
           const node = new DOMParser().parseFromString(adjusted, 'image/svg+xml').documentElement
-          const bounds = (node.getAttribute('viewBox') || '').split(/\s+/).map(Number)
-          const adjustedWidth = bounds.length === 4 ? bounds[2] : Number.parseFloat(node.getAttribute('width') || '0')
-          const adjustedHeight = bounds.length === 4 ? bounds[3] : Number.parseFloat(node.getAttribute('height') || '0')
+          const { width: adjustedWidth, height: adjustedHeight } = readSvgDimensions(
+            node.getAttribute('viewBox'), node.getAttribute('width'), node.getAttribute('height'))
           candidateEvidence.push({ id: candidate.id, geometry: {
             width: adjustedWidth, height: adjustedHeight, ...inspectRenderedSvg(adjusted, type),
           } })

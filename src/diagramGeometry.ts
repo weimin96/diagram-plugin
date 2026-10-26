@@ -8,6 +8,23 @@ export interface DiagramRect {
   height: number
 }
 
+/** SVG percent-sized roots (e.g. width="100%") require a real viewBox.
+ * Do not silently treat percent width as 100px or infer a zero-height SVG. */
+export function readSvgDimensions(viewBox: string | null, width: string | null, height: string | null): {
+  width: number; height: number
+} {
+  const parts = (viewBox ?? '').trim().split(/\s+/).map(Number)
+  if (parts.length === 4 && parts.every(Number.isFinite) && parts[2] > 0 && parts[3] > 0) {
+    return { width: parts[2], height: parts[3] }
+  }
+  const numberOrZero = (value: string | null): number => {
+    if (!value || value.includes('%')) return 0
+    const number = Number.parseFloat(value)
+    return Number.isFinite(number) && number > 0 ? number : 0
+  }
+  return { width: numberOrZero(width), height: numberOrZero(height) }
+}
+
 /** Existing Canvas node collision semantics: ignore a 2px inset on every
  * side. In particular, a merely touching border is not an overlap. */
 export function rectsOverlapWithInset(a: DiagramRect, b: DiagramRect, inset: number): boolean {

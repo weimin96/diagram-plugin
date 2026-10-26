@@ -5,7 +5,8 @@ import type { MermaidDiagramType } from './types.js'
 export type PresentationCandidate = {
   id: string
   description: string
-  kind: 'radar-top-margin' | 'flowchart-spacing'
+  kind: 'radar-top-margin' | 'flowchart-spacing' | 'state-spacing' | 'class-spacing' | 'er-spacing'
+  axis?: 'nodeSpacing' | 'rankSpacing'
   value: number
 }
 
@@ -39,6 +40,26 @@ export function proposePresentationCandidates(
           kind: 'flowchart-spacing' as const, value: base + delta,
         })) : []
   }
+  if (type === 'state' || type === 'class' || type === 'er') {
+    // Professional graph layouts expose their own spacing knobs. Only offer
+    // a bounded candidate when a real browser overlap was observed.
+    const hasNodes = report.findings.some((finding) => finding.code === 'node-overlap')
+    const hasLabels = report.findings.some((finding) => finding.code === 'label-overlap')
+    const axis = hasNodes ? 'nodeSpacing' : hasLabels ? 'rankSpacing' : null
+    if (!axis) return []
+    // Mermaid 11's classDiagram v3 unified renderer takes the spacing
+    // settings from config.state (not config.class). Its class-specific
+    // settings still own styles and box rendering; do not mutate either.
+    const base = type === 'class' ? config.state?.[axis] : config[type]?.[axis]
+    if (typeof base !== 'number' || !Number.isFinite(base) || base <= 0) return []
+    return [12, 24].map((delta) => ({
+      id: `${type}-${axis}+${delta}`,
+      description: axis === 'nodeSpacing' ? '扩大真实节点间距以避免遮挡'
+        : '扩大层次间距以缓解关系标签重叠',
+      kind: `${type}-spacing` as 'state-spacing' | 'class-spacing' | 'er-spacing',
+      axis, value: base + delta,
+    }))
+  }
   return []
 }
 
@@ -53,6 +74,14 @@ export function withPresentationCandidate(
       ...config.flowchart, nodeSpacing: candidate.value,
       rankSpacing: Math.max(config.flowchart?.rankSpacing ?? 0, candidate.value),
     } }
+  }
+  if (candidate.kind === 'state-spacing' || candidate.kind === 'class-spacing' || candidate.kind === 'er-spacing') {
+    const diagramType = candidate.kind.slice(0, -'-spacing'.length) as 'state' | 'class' | 'er'
+    if (!candidate.axis) return config
+    if (diagramType === 'state' || diagramType === 'class') return {
+      ...config, state: { ...config.state, [candidate.axis]: candidate.value },
+    }
+    return { ...config, er: { ...config.er, [candidate.axis]: candidate.value } }
   }
   return config
 }
