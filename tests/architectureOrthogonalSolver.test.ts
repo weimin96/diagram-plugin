@@ -66,6 +66,22 @@ test('search-local segment memo retains exact route costs, upper bounds, and sha
   }
 })
 
+test('upper-bound rejection never caches an incomplete occupied-lane penalty', () => {
+  const route = [{ x: 0, y: 0 }, { x: 300, y: 0 }]
+  const obstacles: RouteRect[] = [{ x: 130, y: -30, width: 60, height: 60 }]
+  const occupied: RouteSegment[] = [
+    { a: { x: 40, y: 0 }, b: { x: 260, y: 0 }, bundleKey: 'other' },
+    { a: { x: 210, y: -40 }, b: { x: 210, y: 40 } },
+  ]
+  const memo = new Map()
+  const full = scoreRoute(route, obstacles, occupied, undefined)
+  assert.equal(scoreRoute(route, obstacles, occupied, undefined, 50_000, memo), 50_000)
+  assert.equal(scoreRoute(route, obstacles, occupied, undefined, Infinity, memo), full,
+    'a rejected segment must be fully recomputed when the admissible bound grows')
+  assert.equal(scoreRoute(route, obstacles, occupied, undefined, full + 1, memo), full,
+    'completed segment costs remain reusable after a cutoff')
+})
+
 test('optional visibility fallback resolves an obstacle maze that bounded doglegs cannot clear', () => {
   const start = { x: 711, y: 274 }, end = { x: 899, y: 702 }
   const obstacles: RouteRect[] = [

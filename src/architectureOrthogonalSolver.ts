@@ -324,7 +324,14 @@ export function scoreRoute(
         // obstacles before invoking the full rectangle-intersection test.
         if ((horizontal || vertical) && (maxX <= rect.x || minX >= rect.x + rect.width
           || maxY <= rect.y || minY >= rect.y + rect.height)) continue
-        if (segmentIntersectsRect(segment, rect)) collisionCount++
+        if (segmentIntersectsRect(segment, rect)) {
+          collisionCount++
+          // All remaining costs are nonnegative. Once an obstacle makes
+          // this candidate uncompetitive, do not evaluate its occupied lanes.
+          // Do not memoize this partial segment cost.
+          if (length + bendsPenalty + (collisions + collisionCount) * 100_000
+            + overlapPenalty + crossingPenalty >= upperBound) return upperBound
+        }
       }
       for (const used of occupied) {
         const usedHorizontal = used.a.y === used.b.y
@@ -354,6 +361,8 @@ export function scoreRoute(
           const groupBus = bundleKey?.startsWith('group:') || used.bundleKey?.startsWith('group:')
           crossing += groupBus ? 2200 : 960
         }
+        if (length + bendsPenalty + (collisions + collisionCount) * 100_000
+          + overlapPenalty + crossingPenalty + overlap + crossing >= upperBound) return upperBound
       }
       cost = { collisions: collisionCount, overlap, crossing }
       if (key !== undefined) segmentCosts!.set(key, cost)
