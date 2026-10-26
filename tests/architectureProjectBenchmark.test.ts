@@ -39,16 +39,16 @@ test('真实依赖密集图不能因不穿节点就获得错误的自动审查�
   assert.equal(q.edgeNodeIntersections, 0)
   assert.ok(q.edgeCrossings <= 1,
     'alternating constrained placement/routing must prevent the original real-source crossing regression')
-  assert.ok(q.edgeOverlaps <= 5,
-    'capacity-aware terminal slots and paired routing must preserve the real independent-overlap improvement')
+  assert.ok(q.edgeOverlaps <= 3,
+    'joint terminal and corridor negotiation must preserve the real independent-overlap improvement')
   assert.ok(canvasBundleTrunks(composed.scene).length >= 2,
     'negotiating independent corridors must not erase genuine shared source trunks')
-  assert.ok(composed.routeDiagnostics.totalRouteLength <= 12_450,
-    'capacity-aware terminal slots must preserve the measured route-length improvement')
-  assert.ok(composed.routeDiagnostics.perimeterDetours <= 9,
-    'dense negotiation must cover real independent arrows beyond the original conflict shortlist')
-  assert.ok(composed.evaluation.structuralScore >= 71,
-    'capacity-aware incoming ports and real source trunks must improve the complete scene')
+  assert.ok(composed.routeDiagnostics.totalRouteLength <= 12_100,
+    'joint corridor negotiation must preserve the measured total-route improvement')
+  assert.ok(composed.routeDiagnostics.perimeterDetours <= 8,
+    'joint optimization must actually reduce real same-region exterior detours')
+  assert.ok(composed.evaluation.structuralScore >= 76,
+    'capacity-aware incoming ports and joint corridor negotiation must improve the complete scene')
   assert.ok(composed.candidates.some((candidate) =>
     candidate.layout === composed.evaluation.layout
     && candidate.density === composed.evaluation.density

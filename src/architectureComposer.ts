@@ -770,18 +770,29 @@ function optimizeCongestedRoutes(result: ReturnType<typeof composeArchitectureGr
   }
 }
 
-/** Complete-scene ingress capacity negotiation, after corridor routing.
- * Redistributes only verified independent terminal ports while preserving
- * the authored node geometry and shared stems. The routing layer supplies
- * real orthogonal proposals; Composer alone decides which whole scene wins.
+/** Final bounded corridor negotiation over the same editable scene.
+ * Previously independent ingress-port clean-up could not reassess the long
+ * exterior routes that remained after the original route optimization.
+ * Compare the router's existing single-edge and corridor proposals alongside
+ * verified ingress slots. No extra layout engine, node moves, or hidden edges.
  */
-function negotiateIngressCapacity(result: ReturnType<typeof composeArchitectureGraphCandidate>) {
+function negotiateFinalCorridors(result: ReturnType<typeof composeArchitectureGraphCandidate>) {
   let selected = result
   const requiredTrunks = canvasBundleTrunks(result.scene).length
-  for (let round = 0; round < 4; round++) {
+  for (let round = 0; round < 6; round++) {
     let best: typeof result | undefined
     let bestGain = 0
-    for (const scene of proposeIngressPortSlots(selected.scene)) {
+    const proposals = proposeIngressPortSlots(selected.scene).map((scene) => ({ scene, routeChanged: false }))
+    const arrows = selected.scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow')
+    for (const arrow of arrows) {
+      proposals.push(
+        { scene: routeArchitectureArrowIds(selected.scene, [arrow.id], false), routeChanged: true },
+        { scene: routeArchitectureArrowIds(selected.scene, [arrow.id], true), routeChanged: true },
+        ...nudgeArchitectureCorridors(selected.scene, arrow.id).map((scene) => ({ scene, routeChanged: true })),
+      )
+    }
+    for (const proposal of proposals) {
+      const scene = proposal.routeChanged ? annotateSourceFanoutTrunks(proposal.scene) : proposal.scene
       const quality = assessCanvasVisualQuality(scene)
       const before = selected.quality.metrics, after = quality.metrics
       if (after.nodeOverlaps > before.nodeOverlaps || after.edgeNodeIntersections > before.edgeNodeIntersections
@@ -793,12 +804,13 @@ function negotiateIngressCapacity(result: ReturnType<typeof composeArchitectureG
       if (routeDiagnostics.perimeterDetours > selected.routeDiagnostics.perimeterDetours
         || routeDiagnostics.frameOverlapArea > selected.routeDiagnostics.frameOverlapArea
         || routeDiagnostics.unrelatedFrameIntrusionLength > selected.routeDiagnostics.unrelatedFrameIntrusionLength
-        || routeDiagnostics.totalRouteLength > selected.routeDiagnostics.totalRouteLength * 1.08) continue
+        || routeDiagnostics.totalRouteLength > selected.routeDiagnostics.totalRouteLength * 1.02) continue
       const evaluation = evaluateArchitectureLayout(scene, quality, selected.evaluation.layout, selected.evaluation.density)
       if (evaluation.rawSelectionScore < selected.evaluation.rawSelectionScore) continue
-      const gain = (before.edgeCrossings - after.edgeCrossings) * 8
-        + (before.edgeOverlaps - after.edgeOverlaps) * 4
-        + (selected.routeDiagnostics.totalRouteLength - routeDiagnostics.totalRouteLength) / 180
+      const gain = (selected.routeDiagnostics.perimeterDetours - routeDiagnostics.perimeterDetours) * 25
+        + (before.edgeCrossings - after.edgeCrossings) * 12
+        + (before.edgeOverlaps - after.edgeOverlaps) * 8
+        + (selected.routeDiagnostics.totalRouteLength - routeDiagnostics.totalRouteLength) / 90
       if (gain <= bestGain + 0.01) continue
       const presentation = assessArchitecturePresentation(scene)
       if (presentation.estimatedTitlePxAtFit < selected.presentation.estimatedTitlePxAtFit) continue
@@ -892,7 +904,7 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
     // Alternating coordinate descent: negotiate corridors on the complete
     // graph, try node slots without modifying authored semantics, then
     // reconcile all affected corridors once more. No second routing engine.
-    const candidate = negotiateIngressCapacity(optimizeCongestedRoutes(negotiateDenseNodeSlots(optimizeCongestedRoutes(
+    const candidate = negotiateFinalCorridors(optimizeCongestedRoutes(negotiateDenseNodeSlots(optimizeCongestedRoutes(
       composeArchitectureGraphCandidate(intent, 'semantic', undefined, false, false, false, false, true),
     )), 8))
     const next = candidate.quality.metrics
