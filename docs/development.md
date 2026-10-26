@@ -65,7 +65,23 @@ pnpm benchmark:architecture:visual:repeat --provider=dsh --manifest=test-results
 pnpm benchmark:architecture:visual:score --manifest=test-results/architecture-design-project/manifest.json --review=<人工填写的review.json> --require-human-approval
 ```
 
+**Codex 视觉验收模型**：与 `codex-ppt/scripts/visual-review-model.ts` 一致，默认显式执行 `gpt-6-luna` / `model_reasoning_effort="max"`；不采用 Codex CLI 的默认模型。模型 ID 和推理强度写入每次独立评价，旧 Codex default 报告不可作为 Luna Max 的同模型历史基线。
+
 DeepSeek Harness 需要执行真实 `read_image` 工具调用并在原始 JSONL 中验证成功的图像结果；Codex 使用隔离的只读 PNG 输入、结构化 JSON 输出及证据指纹。只传提示词或让模型声称看到图不算像素评审。默认报告路径带 `.dsh.` 或 `.codex.`，不会互相覆盖；重复评审保留各次原始记录与区间。不同 Provider/模型之间的绝对评分不能直接当作改善证据，只有同模型、同案例、同评分合同且通过证据指纹校验的重复样本才能与历史基线比较。人工批准门禁独立于模型评分。
+
+### 2026-10-26 GPT Luna 6 Max 当前质量审查
+
+实际执行了同一份真实 Chrome PNG 的两次**隔离 `gpt-6-luna/max`**评审，分数分别为 **56、52/100**（中位数 **54**，波动 4）；`traceability` **1.5/5**、`composition` **2.5/5**、`hierarchy` **3/5**、`legibility` **3.25/5**、`boundaries` **3/5**、`consistency` **4/5**。证据及每次实际图像观察保留于 `test-results/architecture-design-project/diagram-plugin-source-imports.codex.visual-repeat.json`，原始独立样本由报告 `reviewFiles` 引用。这是 **Luna Max 的新基线**，不能与先前 Codex default 的 44/100 直接比较。
+
+与确定性基准核对：同一实际 12 节点 / 26 静态 import 关系，**65.7/90 结构分、1 处交叉、7 对独立重叠、9 条外围绕行、12.5px 适配字号**。当前余留问题按顺序：
+
+1. **P0 · 高汇聚节点端口/通道资源**：`canvas` 有 **11 条实际入边**，集中到画布底部一个狭小节点，箭头难以区分；应在**同一个联合布局约束**中规划端口容量、节点尺度、进入走廊与终端分布，不能继续向现有单边路由追加 case-specific nudge。
+2. **P0 · 真实可追踪性**：`architectureComposer → canvas` 的实际线路长 1084px，比直接路径多约 504px，在语义分区外绕行 252px；`architectureVisualPlan → architectureDesign` 多约 460px，且与两条去往 `canvas` 的真实关系重叠。需让全局候选优化直接惩罚**同分区外围折返、末端入边贴合和无法循线追踪的交叉**，同时保留节点/边 ID 与真实箭头方向。
+3. **P1 · 主阅读路径与分区边界**：真实 `Composer → VisualPlan → canvas` 重点链路虽有粗边框，但 26 条同色连线的视觉强度相近；单个「核心应用」虚线框外多条线折返，分区语义不清。可基于真实关系提供**默认可读重点视图 + 完整关系视图**（不丢失任何关系），以及只针对证实语义的分区层次，不可编造组件分组或业务路径。
+4. **P1 · 缩放后可读性**：节点正文基本可认，但箭头、关系端口和分区标题小；在 Chrome 的实际展示尺寸下分别验收 100% / fit、移动端适配和 SVG 导出。不得通过缩字、隐藏真实边或绘制不真实的共享总线换取质量分。
+5. **P2 · 计算效率和跨图泛化**：上述 12/26 例端到端约 10–11 秒，继续扩大 brute-force 候选不可接受。全局优化应有有界复杂度、同义场景不回退，并同时过 20 例扩展集、实际 Chromium、两次同模型独立像素复评。
+
+下一阶段首先做 P0 的**端口容量与节点/走廊联合约束原型**，只在完整真实 Canvas 的交叉、重叠、穿节点、字体、路长和耗时综合净收益明确时替换旧搜索；旧试验路径随替换删除，不能维持双轨生产路由。主观像素评审达标前仍保持 `approval=pending`。
 
 六维评分包括主次阅读路径、依赖可追踪性、字体可读性、留白/对齐、分区边界和视觉一致性，总分 100。无人评分是 `null`，模型评级不能伪装人工 `approval=approved`；最终交付必须通过机器几何、当前像素指纹和真实人工批准。
 

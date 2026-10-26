@@ -59,7 +59,7 @@ for (let i = 0; i < count; i++) {
     '--import', 'tsx', cli, '--provider=' + provider,
     ...(model ? ['--model=' + model] : []), '--manifest=' + manifestPath,
     '--case=' + caseId, '--out=' + reviewPath,
-  ], { timeout: 220_000, maxBuffer: 512_000 })
+  ], { timeout: 420_000, maxBuffer: 512_000 })
   await verifyEvidence()
   const result = JSON.parse(await readFile(reviewPath, 'utf8')) as {
     provider: string; pixelToolVerified: string; reviews: ArchitectureVisualReviewEntry[]

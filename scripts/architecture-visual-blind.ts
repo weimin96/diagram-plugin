@@ -11,14 +11,16 @@ import path from 'node:path'
 import { architectureVisualCriteria, evaluateArchitectureVisualReview,
   type ArchitectureVisualReviewEntry } from '../src/architectureVisualReview.js'
 import { runDshPixelAssessment } from './dsh-visual-review.js'
+import { visualReviewCodexArgs, visualReviewModel } from './visual-review-model.js'
 
 const flag = (name: string) => process.argv.find((value) => value.startsWith(`--${name}=`))?.slice(name.length + 3)
 const manifestFile = path.resolve(flag('manifest') ?? 'test-results/architecture-design-project/manifest.json')
 const selectedId = flag('case')
-const model = flag('model') ?? process.env.DIAGRAM_VISUAL_REVIEW_MODEL
 const provider = flag('provider') ?? process.env.DIAGRAM_VISUAL_REVIEW_PROVIDER ?? 'dsh'
+const requestedModel = flag('model') ?? process.env.DIAGRAM_VISUAL_REVIEW_MODEL
+const model = provider === 'codex' ? requestedModel ?? visualReviewModel.id : undefined
 if (provider !== 'dsh' && provider !== 'codex') throw new Error('Use --provider=dsh or --provider=codex')
-if (provider === 'dsh' && model) throw new Error('--model applies only to Codex; DSH uses the configured headless profile')
+if (provider === 'dsh' && requestedModel) throw new Error('--model applies only to Codex; DSH uses the configured headless profile')
 if (!selectedId) throw new Error('Specify --case=<manifest case ID>; each call reviews one actual screenshot')
 const directory = path.dirname(manifestFile)
 const manifest = JSON.parse(await readFile(manifestFile, 'utf8')) as {
@@ -94,14 +96,16 @@ JSON 中每个 score 允许 0 至 5，每次递增 0.5。分数须根据各维�
   } else {
     const args = ['exec', '--skip-git-repo-check', '--ignore-user-config', '--ephemeral',
       '--sandbox', 'read-only', '--image', 'anonymous.png', '--output-schema', 'schema.json',
-      '--output-last-message', 'judgment.json', ...(model ? ['--model', model] : []), '-']
+      '--output-last-message', 'judgment.json', ...visualReviewCodexArgs(model), '-']
     const child = spawn('codex', args, { cwd: temp, stdio: ['pipe', 'pipe', 'pipe'] })
     child.stdin.end(prompt)
     let error = ''
     child.stdout.on('data', () => { /* Isolated output saved only in the local review document. */ })
     child.stderr.on('data', (chunk: Buffer) => { error = (error + chunk.toString()).slice(-2000) })
     let timedOut = false
-    const timer = setTimeout(() => { timedOut = true; child.kill('SIGTERM') }, 180_000)
+    // Match PPT's independent Max-review budget; Max may need substantially
+    // more time than the old default-model visual assessment.
+    const timer = setTimeout(() => { timedOut = true; child.kill('SIGTERM') }, 360_000)
     const code = await new Promise<number>((resolve, reject) => {
       child.on('error', reject)
       child.on('exit', (value) => resolve(value ?? 1))
@@ -112,7 +116,7 @@ JSON 中每个 score 允许 0 至 5，每次递增 0.5。分数须根据各维�
   const result: ArchitectureVisualReviewEntry = {
     id: item.id, ...item.evidence, screenshotSha256: item.evidence.screenshotSha256,
     reviewer: provider === 'dsh' ? 'DeepSeek Harness headless read_image reviewer'
-      : model ? `Codex isolated pixel reviewer (${model})` : 'Codex isolated pixel reviewer (default model)',
+      : `Codex isolated pixel reviewer (${model}/${visualReviewModel.reasoningEffort})`,
     reviewMode: 'independent-vision', approval: 'pending',
     ratings: assessment.ratings, summary: assessment.summary,
     issues: assessment.issues.map((issue) => ({ ...issue, elementIds: [] })),
@@ -129,11 +133,13 @@ JSON 中每个 score 允许 0 至 5，每次递增 0.5。分数须根据各维�
     kind: 'diagram-independent-pixel-review', version: 1,
     limitations: 'Single fresh image-only model opinion; no human sign-off; geometric gating remains separate.',
     provider, pixelToolVerified: provider === 'dsh' ? 'read_image tool_result completed' : 'Codex image input',
+    ...(provider === 'codex' ? { model, reasoningEffort: visualReviewModel.reasoningEffort } : {}),
     reviews: [result],
   }, null, 2) + '\n')
   console.log('PIXEL_REVIEW', JSON.stringify({
-    caseId: item.id, provider, model: provider === 'dsh' ? 'DeepSeek Harness headless'
-      : model ?? 'Codex default', score: validated.perceptualScore,
+    caseId: item.id, provider, model: provider === 'dsh' ? 'DeepSeek Harness headless' : model,
+    ...(provider === 'codex' ? { reasoningEffort: visualReviewModel.reasoningEffort } : {}),
+    score: validated.perceptualScore,
     geometryBlocked: validated.state === 'geometry-blocked', outputFile,
   }))
 } finally {

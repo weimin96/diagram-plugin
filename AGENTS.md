@@ -44,6 +44,7 @@
 - Chrome 证据：`pnpm benchmark:architecture:project:visual`（几何阻断导致非零退出仍应保存截图）；编辑器交互：`pnpm benchmark:architecture:relation-lens`。
 - 像素模型审查：`pnpm benchmark:architecture:visual:blind --provider=dsh|codex --manifest=... --case=...`；DSH 必须在独立沙箱中真实触发成功 `read_image`，Codex 必须通过隔离的只读 PNG 和结构化输出，不得伪称模型读图成功。`benchmark:architecture:visual:repeat --provider=dsh|codex` 对同一指纹独立采样，两个 Provider 的报告分别保存，不得用不同模型的单次分数推断优化；只与有可比模型身份的同模型重复基线比较。
 - `pnpm benchmark:architecture:visual:score --require-human-approval` 才能检验真实人工批准。截图存在、几何分数、模型评分与人工签署彼此不可替代。
+- Codex 视觉审查默认使用与 codex-ppt 完全一致的 `gpt-6-luna` / `max`，显式传入 `-m` 和 `model_reasoning_effort`；不可将旧 Codex default 模型评分混入 Luna Max 的趋势分析。
 
 所有布局/路由改动必须提供修改前后同一真实与合成案例的节点/关系保真、独立重叠、交叉、穿节点、分区框、标题字号、线路长度、耗时与必要 Chrome 截图。无整体净收益的试验直接撤销并删除实验实现；不增加“仅对这个用例”的生产路径。
 
