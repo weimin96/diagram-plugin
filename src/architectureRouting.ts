@@ -1,4 +1,5 @@
 import { reservedPorts, availablePortRatios, portSpacingPenalty, type FixedSide, type PortReservations } from './architecturePortPlanning.js'
+export { proposeIngressPortSlots } from './architecturePortPlanning.js'
 import {
   addOccupiedSegments, expandRect, findOrthogonalRoute, scoreRoute,
   segmentIntersectsRect, segmentsCross, simplifyRoute, uniqueNumbers,

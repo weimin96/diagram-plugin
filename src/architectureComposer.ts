@@ -1,5 +1,5 @@
 import { nudgeArchitectureCorridors, bypassArchitectureBlockingNode, nudgeSharedSourceBranch } from './architectureRouteRepair.js'
-import { annotateSourceFanoutTrunks, restoreArchitectureMovedSourceTrunk, routeArchitectureArrowIds, routeArchitectureEdges, routeArchitectureEdgesIncremental } from './architectureRouting.js'
+import { annotateSourceFanoutTrunks, proposeIngressPortSlots, restoreArchitectureMovedSourceTrunk, routeArchitectureArrowIds, routeArchitectureEdges, routeArchitectureEdgesIncremental } from './architectureRouting.js'
 import { beautifyArchitectureScene, inferArchitectureComposition, type ArchitectureComposition, type ArchitecturePartition, type ArchitectureTheme } from './architectureDesign.js'
 import { assessCanvasVisualQuality, type CanvasVisualQualityAssessment } from './canvasQuality.js'
 import type { DiagramVisualStyle } from './diagramVisualStyles.js'
@@ -770,6 +770,53 @@ function optimizeCongestedRoutes(result: ReturnType<typeof composeArchitectureGr
   }
 }
 
+/** Complete-scene ingress capacity negotiation, after corridor routing.
+ * Redistributes only verified independent terminal ports while preserving
+ * the authored node geometry and shared stems. The routing layer supplies
+ * real orthogonal proposals; Composer alone decides which whole scene wins.
+ */
+function negotiateIngressCapacity(result: ReturnType<typeof composeArchitectureGraphCandidate>) {
+  let selected = result
+  const requiredTrunks = canvasBundleTrunks(result.scene).length
+  for (let round = 0; round < 4; round++) {
+    let best: typeof result | undefined
+    let bestGain = 0
+    for (const scene of proposeIngressPortSlots(selected.scene)) {
+      const quality = assessCanvasVisualQuality(scene)
+      const before = selected.quality.metrics, after = quality.metrics
+      if (after.nodeOverlaps > before.nodeOverlaps || after.edgeNodeIntersections > before.edgeNodeIntersections
+        || after.edgeCrossings > before.edgeCrossings || after.edgeOverlaps > before.edgeOverlaps
+        || after.labelNodeIntersections > before.labelNodeIntersections
+        || after.labelOverlaps > before.labelOverlaps || after.labelOverflows > before.labelOverflows
+        || canvasBundleTrunks(scene).length < requiredTrunks) continue
+      const routeDiagnostics = assessArchitectureRouteDiagnostics(scene)
+      if (routeDiagnostics.perimeterDetours > selected.routeDiagnostics.perimeterDetours
+        || routeDiagnostics.frameOverlapArea > selected.routeDiagnostics.frameOverlapArea
+        || routeDiagnostics.unrelatedFrameIntrusionLength > selected.routeDiagnostics.unrelatedFrameIntrusionLength
+        || routeDiagnostics.totalRouteLength > selected.routeDiagnostics.totalRouteLength * 1.08) continue
+      const evaluation = evaluateArchitectureLayout(scene, quality, selected.evaluation.layout, selected.evaluation.density)
+      if (evaluation.rawSelectionScore < selected.evaluation.rawSelectionScore) continue
+      const gain = (before.edgeCrossings - after.edgeCrossings) * 8
+        + (before.edgeOverlaps - after.edgeOverlaps) * 4
+        + (selected.routeDiagnostics.totalRouteLength - routeDiagnostics.totalRouteLength) / 180
+      if (gain <= bestGain + 0.01) continue
+      const presentation = assessArchitecturePresentation(scene)
+      if (presentation.estimatedTitlePxAtFit < selected.presentation.estimatedTitlePxAtFit) continue
+      bestGain = gain
+      best = {
+        ...selected, scene, quality, evaluation, routeDiagnostics, presentation,
+        visualPlan: planArchitectureVisual(scene, selected.semanticComposition, quality, presentation, routeDiagnostics),
+        candidates: selected.candidates.map((item) =>
+          item.layout === evaluation.layout && item.density === evaluation.density ? evaluation : item),
+        reroutedEdges: selected.reroutedEdges + 1,
+      }
+    }
+    if (!best) break
+    selected = best
+  }
+  return selected
+}
+
 /** A compact graph placement cannot be judged independently of its already
  * shared corridors. Consider whole-scene outcomes of equal-size slot
  * exchanges, retaining unaffected segments and proposing repaired real
@@ -845,9 +892,9 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
     // Alternating coordinate descent: negotiate corridors on the complete
     // graph, try node slots without modifying authored semantics, then
     // reconcile all affected corridors once more. No second routing engine.
-    const candidate = optimizeCongestedRoutes(negotiateDenseNodeSlots(optimizeCongestedRoutes(
+    const candidate = negotiateIngressCapacity(optimizeCongestedRoutes(negotiateDenseNodeSlots(optimizeCongestedRoutes(
       composeArchitectureGraphCandidate(intent, 'semantic', undefined, false, false, false, false, true),
-    )), 8)
+    )), 8))
     const next = candidate.quality.metrics
     if (next.nodeOverlaps <= originalMetrics.nodeOverlaps
       && next.edgeNodeIntersections <= originalMetrics.edgeNodeIntersections

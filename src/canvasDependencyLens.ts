@@ -24,3 +24,18 @@ export function canvasKeyDependencyLens(scene: CanvasScene): {
   }
   return { nodeIds, arrowIds: new Set(selectedArrows.map((arrow) => arrow.id)), totalArrows: arrows.length }
 }
+
+/** Complex architecture graphs open with a legible, evidence-backed reading
+ * lens. Every source relation remains in the Canvas and can be shown via
+ * “全部”; diagrams without verified primary edges open unchanged. */
+export function preferKeyDependencyLens(scene: CanvasScene): boolean {
+  if (!scene.architecture) return false
+  const edges = scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow')
+  const nodes = scene.elements.filter((item): item is CanvasNode => item.type === 'node')
+  if (nodes.length < 6 || edges.length < nodes.length * 1.5) return false
+  const incoming = new Map<string, number>()
+  for (const edge of edges) incoming.set(edge.to, (incoming.get(edge.to) ?? 0) + 1)
+  if (Math.max(0, ...incoming.values()) < 6 && edges.length < nodes.length * 2.5) return false
+  const lens = canvasKeyDependencyLens(scene)
+  return lens.arrowIds.size > 0 && lens.arrowIds.size < edges.length
+}

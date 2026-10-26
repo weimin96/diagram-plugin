@@ -30,6 +30,19 @@ try {
       { type: 'arrow', id: 'edgeB', from: 'moduleA', to: 'moduleC', routing: 'orthogonal' },
     ],
   }
+  const denseScene = {
+    ...scene, title: 'Dense relations', elements: [
+      ...Array.from({ length: 7 }, (_, i) => ({
+        type: 'node', id: 'dense-' + i, text: 'Module ' + i,
+        x: 60 + i % 3 * 230, y: 70 + Math.floor(i / 3) * 150,
+        width: 170, height: 80, emphasis: i === 0 || i === 6 ? 'primary' : 'secondary',
+      })),
+      ...Array.from({ length: 12 }, (_, i) => ({
+        type: 'arrow', id: 'dense-edge-' + i, from: 'dense-' + (i % 6), to: 'dense-6',
+        routing: 'orthogonal', emphasis: i === 0 ? 'primary' : 'secondary',
+      })),
+    ],
+  }
   const publicDir = path.join(temp, 'public')
   await mkdir(publicDir)
   const entry = path.join(temp, 'entry.tsx')
@@ -39,6 +52,8 @@ import { CanvasEditor } from '${path.join(root, 'src/CanvasEditor.tsx')}'
 const onChange = () => {}
 createRoot(document.getElementById('root')!).render(<CanvasEditor
   source={${JSON.stringify(JSON.stringify(scene))}} onChange={onChange} />)
+createRoot(document.getElementById('root-dense')!).render(<CanvasEditor
+  source={${JSON.stringify(JSON.stringify(denseScene))}} onChange={onChange} />)
 setTimeout(() => {
   const arrow = document.querySelector('[data-element-id="edgeA"].freeform-arrow')
   if (!arrow) { document.getElementById('result').textContent = JSON.stringify({error:'arrow missing'}); return }
@@ -85,7 +100,7 @@ setTimeout(() => {
                 allButton?.click()
                 setTimeout(() => {
                   result.keyReset = !editor?.classList.contains('has-key-dependency-lens')
-                  result.allEdgesRetained = document.querySelectorAll('.freeform-arrow[data-element-id]').length === 2
+                  result.allEdgesRetained = document.querySelectorAll('#root .freeform-arrow[data-element-id]').length === 2
                   const node = document.querySelector('[data-element-id="moduleA"].freeform-box')
                   node?.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true, pointerId: 6, button: 0, clientX: 110, clientY: 220}))
                   node?.dispatchEvent(new PointerEvent('pointerup', {bubbles: true, pointerId: 6, button: 0, clientX: 110, clientY: 220}))
@@ -98,8 +113,25 @@ setTimeout(() => {
                     setTimeout(() => {
                       result.navigatorSelectsExactEdge = document.querySelector('[data-element-id="edgeB"].freeform-arrow')?.classList.contains('is-selected')
                         && document.querySelector('[data-element-id="edgeA"].freeform-arrow')?.classList.contains('is-relation-dimmed')
-                      result.navigatorPreservesEdges = document.querySelectorAll('.freeform-arrow[data-element-id]').length === 2
-                      document.getElementById('result').textContent = JSON.stringify(result)
+                      result.navigatorPreservesEdges = document.querySelectorAll('#root .freeform-arrow[data-element-id]').length === 2
+                      const denseEditor = document.querySelector('#root-dense .freeform-editor')
+                      result.denseDefaultKeyLens = denseEditor?.classList.contains('has-key-dependency-lens')
+                      result.denseRetainsEdges = document.querySelectorAll('#root-dense .freeform-arrow[data-element-id]').length === 12
+                      const denseLayoutButton = [...document.querySelectorAll('#root-dense button')].find((button) =>
+                        button.title?.includes('详情视图') && button.textContent?.includes('布局'))
+                      result.denseLayoutButton = Boolean(denseLayoutButton)
+                      denseLayoutButton?.click()
+                      setTimeout(() => {
+                        const all = [...document.querySelectorAll('[aria-label="架构设置"] button')].reverse().find((button) =>
+                          button.textContent?.trim() === '全部' && button.closest('.freeform-compact-control-row'))
+                        result.denseAllButton = Boolean(all)
+                        all?.click()
+                        setTimeout(() => {
+                          result.denseCanReturnToAll = !denseEditor?.classList.contains('has-key-dependency-lens')
+                            && document.querySelectorAll('#root-dense .freeform-arrow[data-element-id]').length === 12
+                          document.getElementById('result').textContent = JSON.stringify(result)
+                        }, 100)
+                      }, 100)
                     }, 100)
                   }, 100)
                 }, 110)
@@ -117,7 +149,7 @@ setTimeout(() => {
   await writeFile(path.join(publicDir, 'index.html'),
     '<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="/styles.css">' +
     '<style>.freeform-surface{width:1080px;height:720px}.freeform-svg{width:100%;height:100%}</style>' +
-    '<div id="root"></div><pre id="result">pending</pre><script type="module" src="/test.js"></script>')
+    '<div id="root"></div><div id="root-dense"></div><pre id="result">pending</pre><script type="module" src="/test.js"></script>')
   await writeFile(path.join(publicDir, 'styles.css'), await readFile(path.join(root, 'src/styles.css'), 'utf8'))
   const port = 18000 + Math.floor(Math.random() * 12000)
   server = spawn('python3', ['-m', 'http.server', String(port), '--bind', '127.0.0.1', '--directory', publicDir],
@@ -137,7 +169,8 @@ setTimeout(() => {
     || !result.keyCount?.includes('1/2') || Number(result.keyDimOpacity) > .2
     || !result.focusOverridesKey || !result.keyResumes || !result.keyReset || !result.allEdgesRetained
     || !result.nodeRelationCounts || result.nodeRelationNames?.length !== 2
-    || !result.navigatorSelectsExactEdge || !result.navigatorPreservesEdges) {
+    || !result.navigatorSelectsExactEdge || !result.navigatorPreservesEdges
+    || !result.denseDefaultKeyLens || !result.denseRetainsEdges || !result.denseCanReturnToAll) {
     throw new Error('The real React Canvas relationship lens failed visual/state interaction checks')
   }
 } finally {

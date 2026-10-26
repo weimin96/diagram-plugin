@@ -2,6 +2,7 @@ import { canvasVisualSkin, canvasStyledBox, canvasFillTextColor, isDiagramVisual
 import { hexLuminance } from './colors.js'
 import { canvasArrowLabelText } from './canvasLabelText.js'
 import { canvasArchitecturePlainTitleLines } from './canvasNodeTitleLayout.js'
+import { preferKeyDependencyLens } from './canvasDependencyLens.js'
 import { CanvasRectIndex } from './canvasRectIndex.js'
 import {
   CANVAS_ROLE_ICON_IDS,
@@ -370,6 +371,10 @@ export function serializeCanvasScene(scene: CanvasScene): string {
 export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: string; panel?: string; text?: string; border?: string; note?: string; imageSources?: Readonly<Record<string, string>> }): string {
   const sourceScene = scene
   const architectureMode = Boolean(sourceScene.architecture)
+  // The same verified primary-path contract used by the editor determines
+  // visual weight in dense exported diagrams. All real relationships remain
+  // present and accessible via their SVG-native <title> source/target labels.
+  const denseKeyReading = preferKeyDependencyLens(sourceScene)
   const architectureTheme = sourceScene.architecture?.theme ?? 'enterprise'
   const architectureProfile = canvasArchitectureThemeProfile(architectureTheme)
   const projection = canvasArchitectureProjection(scene)
@@ -422,7 +427,8 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
     const opacity = arrow.opacity ?? (architectureMode
       ? groupBundle
         ? arrow.emphasis === 'muted' ? darkArchitecture ? '0.24' : '0.20' : arrow.emphasis === 'secondary' ? darkArchitecture ? '0.56' : '0.48' : darkArchitecture ? '0.84' : '0.78'
-        : arrow.emphasis === 'muted' ? '0.62' : arrow.emphasis === 'secondary' ? '0.90' : '1'
+        : arrow.emphasis === 'muted' ? denseKeyReading ? '0.30' : '0.62'
+          : arrow.emphasis === 'secondary' ? denseKeyReading ? '0.48' : '0.90' : '1'
       : arrow.emphasis === 'muted' ? '0.48' : arrow.emphasis === 'secondary' ? '0.78' : '1')
     const stroke = arrow.strokeColor ?? visualSkin?.edge ?? (architectureMode ? architectureBorder : border)
     const visibleLabel = architectureMode && arrow.label && !canvasArchitectureRelationLabelVisible(arrow) ? undefined : arrow.label

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { availablePortRatios, portSpacingPenalty, reservedPorts } from '../src/architecturePortPlanning.js'
-import type { CanvasArrow, CanvasNode } from '../src/canvas.js'
+import { availablePortRatios, portSpacingPenalty, proposeIngressPortSlots, reservedPorts } from '../src/architecturePortPlanning.js'
+import { canvasArrowBoxRoute, type CanvasArrow, type CanvasNode, type CanvasScene } from '../src/canvas.js'
 
 const node: CanvasNode = {
   id: 'source', type: 'node', x: 100, y: 100, width: 180, height: 80, text: 'Source',
@@ -35,4 +35,40 @@ test('port planner does not invent slots for no reservation, rotated boxes or un
   }], new Set<string>())
   assert.deepEqual(availablePortRatios({ ...node, rotation: 90 }, 'right', r), [0.5])
   assert.deepEqual(availablePortRatios({ ...node, height: 10 }, 'right', r)[0], 0.5)
+})
+
+test('congested ingress proposals keep exact graph semantics, orthogonal terminals and authored geometry', () => {
+  const target: CanvasNode = { ...node, id: 'sink', x: 420, y: 250, width: 180, height: 80, text: 'Sink' }
+  const upper: CanvasNode = { ...node, id: 'upper', x: 90, y: 20 }
+  const lower: CanvasNode = { ...node, id: 'lower', x: 90, y: 350 }
+  const arrows: CanvasArrow[] = [
+    { id: 'left-a', type: 'arrow', from: 'upper', to: 'sink', routing: 'orthogonal',
+      fromAnchor: 'bottom', toAnchor: 'left',
+      points: [{ x: 180, y: 170 }, { x: 140, y: 170 }, { x: 140, y: 290 }] },
+    { id: 'left-b', type: 'arrow', from: 'lower', to: 'sink', routing: 'orthogonal',
+      fromAnchor: 'top', toAnchor: 'left',
+      points: [{ x: 180, y: 290 }] },
+  ]
+  const scene: CanvasScene = {
+    type: 'diagram-plugin-canvas', version: 1, title: 'Real ports',
+    width: 700, height: 540, architecture: { theme: 'technical' },
+    elements: [upper, target, lower, ...arrows],
+  }
+  const original = JSON.stringify(scene)
+  const candidates = proposeIngressPortSlots(scene)
+  assert.ok(candidates.length > 0)
+  for (const candidate of candidates) {
+    assert.deepEqual(candidate.elements.filter((item) => item.type === 'node'), [upper, target, lower])
+    assert.deepEqual(candidate.elements.filter((item) => item.type === 'arrow')
+      .map((item) => [item.id, item.from, item.to]),
+    arrows.map((item) => [item.id, item.from, item.to]))
+    for (const arrow of candidate.elements) {
+      if (arrow.type !== 'arrow') continue
+      const source = candidate.elements.find((item) => item.id === arrow.from) as CanvasNode
+      const path = canvasArrowBoxRoute(source, target, arrow)
+      assert.ok(path.slice(1).every((p, i) => p.x === path[i].x || p.y === path[i].y),
+        'terminal allocation must never insert a diagonal or change the true endpoint')
+    }
+  }
+  assert.equal(JSON.stringify(scene), original, 'candidate generation must never mutate the saved scene')
 })

@@ -20,10 +20,12 @@
 - `architectureComposer.ts`：控制候选预算、最终整图采纳，不实现端口几何与绘图。
 - `architectureDesign.ts`：语义场景、节点尺寸、分区及初始节点布置。人工或锁定坐标不能擅改。
 - `architectureRouting.ts` + `architecturePortPlanning.ts`：基于真实端口容量与线段占用进行连线规划，只消费布局后的几何与真实关系。
+- 拥挤入边的端口容量优化仅产生保真、正交的候选终端，必须由 Composer 在同一最终场景上检验交叉、重叠、穿节点、真实共享主干与路长后采纳；不能改变人工节点位置或制造假的关系端点。
 - `architectureOrthogonalSolver.ts`：独立的矩形障碍、正交搜索和线路代价，不反向引用 Composer/UI、模型语义或主题。
 - `architectureRouteRepair.ts`：在有边界预算内提出局部几何候选；不负责采纳。
 - `canvasQuality.ts`、`architectureRouteDiagnostics.ts`、`architecturePresentationQuality.ts`、`architectureVisualPlan.ts`：共享最终可编辑场景的结构、路线、阅读质量与审查资格事实。
 - `CanvasEditor.tsx`、`canvas.ts`：渲染与交互消费同一文档合同；任何阅读聚焦都是非破坏式的，不自动改写、丢弃或伪造真实关系。
+- 密集且具有已验证关键关系的架构图默认以关键依赖层级阅读，`全部` 仍可随时显示所有真实关系；静态 SVG 只调整非重点线的视觉权重，不删除路径或损失端点悬停来源。缺乏可靠主链时不自动判断所谓“关键”。
 
 避免反复给特定案例追加 nudge/swap/retry/fallback。若某类失败反复出现，必须从节点层次、分区占位、端口资源与走廊约束的**联合问题**解决。一个候选必须连同最终路由、字体、分区与导出一起打分；不得仅凭某条边更短或分区不再重叠就替换整图。当前已有多种局部搜索属于应当逐步**用单一约束规划替代并删除**的技术债，不是未来需要继续扩展的接口。
 

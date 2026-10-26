@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { canvasKeyDependencyLens } from '../src/canvasDependencyLens.js'
-import { serializeCanvasScene, type CanvasScene } from '../src/canvas.js'
+import { canvasKeyDependencyLens, preferKeyDependencyLens } from '../src/canvasDependencyLens.js'
+import { canvasSceneToSvg, serializeCanvasScene, type CanvasScene } from '../src/canvas.js'
 import { projectArchitectureCase } from '../scripts/architecture-project-cases.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 
@@ -52,5 +52,27 @@ test('real project produces source-preserving key dependencies with no hidden or
     assert.ok(arrow, 'key lens can never invent semantic relationships')
     assert.ok(key.nodeIds.has(arrow.from) && key.nodeIds.has(arrow.to))
   }
+  const svg = canvasSceneToSvg(generated.scene)
+  assert.match(svg, /<g opacity="0\.48"><title>/,
+    'dense SVG exports give secondary routes less visual weight without dropping them')
+  assert.match(svg, /<title>architectureComposer → canvas<\/title>/,
+    'every de-emphasized relationship retains the real direction and hover source')
   assert.equal(serializeCanvasScene(generated.scene), saved)
+  assert.equal(preferKeyDependencyLens(generated.scene), true,
+    'dense real import graph defaults to evidence-backed primary reading without dropping any source edge')
+})
+
+test('ordinary, unverified, or non-architectural scenes keep complete relation reading by default', () => {
+  const source = sample()
+  assert.equal(preferKeyDependencyLens(source), false)
+  const clone = { ...source, architecture: undefined }
+  assert.equal(preferKeyDependencyLens(clone), false)
+  const nodes = Array.from({ length: 7 }, (_, i) => ({
+    id: `n${i}`, type: 'node' as const, x: i * 100, y: 20, width: 90, height: 45, text: `N${i}`,
+  }))
+  const arrows = Array.from({ length: 12 }, (_, i) => ({
+    id: `edge${i}`, type: 'arrow' as const, from: `n${i % 6}`, to: 'n6',
+  }))
+  assert.equal(preferKeyDependencyLens({ ...source, elements: [...nodes, ...arrows] }), false,
+    'high fan-in alone cannot invent verified key dependencies')
 })

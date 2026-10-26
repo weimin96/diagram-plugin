@@ -2,7 +2,7 @@ import { routeArchitectureArrowIds, routeArchitectureEdges, routeArchitectureEdg
 import { canvasVisualSkin, canvasStyledBox, canvasFillTextColor, diagramVisualStyles, type DiagramVisualStyle } from './diagramVisualStyles.js'
 import { canvasArrowLabelText } from './canvasLabelText.js'
 import { canvasNodeRelations, resolveCanvasRelationshipFocus } from './canvasRelationshipFocus.js'
-import { canvasKeyDependencyLens } from './canvasDependencyLens.js'
+import { canvasKeyDependencyLens, preferKeyDependencyLens } from './canvasDependencyLens.js'
 import { canvasArchitecturePlainTitleLines } from './canvasNodeTitleLayout.js'
 import { CanvasRectIndex } from './canvasRectIndex.js'
 import { canvasArrowCrossesViewport } from './canvasViewport.js'
@@ -406,14 +406,15 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   const [architectureView, setArchitectureView] = useState<CanvasArchitectureView>(parsed.scene?.architecture?.view ?? 'detail')
   const [architectureDensity, setArchitectureDensity] = useState<CanvasArchitectureDensity>(parsed.scene?.architecture?.density ?? 'auto')
   const [architectureScope, setArchitectureScope] = useState<CanvasArchitectureScope | null>(null)
-  const [keyDependenciesOnly, setKeyDependenciesOnly] = useState(false)
+  const [keyDependenciesOnly, setKeyDependenciesOnly] = useState(() =>
+    parsed.scene ? preferKeyDependencyLens(parsed.scene) : false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [hoveredRelationId, setHoveredRelationId] = useState<string | null>(null)
   const keyDependencyLens = useMemo(() => parsed.scene?.architecture
     ? canvasKeyDependencyLens(parsed.scene) : null, [parsed.scene])
   useEffect(() => {
     // This is a per-diagram reading preference, not saved Canvas state.
-    setKeyDependenciesOnly(false)
+    setKeyDependenciesOnly(parsed.scene ? preferKeyDependencyLens(parsed.scene) : false)
     setHoveredRelationId(null)
   }, [focusKey])
   const [connectFrom, setConnectFrom] = useState<string | null>(null)
