@@ -1,0 +1,14 @@
+gitGraph
+  commit id: "initial"
+  branch feature
+  checkout feature
+  commit id: "api"
+  commit id: "tests"
+  checkout main
+  commit id: "docs"
+  merge feature
+  branch hotfix
+  checkout hotfix
+  commit id: "bugfix"
+  checkout main
+  merge hotfix

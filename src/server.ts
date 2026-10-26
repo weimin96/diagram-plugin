@@ -32,6 +32,7 @@ import { buildCanvasPatchGraph, canvasPatchDependentClosure, composeCanvasSubgra
 import { diagramIntentRoutingGuide, diagramSkill } from './diagramSkills/registry.js'
 import { skillPromptLines } from './diagramSkills/types.js'
 import { assessMermaidVisualQuality } from './mermaidQuality.js'
+import { summarizeCanvasQuality, summarizeMermaidQuality } from './diagramQuality.js'
 import { diagramTypes, isMermaidDiagramType, type DiagramSurface, type DiagramType, type WorkspaceSnapshot } from './types.js'
 
 declare const __DIAGRAM_PLUGIN_VERSION__: string
@@ -1061,6 +1062,7 @@ server.registerTool('diagram.inspectQuality', {
           ? `Quality review found ${quality.issues.length} Canvas issue(s) in ${diagram.path}. Fix only the reported issues, then inspect once more.`
           : `Basic geometry passed for ${diagram.path}; this is not visual approval.` }],
       structuredContent: { kind: 'diagram-quality', workspacePath: store.workspacePath, path: diagram.path, type: diagram.type, candidate: Boolean(source), ...quality,
+        summary: summarizeCanvasQuality(quality, visualPlan?.review),
         ...(visualPlan ? { presentation, routeDiagnostics, visualPlan } : {}) },
     }
   }
@@ -1069,8 +1071,8 @@ server.registerTool('diagram.inspectQuality', {
   const quality = assessMermaidVisualQuality(diagram.type, inspectedSource)
   return {
     content: [{ type: 'text', text: quality.splitRecommended
-      ? `Quality review recommends revising ${diagram.path}: ${quality.reasons.join('; ')}`
-      : `Quality review passed for ${diagram.path}.` }],
+      ? `Source-level quality review recommends revising ${diagram.path}: ${quality.reasons.join('; ')}. Browser geometry and visual approval are not assessed by this tool.`
+      : `Source-level quality checks found no density warnings for ${diagram.path}. Browser geometry and visual approval are not assessed by this tool.` }],
     structuredContent: {
       kind: 'diagram-quality',
       workspacePath: store.workspacePath,
@@ -1081,6 +1083,7 @@ server.registerTool('diagram.inspectQuality', {
       issues: quality.reasons,
       density: quality.density,
       metrics: quality.metrics,
+      summary: summarizeMermaidQuality(diagram.type, quality),
     },
   }
 })

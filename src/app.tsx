@@ -22,6 +22,7 @@ import { canvasSceneToSvg, parseCanvasScene, type CanvasWorkbenchMode } from './
 import { normalizeMermaidColor } from './colors.js'
 import { MermaidEditor } from './MermaidEditor.js'
 import { assessMermaidVisualQuality } from './mermaidQuality.js'
+import { summarizeMermaidQuality } from './diagramQuality.js'
 import { mermaidVisualConfig, normalizeMermaidSourceForRender, resolveMermaidVisualStyle, setMermaidVisualStyle, type MermaidVisualStyle } from './mermaidVisualGrammar.js'
 import { createTemplate, detectDiagramType } from './templates.js'
 import { extractToolResultError, extractToolResultPayload, type ToolResultLike } from './toolResult.js'
@@ -2728,7 +2729,10 @@ function MermaidPreview({ source }: { source: string }) {
   const [dragging, setDragging] = useState(false)
   const dragState = useRef<{ pointerId: number; x: number; y: number; originX: number; originY: number } | null>(null)
   const renderId = useMemo(() => `diagram-${Math.random().toString(36).slice(2)}`, [])
-  const quality = useMemo(() => assessMermaidVisualQuality(detectDiagramType(source), source), [source])
+  const quality = useMemo(() => {
+    const type = detectDiagramType(source)
+    return type === 'unknown' ? undefined : summarizeMermaidQuality(type, assessMermaidVisualQuality(type, source))
+  }, [source])
 
   function centerAt(nextZoom: number) {
     const surface = viewport.current
@@ -2850,8 +2854,8 @@ function MermaidPreview({ source }: { source: string }) {
         <span className="canvas-control-separator" />
         <button type="button" title="适配画布" onClick={fit}>适配</button>
       </div>
-      {!error && quality.splitRecommended ? (
-        <div className="mermaid-quality-chip" role="status" title={quality.reasons.join('；')}>建议拆图</div>
+      {!error && quality?.needsRevision ? (
+        <div className="mermaid-quality-chip" role="status" title={quality.findings.map((issue) => issue.message).join('；')}>建议拆图</div>
       ) : null}
       {error ? <div className="syntax-error"><strong>预览渲染失败</strong><span>{error}</span></div> : null}
       <div

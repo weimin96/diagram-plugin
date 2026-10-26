@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { readdir } from 'node:fs/promises'
 import { allDiagramSkills, diagramSkill } from '../src/diagramSkills/registry.js'
 import { diagramTypeGroups, mermaidDiagramTypes } from '../src/types.js'
 
@@ -7,6 +8,20 @@ test('every exposed Mermaid diagram type has a registered skill', () => {
   const exposed = mermaidDiagramTypes.map((item) => item.type).sort()
   const registered = allDiagramSkills().map((item) => item.type).sort()
   assert.deepEqual(registered, exposed)
+})
+
+test('every published Mermaid diagram type has a real Chrome stress and pixel-baseline case', async () => {
+  const fixtures = await readdir('tests/fixtures/visual-stress')
+  const covered = new Set(fixtures.filter((name) => name.endsWith('.mmd'))
+    .map((name) => name.split('__')[0]))
+  for (const { type } of mermaidDiagramTypes) {
+    assert.ok(covered.has(type), `${type} must have a dedicated Chrome fixture, not only a default template`)
+  }
+  const baseline = await readdir('tests/fixtures/visual-baseline/light')
+  for (const { type } of mermaidDiagramTypes) {
+    assert.ok(baseline.some((filename) => filename.startsWith(type + '__') && filename.endsWith('.png')),
+      `${type} must have a real pixel baseline`)
+  }
 })
 
 test('primary diagram skills carry type-specific composition and anti-pattern rules', () => {

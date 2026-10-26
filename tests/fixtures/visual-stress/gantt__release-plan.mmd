@@ -1,0 +1,13 @@
+gantt
+  title Release Plan
+  dateFormat YYYY-MM-DD
+  axisFormat %m/%d
+  section Discovery
+    Requirements :done, req, 2026-05-01, 5d
+    Architecture :done, arch, after req, 4d
+  section Delivery
+    Implementation :active, build, after arch, 12d
+    Integration :crit, integration, after build, 4d
+    Verification :verify, after integration, 3d
+  section Release
+    Launch :milestone, launch, after verify, 0d

@@ -121,6 +121,14 @@ DeepSeek Harness 需要执行真实 `read_image` 工具调用并在原始 JSONL 
 
 ## 宿主安装与验收
 
+### 跨图表复用的质量闭环（2026-10-26）
+
+- `src/diagramQuality.ts` 为 **Canvas + 19 类 Mermaid** 提供一个统一的、可序列化的 `DiagramQualityReport`：引擎与类型、是否需要修订、源/实际几何证据、问题代码/严重性/定位、原始数值指标、独立视觉审查状态和人工批准状态。它**适配**已经存在的 `canvasQuality` 与 `mermaidQuality`，不重复解析语义，也不引入第二个渲染/路由引擎。
+- MCP `diagram.inspectQuality` 在保留旧 `issues/metrics/needsRevision` 字段的同时增加 `summary`。Mermaid 的源码级检查只能回报 `geometry=not-measured`、`visualReview=not-assessed`、`humanApproval=not-approved`，不得用“源码检查没有警告”冒充浏览器测量和质量交付。Canvas 原有架构审查阻断项保持权威。
+- Mermaid 编辑器的“建议拆图”消费同一质量报告；`pnpm visual:smoke` 浏览器实际渲染会给出含宽高、文字溢出、节点/标签重叠的 `qualityReport`，并检查它没有伪造人工批准。浏览器几何检测仍有 Mermaid 类型差异和选择器覆盖限制，不能代替真实像素审美评价。
+- 复杂场景夹具从 12 个扩展到 **20 个**，覆盖所有 **19 种 Mermaid 类型**。Chrome 实测：默认模板 19×2=38 次渲染；复杂场景 20×2=40 次渲染；固定像素黄金图从 24 张扩展到 **40 张**（旧 24 张原封不动）。`tests/diagramSkills.test.ts` 以数据驱动方式阻止未来添加图表类型却缺少场景或黄金图；新增质量映射单测覆盖 19 种引擎、真实 Canvas 报告及失败证据，测试方法合计保持在 **300 条以内**。
+- **下一步**：用统一报告定位每种图表真实失败点，再优先抽取流程、状态、类、ER 与 Canvas 共用的纯测量/几何能力；仍由专业图表保留各自合法语法和渲染布局。不要把架构图整套正交路由搬进桑基图、时间线或数据图，也不要将所有 Mermaid 强制迁移为 Canvas。
+
 **Codex：** `pnpm plugin:install` 安装源码版本；Desktop 已开启时使用 `pnpm plugin:install:desktop` 刷新。公开 npm 版通过 `npx -y @weimin96/diagram-plugin@latest install --codex` 安装。注意不要同时开启 `diagram-plugin-local` 与 `diagram-plugin-npm`。
 
 **DSH Desktop：** 退出 Desktop、运行 `pnpm build`，再执行：

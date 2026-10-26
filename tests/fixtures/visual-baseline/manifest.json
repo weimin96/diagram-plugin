@@ -29,10 +29,31 @@
     },
     {
       "mode": "light",
+      "type": "gantt",
+      "name": "gantt/release-plan",
+      "diagramWidth": 740,
+      "diagramHeight": 170
+    },
+    {
+      "mode": "light",
+      "type": "gitgraph",
+      "name": "gitgraph/branches",
+      "diagramWidth": 471,
+      "diagramHeight": 261
+    },
+    {
+      "mode": "light",
       "type": "ishikawa",
       "name": "ishikawa/dense",
       "diagramWidth": 674,
       "diagramHeight": 580
+    },
+    {
+      "mode": "light",
+      "type": "journey",
+      "name": "journey/onboarding",
+      "diagramWidth": 1182,
+      "diagramHeight": 556
     },
     {
       "mode": "light",
@@ -47,6 +68,27 @@
       "name": "mindmap/50-nodes",
       "diagramWidth": 923,
       "diagramHeight": 602
+    },
+    {
+      "mode": "light",
+      "type": "pie",
+      "name": "pie/distribution",
+      "diagramWidth": 630,
+      "diagramHeight": 450
+    },
+    {
+      "mode": "light",
+      "type": "quadrant",
+      "name": "quadrant/priorities",
+      "diagramWidth": 620,
+      "diagramHeight": 620
+    },
+    {
+      "mode": "light",
+      "type": "radar",
+      "name": "radar/capabilities",
+      "diagramWidth": 764,
+      "diagramHeight": 629
     },
     {
       "mode": "light",
@@ -85,10 +127,24 @@
     },
     {
       "mode": "light",
+      "type": "timeline",
+      "name": "timeline/milestones",
+      "diagramWidth": 915,
+      "diagramHeight": 464
+    },
+    {
+      "mode": "light",
       "type": "treemap",
       "name": "treemap/dense",
       "diagramWidth": 936,
       "diagramHeight": 351
+    },
+    {
+      "mode": "light",
+      "type": "xychart",
+      "name": "xychart/metrics",
+      "diagramWidth": 720,
+      "diagramHeight": 460
     },
     {
       "mode": "dark",
@@ -113,10 +169,31 @@
     },
     {
       "mode": "dark",
+      "type": "gantt",
+      "name": "gantt/release-plan",
+      "diagramWidth": 740,
+      "diagramHeight": 170
+    },
+    {
+      "mode": "dark",
+      "type": "gitgraph",
+      "name": "gitgraph/branches",
+      "diagramWidth": 471,
+      "diagramHeight": 261
+    },
+    {
+      "mode": "dark",
       "type": "ishikawa",
       "name": "ishikawa/dense",
       "diagramWidth": 674,
       "diagramHeight": 580
+    },
+    {
+      "mode": "dark",
+      "type": "journey",
+      "name": "journey/onboarding",
+      "diagramWidth": 1182,
+      "diagramHeight": 556
     },
     {
       "mode": "dark",
@@ -131,6 +208,27 @@
       "name": "mindmap/50-nodes",
       "diagramWidth": 923,
       "diagramHeight": 602
+    },
+    {
+      "mode": "dark",
+      "type": "pie",
+      "name": "pie/distribution",
+      "diagramWidth": 630,
+      "diagramHeight": 450
+    },
+    {
+      "mode": "dark",
+      "type": "quadrant",
+      "name": "quadrant/priorities",
+      "diagramWidth": 620,
+      "diagramHeight": 620
+    },
+    {
+      "mode": "dark",
+      "type": "radar",
+      "name": "radar/capabilities",
+      "diagramWidth": 764,
+      "diagramHeight": 629
     },
     {
       "mode": "dark",
@@ -169,10 +267,24 @@
     },
     {
       "mode": "dark",
+      "type": "timeline",
+      "name": "timeline/milestones",
+      "diagramWidth": 915,
+      "diagramHeight": 464
+    },
+    {
+      "mode": "dark",
       "type": "treemap",
       "name": "treemap/dense",
       "diagramWidth": 936,
       "diagramHeight": 351
+    },
+    {
+      "mode": "dark",
+      "type": "xychart",
+      "name": "xychart/metrics",
+      "diagramWidth": 720,
+      "diagramHeight": 460
     }
   ]
 }

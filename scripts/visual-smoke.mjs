@@ -52,6 +52,14 @@ async function runVisualSmoke(chrome, externalCases, qualityBenchmark) {
     const result = JSON.parse(decodeHtml(match[1]))
     const failed = result.filter((item) => !item.ok)
     const invalidDimensions = result.filter((item) => item.ok && (!(item.width > 0) || !(item.height > 0)))
+    const invalidReports = result.filter((item) => item.ok
+      && (item.qualityReport?.type !== item.type
+        || item.qualityReport?.version !== 1
+        || item.qualityReport?.engine !== 'mermaid'
+        || item.qualityReport?.evidence !== 'browser'
+        || item.qualityReport?.geometry === 'not-measured'
+        || item.qualityReport?.visualReview !== 'not-assessed'
+        || item.qualityReport?.humanApproval !== 'not-approved'))
     const oversized = result.filter((item) => item.ok && isOversized(item))
     const splitAdvisories = oversized.filter((item) => item.quality?.splitRecommended)
     const hardOversized = qualityBenchmark ? oversized.filter((item) => !item.quality?.splitRecommended) : oversized
@@ -68,6 +76,9 @@ async function runVisualSmoke(chrome, externalCases, qualityBenchmark) {
     if (invalidDimensions.length) {
       throw new Error(`Visual smoke invalid dimensions:\n${invalidDimensions.map((item) => `${item.mode}/${item.name ?? item.type}: ${item.width}x${item.height}`).join('\n')}`)
     }
+    if (invalidReports.length) {
+      throw new Error(`Shared quality report missing or overstating approval: ${invalidReports.map((item) => item.mode + '/' + item.name).join(', ')}`)
+    }
     if (splitAdvisories.length) {
       const unique = splitAdvisories.filter((item, index, rows) => rows.findIndex((other) => other.name === item.name) === index)
       for (const item of unique) {
@@ -77,7 +88,7 @@ async function runVisualSmoke(chrome, externalCases, qualityBenchmark) {
     if (qualityBenchmark) {
       const lightRows = result.filter((item) => item.mode === 'light' && item.ok)
       for (const item of lightRows) {
-        console.log(`quality: ${item.name} · ${item.quality.density} · ${item.width}x${item.height} · overflow=${item.geometry.contentOverflow} · nodeOverlap=${item.geometry.nodeOverlaps} · labelOverlap=${item.geometry.labelOverlaps}`)
+        console.log(`quality: ${item.name} · ${item.quality.density} · ${item.width}x${item.height} · overflow=${item.geometry.contentOverflow} · nodeOverlap=${item.geometry.nodeOverlaps} · labelOverlap=${item.geometry.labelOverlaps} · textOverlap=${item.geometry.textOverlaps}`)
       }
     }
     if (geometryFailures.length) {
@@ -183,6 +194,7 @@ function browserEntry(externalCases) {
   return `
 import mermaid from 'mermaid'
 import { fitMermaidSvgToContent } from ${JSON.stringify(path.join(root, 'src/mermaidSvg.ts'))}
+import { summarizeMermaidQuality } from ${JSON.stringify(path.join(root, 'src/diagramQuality.ts'))}
 import { createTemplate } from ${JSON.stringify(templates)}
 import { mermaidDiagramTypes } from ${JSON.stringify(types)}
 import { mermaidVisualConfig, normalizeMermaidSourceForRender } from ${JSON.stringify(grammar)}
@@ -209,7 +221,9 @@ for (const mode of ['light', 'dark']) {
       const width = viewBox.length === 4 ? viewBox[2] : Number.parseFloat(root.getAttribute('width') || '0')
       const height = viewBox.length === 4 ? viewBox[3] : Number.parseFloat(root.getAttribute('height') || '0')
       const geometry = inspectRenderedSvg(svg, type)
-      output.push({ mode, type, name, ok: true, width: Math.round(width), height: Math.round(height), quality: assessMermaidVisualQuality(type, source), geometry })
+      const quality = assessMermaidVisualQuality(type, source)
+      const qualityReport = summarizeMermaidQuality(type, quality, { width, height, ...geometry })
+      output.push({ mode, type, name, ok: true, width: Math.round(width), height: Math.round(height), quality, qualityReport, geometry })
     } catch (error) {
       output.push({ mode, type, name, ok: false, error: error instanceof Error ? error.message : String(error), quality: assessMermaidVisualQuality(type, source) })
     }
@@ -242,10 +256,24 @@ function inspectRenderedSvg(svg, type) {
   const nodeSelector = type === 'flowchart' || type === 'state' || type === 'class' ? 'g.node' : ''
   const nodes = nodeSelector ? [...svgEl.querySelectorAll(nodeSelector)].map(safeRect).filter(Boolean) : []
   const labels = [...svgEl.querySelectorAll('g.edgeLabel')].map(safeRect).filter(Boolean)
+  // Mermaid Sankey intentionally paints the same text twice at the exact
+  // coordinates for contrast. Count distinct visual labels, not SVG layers.
+  const seenText = new Set()
+  const textBoxes = [...svgEl.querySelectorAll('text')].flatMap((element) => {
+    const label = (element.textContent || '').trim()
+    const box = safeRect(element)
+    if (!label || !box) return []
+    const key = label + ':' + [box.x, box.y, box.width, box.height]
+      .map((value) => Math.round(value * 10) / 10).join(',')
+    if (seenText.has(key)) return []
+    seenText.add(key)
+    return [box]
+  })
   const result = {
     contentOverflow,
     nodeOverlaps: countOverlaps(nodes, 4),
     labelOverlaps: countOverlaps(labels, 8),
+    textOverlaps: countOverlaps(textBoxes, 2),
     overflowSamples: overflowEntries.slice(0, 10).map((entry) => entry.tag + ':' + entry.text),
   }
   host.remove()
