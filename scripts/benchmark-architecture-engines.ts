@@ -8,17 +8,28 @@ import { assessArchitecturePresentation } from '../src/architecturePresentationQ
 import { assessArchitectureRouteDiagnostics } from '../src/architectureRouteDiagnostics.js'
 import type { CanvasScene } from '../src/canvas.js'
 import { architectureBenchmarkCases } from './architecture-benchmark-cases.js'
+import { projectArchitectureCase } from './architecture-project-cases.js'
 import { layoutWithElk, type ElkBenchmarkVariant } from './elk-architecture-candidate.js'
-import { judgeExternalLayout, measureEditableArchitecture } from './architecture-layout-gate.js'
+import { compareEditableArchitectureSemantics, judgeExternalLayout, measureEditableArchitecture } from './architecture-layout-gate.js'
 
 const args = process.argv.slice(2)
 const suiteArg = args.find((arg) => arg.startsWith('--suite='))
 const suite = suiteArg?.slice(8) ?? 'core'
-if (suite !== 'core' && suite !== 'extended' && suite !== 'stress') throw new Error('Unknown suite')
+if (suite !== 'core' && suite !== 'extended' && suite !== 'stress' && suite !== 'project') throw new Error('Unknown suite')
 const caseArg = args.find((arg) => arg.startsWith('--case='))?.slice(7)
-const output = path.resolve(args.find((arg) => arg.startsWith('--out='))?.slice(6) ?? 'test-results/architecture-engines')
+const output = path.resolve(args.find((arg) => arg.startsWith('--out='))?.slice(6)
+  ?? (suite === 'project' ? 'test-results/architecture-engines-project' : 'test-results/architecture-engines'))
 const variants: ElkBenchmarkVariant[] = ['flat', 'compound', 'native', 'native-compound']
-const entries = architectureBenchmarkCases(suite).filter((entry) => !caseArg || entry.id === caseArg)
+const direction = args.find((arg) => arg.startsWith('--direction='))?.slice(12) ?? 'RIGHT'
+if (direction !== 'RIGHT' && direction !== 'DOWN') throw new Error('Use --direction=RIGHT|DOWN')
+const spacingArg = args.find((arg) => arg.startsWith('--spacing='))?.slice(10)
+const spacing = spacingArg === undefined ? undefined : Number(spacingArg)
+if (spacing !== undefined && (!Number.isInteger(spacing) || spacing < 20 || spacing > 200)) {
+  throw new Error('--spacing must be an integer between 20 and 200')
+}
+const requireEligible = args.includes('--require-eligible')
+const entries = (suite === 'project' ? [await projectArchitectureCase()] : architectureBenchmarkCases(suite))
+  .filter((entry) => !caseArg || entry.id === caseArg)
 if (!entries.length) throw new Error('No matching benchmark case')
 await mkdir(output, { recursive: true })
 
@@ -27,7 +38,8 @@ type Result = { case: string; engine: string; ms: number; nodes: number; edges: 
   width: number; height: number; aspectRatio: number; groupOverlaps: number; totalRouteLength: number;
   crossPartitionRouteLength: number; unrelatedFrameIntrusionLength: number
   fitFont: number; warnings: string[]; eligible?: boolean; rejectionReasons?: string[];
-  nonOrthogonalSegments?: number; frameOverlapArea?: number; error?: string }
+  nonOrthogonalSegments?: number; frameOverlapArea?: number; error?: string;
+  faithful?: boolean; semanticViolations?: string[]; perimeterDetours?: number }
 const results: Result[] = []
 function additionalGeometry(scene: CanvasScene) {
   const measured = assessArchitectureRouteDiagnostics(scene)
@@ -50,7 +62,9 @@ for (const entry of entries) {
   for (const variant of variants) {
     const start = performance.now()
     try {
-      const scene = await layoutWithElk(original.scene, variant)
+      const scene = await layoutWithElk(original.scene, variant, {
+        direction, ...(spacing === undefined ? {} : { nodeSpacing: spacing, layerSpacing: spacing }),
+      })
       measures.push({ engine: `elk-${variant}`, scene, ms: Math.round(performance.now() - start) })
     } catch (error) {
       results.push({
@@ -68,6 +82,7 @@ for (const entry of entries) {
     const metrics = quality.metrics
     const presentation = assessArchitecturePresentation(item.scene)
     const measured = measureEditableArchitecture(item.scene)
+    const fidelity = compareEditableArchitectureSemantics(original.scene, item.scene)
     const verdict = item.engine === 'current' ? undefined : judgeExternalLayout(baseline, measured)
     results.push({
       case: entry.id, engine: item.engine, nodes: entry.intent.nodes.length,
@@ -76,17 +91,25 @@ for (const entry of entries) {
       labelCollisions: metrics.labelOverlaps + metrics.labelNodeIntersections + metrics.labelOverflows,
       ...additionalGeometry(item.scene),
       fitFont: presentation.estimatedTitlePxAtFit, warnings: [...presentation.warnings],
-      eligible: verdict?.eligible, rejectionReasons: verdict?.reasons,
+      faithful: fidelity.faithful, semanticViolations: fidelity.reasons,
+      eligible: verdict ? verdict.eligible && fidelity.faithful : undefined,
+      rejectionReasons: [...(verdict?.reasons ?? []), ...fidelity.reasons],
       nonOrthogonalSegments: measured.nonOrthogonalSegments, frameOverlapArea: measured.frameOverlapArea,
+      perimeterDetours: measured.perimeterDetours,
     })
     await writeFile(path.join(output, `${entry.id}--${item.engine}.diagram.json`), serializeCanvasScene(item.scene))
     await writeFile(path.join(output, `${entry.id}--${item.engine}.svg`), canvasSceneToSvg(item.scene))
   }
 }
 
+const eligible = results.filter((item) => item.engine !== 'current' && item.eligible)
 await writeFile(path.join(output, 'report.json'), JSON.stringify({
-  version: 2, suite, caseCount: entries.length,
-  note: 'Timing scopes differ: current.ms includes the entire composer with multi-candidate refinement; elk-*.ms includes only experimental relayout on an already composed scene. ELK native imports section geometry; native-compound transforms edge.container-local sections into world coordinates and connects noncentral ports to Canvas side-center anchors via orthogonal bridges. Eligible is only a same-Canvas heuristic candidate gate, not human visual approval. This is NOT an end-to-end speed comparison. Synthetic cases are not production data.',
+  version: 3, suite, caseCount: entries.length, direction, spacing: spacing ?? null,
+  source: suite === 'project' ? 'Real scoped TypeScript import graph including type-only relations' : 'Reference/synthetic',
+  candidateCount: results.filter((item) => item.engine !== 'current').length,
+  eligibleCount: eligible.length,
+  recommendation: eligible.length ? 'Inspect eligible candidates visually; not approved' : 'Keep current production layout engine',
+  note: 'Timing scopes differ: current.ms includes the entire composer with multi-candidate refinement; elk-*.ms includes only experimental relayout on an already composed scene. ELK native imports section geometry; native-compound transforms edge.container-local sections into world coordinates and connects noncentral ports to Canvas side-center anchors via orthogonal bridges. Eligibility requires semantic fidelity, editable Canvas geometry and readable font, not human approval. This is NOT an end-to-end speed comparison. Reference/synthetic cases are not production data.',
   results,
 }, null, 2) + '\n')
 const groups = entries.map((entry) => ({
@@ -104,4 +127,9 @@ ${results.map((r) => `<div class="panel"><b>${escapeHtml(r.engine)}</b>${r.error
 console.table(results.map(({ case: id, engine, ms, crossings, overlaps, throughNodes, groupOverlaps, aspectRatio, eligible, error }) =>
   ({ id, engine, ms, crossings, overlaps, throughNodes, groupOverlaps, aspectRatio, eligible, error: error?.slice(0, 60) ?? '' })))
 console.log(`A/B result: ${path.join(output, 'index.html')}`)
+console.log(`External layouts eligible for further visual review: ${eligible.length} / ${results.filter((item) => item.engine !== 'current').length}`)
 if (results.some((item) => item.error)) process.exitCode = 1
+if (requireEligible && !eligible.length) {
+  console.error('No eligible ELK candidate: current production layout remains unchanged.')
+  process.exitCode = 1
+}

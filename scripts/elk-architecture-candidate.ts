@@ -6,6 +6,11 @@ import { canvasNativeOrthogonalRoute } from './canvas-native-route.js'
 
 const engine = new ELK()
 export type ElkBenchmarkVariant = 'flat' | 'compound' | 'native' | 'native-compound'
+export type ElkLayoutConfig = {
+  direction?: 'RIGHT' | 'DOWN'
+  nodeSpacing?: number
+  layerSpacing?: number
+}
 
 type Shape = { id: string; x?: number; y?: number; width?: number; height?: number; children?: Shape[] }
 
@@ -38,7 +43,7 @@ function collectNativeEdges(graph: ElkNode, positions: Map<string, CanvasPoint>)
 }
 
 /** Prototype adapter: geometry only. Existing CanvasScene is never changed in place. */
-export async function layoutWithElk(scene: CanvasScene, variant: ElkBenchmarkVariant): Promise<CanvasScene> {
+export async function layoutWithElk(scene: CanvasScene, variant: ElkBenchmarkVariant, config: ElkLayoutConfig = {}): Promise<CanvasScene> {
   const nodes = scene.elements.filter((item): item is CanvasNode => item.type === 'node')
   const arrows = scene.elements.filter((item) => item.type === 'arrow')
   if (!nodes.length) throw new Error('No Canvas nodes to lay out')
@@ -67,10 +72,10 @@ export async function layoutWithElk(scene: CanvasScene, variant: ElkBenchmarkVar
     id: 'root',
     layoutOptions: {
       'elk.algorithm': 'layered',
-      'elk.direction': 'RIGHT',
+      'elk.direction': config.direction ?? 'RIGHT',
       'elk.edgeRouting': 'ORTHOGONAL',
-      'elk.spacing.nodeNode': '64',
-      'elk.layered.spacing.nodeNodeBetweenLayers': '90',
+      'elk.spacing.nodeNode': String(config.nodeSpacing ?? 64),
+      'elk.layered.spacing.nodeNodeBetweenLayers': String(config.layerSpacing ?? 90),
       'elk.padding': '[top=35,left=35,bottom=35,right=35]',
       ...(compound ? { 'elk.hierarchyHandling': 'INCLUDE_CHILDREN' } : {}),
     },
@@ -83,7 +88,7 @@ export async function layoutWithElk(scene: CanvasScene, variant: ElkBenchmarkVar
           children: entries,
           layoutOptions: {
             'elk.algorithm': 'layered',
-            'elk.direction': 'DOWN',
+            'elk.direction': config.direction ?? 'DOWN',
             'elk.padding': '[top=40,left=25,bottom=25,right=25]',
             'elk.spacing.nodeNode': '40',
           },

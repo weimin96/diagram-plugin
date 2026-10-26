@@ -24,7 +24,42 @@ export function measureEditableArchitecture(scene: CanvasScene) {
     frames: region.frameOverlaps,
     frameOverlapArea: region.frameOverlapArea,
     intrusionPx: region.unrelatedFrameIntrusionLength,
+    routeLength: region.totalRouteLength,
+    perimeterDetours: region.perimeterDetours,
   }
+}
+
+/** No rendered SVG can stand in for a real, editable relationship graph. */
+export function compareEditableArchitectureSemantics(
+  source: CanvasScene, candidate: CanvasScene,
+): { faithful: boolean; reasons: string[] } {
+  const reasons: string[] = []
+  if (source.type !== candidate.type || source.version !== candidate.version) reasons.push('Canvas 文件协议改变')
+  if (JSON.stringify(source.groups ?? []) !== JSON.stringify(candidate.groups ?? [])
+    || JSON.stringify(source.lanes ?? []) !== JSON.stringify(candidate.lanes ?? [])) {
+    reasons.push('语义分区或泳道改变')
+  }
+  const sourceById = new Map(source.elements.map((element) => [element.id, element]))
+  const candidateById = new Map(candidate.elements.map((element) => [element.id, element]))
+  if (sourceById.size !== source.elements.length || candidateById.size !== candidate.elements.length
+    || sourceById.size !== candidateById.size) reasons.push('节点或关系 ID 数量改变或重复')
+  for (const [id, item] of sourceById) {
+    const next = candidateById.get(id)
+    if (!next || next.type !== item.type) { reasons.push(`${id}: 缺失或类型改变`); continue }
+    if (item.type === 'arrow' && next.type === 'arrow') {
+      if (item.from !== next.from || item.to !== next.to || item.label !== next.label
+        || item.emphasis !== next.emphasis) reasons.push(`${id}: 关系语义或方向改变`)
+    } else if (item.type !== 'arrow' && next.type !== 'arrow') {
+      if (item.text !== next.text || item.width !== next.width || item.height !== next.height
+        || item.groupId !== next.groupId || item.emphasis !== next.emphasis) {
+        reasons.push(`${id}: 节点文字、尺寸或归属改变`)
+      }
+      if (item.locked && (item.x !== next.x || item.y !== next.y)) {
+        reasons.push(`${id}: 锁定节点位置改变`)
+      }
+    }
+  }
+  return { faithful: reasons.length === 0, reasons }
 }
 
 export function judgeExternalLayout(
@@ -46,7 +81,13 @@ export function judgeExternalLayout(
     reasons.push(`分区重叠面积增加 ${baseline.frameOverlapArea}→${candidate.frameOverlapArea}px²`)
   }
   if (candidate.intrusionPx > baseline.intrusionPx + 100) reasons.push('跨无关分区穿越增加')
-  if (candidate.fitPx < Math.min(11, baseline.fitPx - 0.5)) reasons.push(`可读字号降低 ${baseline.fitPx}→${candidate.fitPx}px`)
+  if (candidate.fitPx < baseline.fitPx - 0.5) reasons.push(`可读字号降低 ${baseline.fitPx}→${candidate.fitPx}px`)
+  if (candidate.routeLength > baseline.routeLength * 1.1) {
+    reasons.push(`总线长增加 ${baseline.routeLength}→${candidate.routeLength}px`)
+  }
+  if (candidate.perimeterDetours > baseline.perimeterDetours) {
+    reasons.push(`外围绕行增加 ${baseline.perimeterDetours}→${candidate.perimeterDetours}`)
+  }
   if (b.edgeCrossings === a.edgeCrossings && b.edgeOverlaps === a.edgeOverlaps
     && candidate.fitPx < baseline.fitPx + 1 && candidate.frames >= baseline.frames) {
     reasons.push('没有明确的结构或可读性收益')

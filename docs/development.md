@@ -13,6 +13,14 @@
 
 下一阶段是**统一约束下的节点/分区/端口/走廊联合布局**。任何替代方案必须与现有 Canonical Canvas 合同进行同语义、同尺寸、同渲染/导出、同完整指标 A/B；未证明改善就撤销试验代码，不继续叠加条件路由器。ELK 和 D2/TALA 保留独立实验，不因单项指标较好或 native SVG 可看就进入正式依赖；还必须检查许可证与几何回灌保真。
 
+### 布局内核替换验证 · 第一阶段（2026-10-26）
+
+运行 `pnpm benchmark:architecture:engines:project`，生成 `test-results/architecture-engines-project/index.html` 和 `report.json`。该基准从本仓库 TypeScript AST 提取选定 12 个模块的真实 26 条静态 import 关系；用**同一份 Canonical Canvas** 分别评估现有布局与 ELK flat / compound / native / native-compound。可用 `--direction=DOWN`、`--spacing=40` 等参数做独立布局配置实验，不改变正式引擎。输出明确标出原始节点/边 ID 和语义保真、交叉、重叠、非正交、字号、总线长、外围绕行与候选拒绝原因。`--require-eligible` 会在所有外部候选均不可用时退出非零，不能误报替换成功。
+
+**实际 A/B 决策：暂不切换 ELK。** 当前实际图为 1 交叉、3 独立重叠、12.5px、12,024px 总线路、8 条外围绕行；4 种 ELK 接法全部保留真实语义但**均未通过**完整 Canvas 替换门禁。ELK 原生 flat 为 2 交叉、0 重叠、8.7px、16,095px；原生 compound 为 4 交叉、0 重叠、9.8px、12,509px。方向 RIGHT / DOWN 与间距 40 / 64 / 90 的 24 种隔离参数组合也没有可替换方案。ELK 原生计算仅约十几毫秒，但其计时不包含正式 Composer 的建图和后处理，**不能与现有约 14 秒端到端流程直接比较**。
+
+下一阶段不是继续盲调 ELK 的 spacing，而是单独验证**可信语义视图 + 节点层次/端口联合约束在固定可读尺寸下的可编辑结果**。应先建立真实高汇聚、跨分区、长链的多种输入案例及可比较的 Chrome/Luna Max 基线，再决定是逐步替换自研规划器还是直接采用更合适的布局内核。旧局部搜索只在经完整 A/B 证实替换有效之后删除；失败的外部引擎仍留在开发实验区，不能打包到正式插件。elkjs 当前为开发依赖，其 EPL-2.0 / GPL-3.0-or-later 许可证须在任何生产打包决定前单独审查。
+
 ## 本地开发
 
 Node.js 22+、pnpm 11，构建与测试：
