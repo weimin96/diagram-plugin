@@ -4,6 +4,7 @@ import { assessCanvasVisualQuality } from '../src/canvasQuality.js'
 import { parseCanvasScene, createCanvasSource } from '../src/canvas.js'
 import { summarizeCanvasQuality, summarizeMermaidQuality } from '../src/diagramQuality.js'
 import { countOverlappingRects, rectContains, rectsOverlapWithInset } from '../src/diagramGeometry.js'
+import { proposePresentationCandidates, selectPresentationCandidate, withPresentationCandidate } from '../src/diagramPresentationAB.js'
 import { assessMermaidVisualQuality } from '../src/mermaidQuality.js'
 import { mermaidDiagramTypes } from '../src/types.js'
 import { createTemplate } from '../src/templates.js'
@@ -88,4 +89,44 @@ test('shared rectangle semantics preserve Canvas insets and browser-pixel strict
   assert.equal(countOverlappingRects([a, overlaps], 4), 1)
   assert.equal(countOverlappingRects([a, overlaps, overlaps], 4), 3,
     'each browser-rendered text pair is counted exactly once')
+})
+
+test('reversible presentation A/B requires a strict improvement on two themes without side effects', () => {
+  const type = 'radar'
+  const quality = assessMermaidVisualQuality(type, createTemplate(type, 'Test'))
+  const baseline = summarizeMermaidQuality(type, quality, {
+    width: 764, height: 629, contentOverflow: 0, nodeOverlaps: 0, labelOverlaps: 0, textOverlaps: 1,
+  })
+  const baseConfig = { radar: { marginTop: 44 } } as Parameters<typeof withPresentationCandidate>[0]
+  const before = JSON.stringify(baseConfig)
+  const proposed = proposePresentationCandidates(type, baseline, baseConfig)
+  assert.deepEqual(proposed.map((item) => item.id), ['radar-top+12', 'radar-top+28'])
+  assert.equal(withPresentationCandidate(baseConfig, proposed[0]).radar?.marginTop, 56)
+  assert.equal(JSON.stringify(baseConfig), before, 'candidates must never mutate the production config')
+  const baselineGeometry = { width: 764, height: 629, contentOverflow: 0, nodeOverlaps: 0, labelOverlaps: 0, textOverlaps: 1 }
+  const observation = (mode: 'light' | 'dark', extras = {}) => ({
+    mode, baseline: baselineGeometry, candidates: [
+      { id: proposed[0].id, geometry: {
+        ...baselineGeometry, height: 641, textOverlaps: 0, ...extras,
+      } },
+      { id: proposed[1].id, geometry: {
+        ...baselineGeometry, height: 657, textOverlaps: 0,
+      } },
+    ],
+  })
+  const selected = selectPresentationCandidate(proposed, [observation('light'), observation('dark')])
+  assert.equal(selected.state, 'improved')
+  assert.equal(selected.selected?.value, 56, 'smallest verified change wins')
+  const oneTheme = selectPresentationCandidate(proposed, [observation('light')])
+  assert.equal(oneTheme.state, 'rejected')
+  const regression = selectPresentationCandidate(proposed,
+    [observation('light'), observation('dark', { nodeOverlaps: 1 })])
+  assert.equal(regression.selected?.id, proposed[1].id,
+    'reject an otherwise improved candidate if its second theme has a new hard collision')
+  assert.equal(selectPresentationCandidate(proposed, [
+    observation('light', { width: 1100 }),
+    observation('dark', { width: 1100 }),
+  ]).selected?.id, proposed[1].id, 'reject any candidate that inflates width beyond the geometric cap')
+  assert.deepEqual(proposePresentationCandidates(type, summarizeMermaidQuality(type, quality), baseConfig), [],
+    'source-only evidence must not propose browser-dependent changes')
 })

@@ -16,6 +16,7 @@
     "visual:styles": "node --import tsx scripts/visual-styles.ts",
     "visual:benchmark": "node scripts/visual-smoke.mjs --source-dir tests/fixtures/visual-stress --quality-benchmark",
     "visual:quality:report": "node scripts/visual-smoke.mjs --source-dir tests/fixtures/visual-stress --quality-benchmark --report-file=test-results/diagram-quality/mermaid-types.json",
+    "visual:quality:ab": "node scripts/visual-smoke.mjs --source-dir tests/fixtures/visual-stress --quality-benchmark --presentation-ab --report-file=test-results/diagram-quality/presentation-ab.json",
     "benchmark:architecture": "node --import tsx scripts/benchmark-architecture.ts",
     "benchmark:architecture:review": "node --import tsx scripts/benchmark-architecture.ts --suite=extended --require-review-ready",
     "benchmark:architecture:project": "node --import tsx scripts/benchmark-architecture.ts --suite=project",

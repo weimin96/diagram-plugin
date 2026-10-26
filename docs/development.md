@@ -133,6 +133,8 @@ DeepSeek Harness 需要执行真实 `read_image` 工具调用并在原始 JSONL 
 
 **首个问题驱动修复案例**：Chrome 真实雷达图顶部轴标签与标题相交 1 处。对渲染配置的 `marginTop` 进行 56/72/88px A/B（旧值 44px）：三者均清除文字冲突，仅 56px 额外增加 12px 高度，故采用 56px 并更新对应明/暗像素基准。该修改保持 Mermaid 源文件、维度与数值不变；完整图表 Chrome 几何和像素门禁仍执行。这是手工经 A/B 证明的修复，尚非自动修改管线或 Luna Max 人工批准。
 
+**展示参数自动 A/B 选择（第三阶段）**：`pnpm visual:quality:ab` 在同一套 Chrome/真实 SVG 测量链路中，针对有证据的雷达图文字碰撞、流程图关系标签重叠分别生成至多两个局部展示参数候选；候选仍使用相同 Mermaid 源码、真实数据、主题、语义和渲染器。两个主题同时比较文字溢出、节点/标签/文本重叠，要求各项不退化、总改善严格大于零、画布宽高最多增加 15%，并优先选择等效收益下的较小面积。推荐仅写入忽略目录 `test-results/diagram-quality/presentation-ab.json`，`applied=false`，**不自动覆盖图表、不改生产配置、不宣称视觉审批**。在当前全部 20 个复杂案例上没有额外几何候选，0 项改动是正确结果。为证明流程确实能选出方案，通过明确实验旗标 `node scripts/visual-smoke.mjs --source-dir tests/fixtures/visual-stress --quality-benchmark --presentation-ab --ab-radar-margin=44 --report-file=test-results/diagram-quality/reproduced-radar-ab.json` 复现旧雷达图 44px 布局，两主题各有 1 处碰撞，Chrome 自动从 56/72px 方案中选择 56px，冲突均归零，并拒绝改变 Mermaid 源码。禁止将实验旗标产生的质量信号混称为当前生产质量。
+
 **Codex：** `pnpm plugin:install` 安装源码版本；Desktop 已开启时使用 `pnpm plugin:install:desktop` 刷新。公开 npm 版通过 `npx -y @weimin96/diagram-plugin@latest install --codex` 安装。注意不要同时开启 `diagram-plugin-local` 与 `diagram-plugin-npm`。
 
 **DSH Desktop：** 退出 Desktop、运行 `pnpm build`，再执行：

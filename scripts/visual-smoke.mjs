@@ -10,6 +10,14 @@ const temp = await mkdtemp(path.join(os.tmpdir(), 'diagram-plugin-visual-'))
 const sourceDir = readSourceDirArg(process.argv.slice(2))
 const qualityBenchmark = process.argv.includes('--quality-benchmark')
 const reportFile = process.argv.find((arg) => arg.startsWith('--report-file='))?.slice('--report-file='.length)
+const presentationAB = process.argv.includes('--presentation-ab')
+// Explicit experimental baseline for reproducing a known layout regression.
+// It never changes persisted source or the normal renderer configuration.
+const radarBaselineArg = process.argv.find((arg) => arg.startsWith('--ab-radar-margin='))
+const radarBaseline = radarBaselineArg ? Number(radarBaselineArg.split('=')[1]) : null
+if (radarBaselineArg && (!presentationAB || !Number.isFinite(radarBaseline) || radarBaseline < 10 || radarBaseline > 180)) {
+  throw new Error('--ab-radar-margin must be used with --presentation-ab and a margin between 10 and 180')
+}
 
 try {
   const chrome = await findChrome()
@@ -28,7 +36,7 @@ async function runVisualSmoke(chrome, externalCases, qualityBenchmark) {
   const entry = path.join(temp, 'visual-smoke.ts')
   const port = 18765 + Math.floor(Math.random() * 1000)
   await mkdir(publicDir, { recursive: true })
-  await writeFile(entry, browserEntry(externalCases), 'utf8')
+  await writeFile(entry, browserEntry(externalCases, presentationAB, radarBaseline), 'utf8')
   await build({
     entryPoints: [entry],
     outfile: path.join(publicDir, 'test.js'),
@@ -61,6 +69,15 @@ async function runVisualSmoke(chrome, externalCases, qualityBenchmark) {
         || item.qualityReport?.geometry === 'not-measured'
         || item.qualityReport?.visualReview !== 'not-assessed'
         || item.qualityReport?.humanApproval !== 'not-approved'))
+    const abDecisions = presentationAB
+      ? result.filter((item) => item.mode === 'light' && item.ok).map((item) => ({
+          name: item.name, type: item.type,
+          decision: item.presentationAB?.decision,
+          observations: result.filter((row) => row.name === item.name && row.type === item.type)
+            .map(({ mode, width, height, geometry, presentationAB: ab }) => ({
+              mode, baseline: { width, height, ...geometry }, candidates: ab?.candidates ?? [],
+            })),
+        })) : []
     const oversized = result.filter((item) => item.ok && isOversized(item))
     const splitAdvisories = oversized.filter((item) => item.quality?.splitRecommended)
     const hardOversized = qualityBenchmark ? oversized.filter((item) => !item.quality?.splitRecommended) : oversized
@@ -79,6 +96,9 @@ async function runVisualSmoke(chrome, externalCases, qualityBenchmark) {
     }
     if (invalidReports.length) {
       throw new Error(`Shared quality report missing or overstating approval: ${invalidReports.map((item) => item.mode + '/' + item.name).join(', ')}`)
+    }
+    if (presentationAB && abDecisions.some((item) => !item.decision || item.observations.length !== 2)) {
+      throw new Error('Presentation A/B requires a decision and both theme observations for every case')
     }
     if (splitAdvisories.length) {
       const unique = splitAdvisories.filter((item, index, rows) => rows.findIndex((other) => other.name === item.name) === index)
@@ -107,10 +127,21 @@ async function runVisualSmoke(chrome, externalCases, qualityBenchmark) {
         cases: result.map(({ mode, name, type, qualityReport }) => ({
           mode, name, type, quality: qualityReport,
         })),
+        ...(presentationAB ? { presentationAB: {
+          simulatedRadarBaselineMargin: radarBaseline,
+          applied: false,
+          decisions: abDecisions,
+        } } : {}),
         // These are machine observations only, not a Luna review or approval.
         reviewedByHuman: false,
       }, null, 2) + '\n')
       console.log(`Browser quality report: ${file}`)
+    }
+    if (presentationAB) {
+      for (const { name, decision } of abDecisions.filter((item) => item.decision.state === 'improved')) {
+        console.log(`A/B candidate: ${name} -> ${decision.selected.id}, pending review (not applied)`)
+      }
+      console.log(`Presentation A/B: ${abDecisions.filter((item) => item.decision.state === 'improved').length} improved / ${abDecisions.length} cases, no source changes.`)
     }
     console.log(`Diagram Plugin visual smoke passed: ${result.length} browser renders${externalCases ? ' from external cases' : ''}.`)
   } finally {
@@ -201,7 +232,7 @@ function decodeHtml(value) {
     .replaceAll('&amp;', '&')
 }
 
-function browserEntry(externalCases) {
+function browserEntry(externalCases, presentationAB = false, radarBaseline = null) {
   const templates = path.join(root, 'src/templates.ts')
   const types = path.join(root, 'src/types.ts')
   const grammar = path.join(root, 'src/mermaidVisualGrammar.ts')
@@ -210,6 +241,7 @@ function browserEntry(externalCases) {
 import mermaid from 'mermaid'
 import { fitMermaidSvgToContent } from ${JSON.stringify(path.join(root, 'src/mermaidSvg.ts'))}
 import { summarizeMermaidQuality } from ${JSON.stringify(path.join(root, 'src/diagramQuality.ts'))}
+import { proposePresentationCandidates, withPresentationCandidate, selectPresentationCandidate } from ${JSON.stringify(path.join(root, 'src/diagramPresentationAB.ts'))}
 import { rectContains, countOverlappingRects } from ${JSON.stringify(path.join(root, 'src/diagramGeometry.ts'))}
 import { createTemplate } from ${JSON.stringify(templates)}
 import { mermaidDiagramTypes } from ${JSON.stringify(types)}
@@ -222,12 +254,17 @@ const palettes = {
 }
 const output = []
 const externalCases = ${JSON.stringify(externalCases ?? null)}
+const presentationAB = ${JSON.stringify(presentationAB)}
+const radarBaseline = ${JSON.stringify(radarBaseline)}
 for (const mode of ['light', 'dark']) {
   const cases = externalCases || mermaidDiagramTypes.map(({ type }) => ({ type, name: type, source: createTemplate(type, '测试图表') }))
   for (const { type, name = type, source } of cases) {
     try {
       const renderSource = normalizeMermaidSourceForRender(type, source)
       const config = mermaidVisualConfig(type, palettes[mode], renderSource)
+      if (presentationAB && type === 'radar' && radarBaseline !== null) {
+        config.radar = { ...config.radar, marginTop: radarBaseline }
+      }
       mermaid.initialize({ ...config, fontFamily: config.fontFamily ?? 'Arial, sans-serif' })
       const { svg: renderedSvg } = await mermaid.render('smoke-' + mode + '-' + type + '-' + Math.random().toString(36).slice(2), renderSource)
       const svg = fitMermaidSvgToContent(renderedSvg, config.themeVariables?.background)
@@ -239,11 +276,52 @@ for (const mode of ['light', 'dark']) {
       const geometry = inspectRenderedSvg(svg, type)
       const quality = assessMermaidVisualQuality(type, source)
       const qualityReport = summarizeMermaidQuality(type, quality, { width, height, ...geometry })
-      output.push({ mode, type, name, ok: true, width: Math.round(width), height: Math.round(height), quality, qualityReport, geometry })
+      const proposed = presentationAB ? proposePresentationCandidates(type, qualityReport, config) : []
+      const candidateEvidence = []
+      for (const candidate of proposed) {
+        try {
+          const alternative = withPresentationCandidate(config, candidate)
+          mermaid.initialize({ ...alternative, fontFamily: alternative.fontFamily ?? 'Arial, sans-serif' })
+          // Mermaid uses its renderer ID as a CSS selector. Do not include
+          // arithmetic '+' from candidate IDs (or any unsanitized user text).
+          const safeId = candidate.id.replace(/[^a-z0-9_-]/gi, '-')
+          const { svg: candidateSvg } = await mermaid.render('ab-' + mode + '-' + type + '-' + safeId + '-' + Math.random().toString(36).slice(2), renderSource)
+          const adjusted = fitMermaidSvgToContent(candidateSvg, alternative.themeVariables?.background)
+          const node = new DOMParser().parseFromString(adjusted, 'image/svg+xml').documentElement
+          const bounds = (node.getAttribute('viewBox') || '').split(/\s+/).map(Number)
+          const adjustedWidth = bounds.length === 4 ? bounds[2] : Number.parseFloat(node.getAttribute('width') || '0')
+          const adjustedHeight = bounds.length === 4 ? bounds[3] : Number.parseFloat(node.getAttribute('height') || '0')
+          candidateEvidence.push({ id: candidate.id, geometry: {
+            width: adjustedWidth, height: adjustedHeight, ...inspectRenderedSvg(adjusted, type),
+          } })
+        } catch (error) {
+          candidateEvidence.push({ id: candidate.id, error: error instanceof Error ? error.message : String(error) })
+        } finally {
+          document.body.replaceChildren()
+        }
+      }
+      output.push({ mode, type, name, ok: true, width: Math.round(width), height: Math.round(height),
+        quality, qualityReport, geometry,
+        ...(presentationAB ? { presentationAB: { proposed, candidates: candidateEvidence } } : {}),
+      })
     } catch (error) {
       output.push({ mode, type, name, ok: false, error: error instanceof Error ? error.message : String(error), quality: assessMermaidVisualQuality(type, source) })
     }
     document.body.replaceChildren()
+  }
+}
+if (presentationAB) {
+  for (const item of output.filter((item) => item.mode === 'light' && item.ok)) {
+    const dark = output.find((row) => row.mode === 'dark' && row.name === item.name && row.type === item.type)
+    if (!dark?.ok) continue
+    const decision = selectPresentationCandidate(item.presentationAB.proposed, [
+      { mode: 'light', baseline: { width: item.width, height: item.height, ...item.geometry },
+        candidates: item.presentationAB.candidates },
+      { mode: 'dark', baseline: { width: dark.width, height: dark.height, ...dark.geometry },
+        candidates: dark.presentationAB.candidates },
+    ])
+    item.presentationAB.decision = decision
+    dark.presentationAB.decision = decision
   }
 }
 function inspectRenderedSvg(svg, type) {
