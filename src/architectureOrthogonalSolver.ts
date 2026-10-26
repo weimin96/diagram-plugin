@@ -24,6 +24,11 @@ export function findOrthogonalRoute(
   visibilityFallback = false,
 ): CanvasPoint[] {
   const margin = 24
+  // A single search evaluates many candidate paths sharing the exact same
+  // orthogonal legs. Occupied corridors and obstacles are immutable for this
+  // search, so reuse each segment's geometric penalty without changing the
+  // route cost function or retaining state across graph edits.
+  const segmentCosts = new Map<string, RouteSegmentCost>()
   const xCandidates = uniqueNumbers([
     ...(hints?.x ?? []),
     ...uniqueNumbers([
@@ -73,7 +78,7 @@ export function findOrthogonalRoute(
   for (const candidate of candidates) {
     const simplified = simplifyRoute(candidate)
     if (!routeRespectsAnchors(simplified, fromAnchor, toAnchor)) continue
-    const score = scoreRoute(simplified, obstacles, occupied, bundleKey, bestScore)
+    const score = scoreRoute(simplified, obstacles, occupied, bundleKey, bestScore, segmentCosts)
     if (score < bestScore) {
       best = simplified
       bestScore = score
@@ -99,7 +104,7 @@ export function findOrthogonalRoute(
             end,
           ])
           if (!routeRespectsAnchors(candidate, fromAnchor, toAnchor)) continue
-          const score = scoreRoute(candidate, obstacles, occupied, bundleKey, bestScore)
+          const score = scoreRoute(candidate, obstacles, occupied, bundleKey, bestScore, segmentCosts)
           if (score < bestScore) {
             best = candidate
             bestScore = score
@@ -120,7 +125,7 @@ export function findOrthogonalRoute(
             end,
           ])
           if (!routeRespectsAnchors(candidate, fromAnchor, toAnchor)) continue
-          const score = scoreRoute(candidate, obstacles, occupied, bundleKey, bestScore)
+          const score = scoreRoute(candidate, obstacles, occupied, bundleKey, bestScore, segmentCosts)
           if (score < bestScore) {
             best = candidate
             bestScore = score
@@ -134,7 +139,7 @@ export function findOrthogonalRoute(
       start, end, obstacles, occupied, bundleKey, fromAnchor, toAnchor, hints,
     )
     if (detour) {
-      const score = scoreRoute(detour, obstacles, occupied, bundleKey, bestScore)
+      const score = scoreRoute(detour, obstacles, occupied, bundleKey, bestScore, segmentCosts)
       if (score < bestScore) best = detour
     }
   }
@@ -284,7 +289,13 @@ function boundedCorridorCandidates(values: number[], preferredCount: number): nu
   ])
 }
 
-export function scoreRoute(route: CanvasPoint[], obstacles: RouteRect[], occupied: RouteSegment[], bundleKey?: string, upperBound = Infinity): number {
+type RouteSegmentCost = { collisions: number; overlap: number; crossing: number }
+
+export function scoreRoute(
+  route: CanvasPoint[], obstacles: RouteRect[], occupied: RouteSegment[],
+  bundleKey?: string, upperBound = Infinity,
+  segmentCosts?: Map<string, RouteSegmentCost>,
+): number {
   let length = 0
   let collisions = 0
   let overlapPenalty = 0
@@ -297,20 +308,60 @@ export function scoreRoute(route: CanvasPoint[], obstacles: RouteRect[], occupie
     // cannot beat the best route, the exact remainder cannot change the
     // winner; avoid scoring thousands of known-losing candidates.
     if (length + bendsPenalty + collisions * 100_000 + overlapPenalty + crossingPenalty >= upperBound) return upperBound
-    for (const rect of obstacles) {
-      if (!segmentIntersectsRect(segment, rect)) continue
-      collisions += 1
-      if (length + bendsPenalty + collisions * 100_000 + overlapPenalty + crossingPenalty >= upperBound) return upperBound
-    }
-    for (const used of occupied) {
-      const overlap = segmentOverlap(segment, used)
-      overlapPenalty += overlap * (bundleKey && used.bundleKey === bundleKey ? 0.08 : 4)
-      if (segmentsCross(segment, used) && (!bundleKey || used.bundleKey !== bundleKey)) {
-        const groupBus = bundleKey?.startsWith('group:') || used.bundleKey?.startsWith('group:')
-        crossingPenalty += groupBus ? 2200 : 960
+    const key = segmentCosts
+      ? `${segment.a.x},${segment.a.y}:${segment.b.x},${segment.b.y}` : undefined
+    let cost = key === undefined ? undefined : segmentCosts!.get(key)
+    if (!cost) {
+      let collisionCount = 0, overlap = 0, crossing = 0
+      const horizontal = segment.a.y === segment.b.y
+      const vertical = segment.a.x === segment.b.x
+      const minX = Math.min(segment.a.x, segment.b.x)
+      const maxX = Math.max(segment.a.x, segment.b.x)
+      const minY = Math.min(segment.a.y, segment.b.y)
+      const maxY = Math.max(segment.a.y, segment.b.y)
+      for (const rect of obstacles) {
+        // All ordinary router candidates are rectilinear. Reject distant
+        // obstacles before invoking the full rectangle-intersection test.
+        if ((horizontal || vertical) && (maxX <= rect.x || minX >= rect.x + rect.width
+          || maxY <= rect.y || minY >= rect.y + rect.height)) continue
+        if (segmentIntersectsRect(segment, rect)) collisionCount++
       }
-      if (length + bendsPenalty + collisions * 100_000 + overlapPenalty + crossingPenalty >= upperBound) return upperBound
+      for (const used of occupied) {
+        const usedHorizontal = used.a.y === used.b.y
+        const usedVertical = used.a.x === used.b.x
+        if ((horizontal || vertical) && (usedHorizontal || usedVertical)) {
+          if (horizontal && usedHorizontal) {
+            if (Math.abs(segment.a.y - used.a.y) > 8
+              || maxX <= Math.min(used.a.x, used.b.x)
+              || minX >= Math.max(used.a.x, used.b.x)) continue
+          } else if (vertical && usedVertical) {
+            if (Math.abs(segment.a.x - used.a.x) > 8
+              || maxY <= Math.min(used.a.y, used.b.y)
+              || minY >= Math.max(used.a.y, used.b.y)) continue
+          } else if (horizontal && usedVertical) {
+            if (used.a.x <= minX || used.a.x >= maxX
+              || segment.a.y <= Math.min(used.a.y, used.b.y)
+              || segment.a.y >= Math.max(used.a.y, used.b.y)) continue
+          } else if (vertical && usedHorizontal) {
+            if (segment.a.x <= Math.min(used.a.x, used.b.x)
+              || segment.a.x >= Math.max(used.a.x, used.b.x)
+              || used.a.y <= minY || used.a.y >= maxY) continue
+          }
+        }
+        const distance = segmentOverlap(segment, used)
+        overlap += distance * (bundleKey && used.bundleKey === bundleKey ? 0.08 : 4)
+        if (segmentsCross(segment, used) && (!bundleKey || used.bundleKey !== bundleKey)) {
+          const groupBus = bundleKey?.startsWith('group:') || used.bundleKey?.startsWith('group:')
+          crossing += groupBus ? 2200 : 960
+        }
+      }
+      cost = { collisions: collisionCount, overlap, crossing }
+      if (key !== undefined) segmentCosts!.set(key, cost)
     }
+    collisions += cost.collisions
+    overlapPenalty += cost.overlap
+    crossingPenalty += cost.crossing
+    if (length + bendsPenalty + collisions * 100_000 + overlapPenalty + crossingPenalty >= upperBound) return upperBound
   }
   return length + bendsPenalty + collisions * 100_000 + overlapPenalty + crossingPenalty
 }

@@ -13,6 +13,12 @@
 
 下一阶段是**统一约束下的节点/分区/端口/走廊联合布局**。任何替代方案必须与现有 Canonical Canvas 合同进行同语义、同尺寸、同渲染/导出、同完整指标 A/B；未证明改善就撤销试验代码，不继续叠加条件路由器。ELK 和 D2/TALA 保留独立实验，不因单项指标较好或 native SVG 可看就进入正式依赖；还必须检查许可证与几何回灌保真。
 
+### 布局性能收敛 · 第二阶段（2026-10-26）
+
+实际使用 Node CPU Profile 对 `pnpm benchmark:architecture:project` 的 12 节点 / 26 关系进行采样，最显著的热点是 `architectureOrthogonalSolver.scoreRoute`（一次样本约 5.5 秒 CPU）及 `canvasQuality` 内重复的整体碰撞评估。拆分 Dense Composer 的阶段耗时：首次完整布局约 3.1 秒、密集候选初始化 1.5 秒、第一次线路协商 1.7 秒、节点槽位约 0.9 秒、第二次线路协商约 3 秒、终局协商约 2.3 秒。隔离 A/B 验证直接删除其中任何一次协商都会使真实图交叉或重叠退化，不能靠跳过门禁换取速度。
+
+因此先优化**单次正交搜索内的相同线段代价复用**和确定性不相交线段快速跳过。真实图的几何输出与改动前 Canvas JSON 的 SHA-256 **完全一致**（原始 ID、方向、端口、折点、字体均不变），单次基准在当前环境由约 13.6 秒降至约 11.2 秒；取消线段缓存但保留快速几何判断的对照约 12.9 秒。上述运行时间有系统负载波动，**不是严格的统计性能承诺**。保持评分公式和搜索轮数不变，20 个扩展场景及真实项目质量门禁继续检验回归。下一步优先降低重复全场景评估成本，而不是增加新的路由规则或布局引擎。
+
 ### 布局内核替换验证 · 第一阶段（2026-10-26）
 
 运行 `pnpm benchmark:architecture:engines:project`，生成 `test-results/architecture-engines-project/index.html` 和 `report.json`。该基准从本仓库 TypeScript AST 提取选定 12 个模块的真实 26 条静态 import 关系；用**同一份 Canonical Canvas** 分别评估现有布局与 ELK flat / compound / native / native-compound。可用 `--direction=DOWN`、`--spacing=40` 等参数做独立布局配置实验，不改变正式引擎。输出明确标出原始节点/边 ID 和语义保真、交叉、重叠、非正交、字号、总线长、外围绕行与候选拒绝原因。`--require-eligible` 会在所有外部候选均不可用时退出非零，不能误报替换成功。

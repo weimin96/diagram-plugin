@@ -38,6 +38,34 @@ test('orthogonal geometry weighs unrelated occupied corridors but permits named 
   ]), [{ x: 0, y: 0 }, { x: 140, y: 0 }, { x: 140, y: 80 }])
 })
 
+test('search-local segment memo retains exact route costs, upper bounds, and shared-bundle semantics', () => {
+  const obstacles: RouteRect[] = [
+    { x: 105, y: -25, width: 55, height: 80 },
+    { x: 220, y: 55, width: 80, height: 45 },
+  ]
+  const occupied: RouteSegment[] = [
+    { a: { x: 0, y: 50 }, b: { x: 350, y: 50 }, bundleKey: 'source-a' },
+    { a: { x: 195, y: -80 }, b: { x: 195, y: 180 } },
+    { a: { x: 10, y: 8 }, b: { x: 160, y: 8 }, bundleKey: 'group:a' },
+  ]
+  const routes = [
+    [{ x: 0, y: 0 }, { x: 340, y: 0 }],
+    [{ x: 0, y: 0 }, { x: 0, y: 50 }, { x: 340, y: 50 }, { x: 340, y: 0 }],
+    [{ x: 0, y: 0 }, { x: 90, y: 0 }, { x: 90, y: 120 }, { x: 340, y: 120 }, { x: 340, y: 0 }],
+    [{ x: 0, y: 0 }, { x: 250, y: 0 }, { x: 250, y: 150 }, { x: 340, y: 150 }],
+  ]
+  for (const bundle of [undefined, 'source-a', 'group:a']) {
+    const memo = new Map()
+    for (const upperBound of [Infinity, 200, 1400, 10_000, 150_000]) {
+      for (const path of routes) {
+        assert.equal(scoreRoute(path, obstacles, occupied, bundle, upperBound, memo),
+          scoreRoute(path, obstacles, occupied, bundle, upperBound),
+          'repeated candidate legs must preserve the same complete geometric cost')
+      }
+    }
+  }
+})
+
 test('optional visibility fallback resolves an obstacle maze that bounded doglegs cannot clear', () => {
   const start = { x: 711, y: 274 }, end = { x: 899, y: 702 }
   const obstacles: RouteRect[] = [
