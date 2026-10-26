@@ -717,6 +717,13 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 }
 .freeform-relation-lens span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .freeform-relation-lens span:nth-child(2) { color: var(--accent); flex: none; }
+.freeform-relation-lens.is-guided { gap: 7px; max-width: min(800px, calc(100% - 28px)); }
+.freeform-relation-lens.is-guided > span:first-child { max-width: 136px; color: var(--text-secondary); }
+.freeform-relation-lens.is-guided .freeform-guided-edge-name { flex: 1 1 auto; min-width: 60px; color: var(--text-primary); }
+.freeform-relation-lens.is-guided .freeform-guided-count { flex: 0 0 auto; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.freeform-relation-lens.is-guided button { min-width: 24px; min-height: 25px; border-radius: 5px; }
+.freeform-relation-lens.is-guided button:hover { background: var(--surface-hover); color: var(--text-primary); }
+.freeform-relation-lens.is-guided button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .freeform-relation-lens button {
   flex: none; border: none; background: transparent; color: var(--text-secondary);
   font: inherit; cursor: pointer; padding: 0 3px;

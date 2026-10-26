@@ -411,12 +411,14 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   const [relationQuery, setRelationQuery] = useState('')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [hoveredRelationId, setHoveredRelationId] = useState<string | null>(null)
+  const [guidedRelation, setGuidedRelation] = useState<{ nodeId: string; index: number } | null>(null)
   const keyDependencyLens = useMemo(() => parsed.scene?.architecture
     ? canvasKeyDependencyLens(parsed.scene) : null, [parsed.scene])
   useEffect(() => {
     // This is a per-diagram reading preference, not saved Canvas state.
     setKeyDependenciesOnly(parsed.scene ? preferKeyDependencyLens(parsed.scene) : false)
     setHoveredRelationId(null)
+    setGuidedRelation(null)
     setRelationQuery('')
   }, [focusKey])
   const [connectFrom, setConnectFrom] = useState<string | null>(null)
@@ -923,6 +925,13 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   const selectedNodeRelations = useMemo(() => selectedIds.length === 1 && sourceBoxes.some((node) => node.id === selectedIds[0])
     ? canvasNodeRelations(selectedIds[0], sourceBoxes, sourceArrows) : null,
   [selectedIds, sourceBoxes, sourceArrows])
+  const selectedNodeEdges = selectedNodeRelations
+    ? [...selectedNodeRelations.incoming, ...selectedNodeRelations.outgoing] : []
+  useEffect(() => {
+    if (guidedRelation && (selectedIds.length !== 1 || selectedIds[0] !== guidedRelation.nodeId)) {
+      setGuidedRelation(null)
+    }
+  }, [guidedRelation, selectedIds])
   const sourceCollisionIndex = useMemo(() => selectedIds.length > 3 ? new CanvasRectIndex(sourceBoxes) : null, [selectedIds.length > 3, sourceBoxes])
   const staticRenderItems = useMemo(() => {
     const scene = staticSemanticLodProjection?.scene
@@ -1211,9 +1220,15 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   const tracedNodeIds = new Set(traceResult?.nodeIds ?? [])
   const tracedArrowIds = new Set(traceResult?.arrowIds ?? [])
   const projectedBoxLookup = new Map<string, CanvasNode | CanvasNote>(projectedBoxes.map((item) => [item.id, item]))
+  const guidedActive = Boolean(guidedRelation && scene.architecture && tool === 'select'
+    && selectedIds.length === 1 && selectedIds[0] === guidedRelation.nodeId
+    && guidedRelation.index >= 0 && guidedRelation.index < selectedNodeEdges.length
+    && !traceResult && !gesturePositionOverrides && !arrowPointDraft && !arrowEndpointPreview)
+  const guidedEdge = guidedActive ? selectedNodeEdges[guidedRelation!.index] : undefined
   const relationFocus = scene.architecture && tool === 'select' && !gesturePositionOverrides
     && !arrowPointDraft && !arrowEndpointPreview
-    ? resolveCanvasRelationshipFocus(visibleRenderArrows, selectedIds, hoveredRelationId, Boolean(traceResult))
+    ? resolveCanvasRelationshipFocus(visibleRenderArrows,
+      guidedEdge ? [guidedEdge.id] : selectedIds, hoveredRelationId, Boolean(traceResult))
     : null
   const keyDependencyActive = keyDependenciesOnly && Boolean(keyDependencyLens?.arrowIds.size)
     && !relationFocus && !traceResult && tool === 'select'
@@ -1822,6 +1837,16 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
       x: clamp((left + right) / 2 - viewWidth / 2, 0, Math.max(0, live.width - viewWidth)),
       y: clamp((top + bottom) / 2 - viewHeight / 2, 0, Math.max(0, live.height - viewHeight)),
     })
+  }
+
+  function viewGuidedRelation(nodeId: string, index: number) {
+    const relation = selectedNodeEdges[index]
+    if (!relation) return
+    const arrow = sourceArrows.find((item) => item.id === relation.id)
+    if (!arrow) return
+    setHoveredRelationId(null)
+    setGuidedRelation({ nodeId, index })
+    focusBoxes([arrow.from, arrow.to])
   }
 
   function enterArchitectureScope(scope: CanvasArchitectureScope) {
@@ -3107,7 +3132,30 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
             <button type="button" aria-label="显示全部依赖" onClick={() => setKeyDependenciesOnly(false)}>×</button>
           </div>
         ) : null}
-        {relationFocus && relationshipFocusFrom && relationshipFocusTo ? (
+        {scene.architecture && selectedNodeRelations && selectedNodeEdges.length >= 2 && !traceResult
+          && tool === 'select' && !gesturePositionOverrides && !arrowPointDraft && !arrowEndpointPreview ? (
+          <div className="freeform-relation-lens is-guided" aria-label="节点依赖逐条阅读">
+            <span title={sourceBoxes.find((item) => item.id === selectedIds[0])?.text}>
+              {sourceBoxes.find((item) => item.id === selectedIds[0])?.text}
+            </span>
+            {guidedActive && relationFocus && relationshipFocusFrom && relationshipFocusTo ? <>
+              <span className="freeform-guided-edge-name" title={`${relationshipFocusFrom.text} → ${relationshipFocusTo.text}`}>
+                {relationshipFocusFrom.text} → {relationshipFocusTo.text}
+              </span>
+              <span className="freeform-guided-count">{guidedRelation!.index + 1}/{selectedNodeEdges.length}</span>
+              <button type="button" aria-label="上一条依赖" disabled={selectedNodeEdges.length < 2}
+                onClick={() => viewGuidedRelation(guidedRelation!.nodeId,
+                  (guidedRelation!.index - 1 + selectedNodeEdges.length) % selectedNodeEdges.length)}>‹</button>
+              <button type="button" aria-label="下一条依赖" disabled={selectedNodeEdges.length < 2}
+                onClick={() => viewGuidedRelation(guidedRelation!.nodeId,
+                  (guidedRelation!.index + 1) % selectedNodeEdges.length)}>›</button>
+              <button type="button" aria-label="退出逐条阅读" onClick={() => { setGuidedRelation(null); setHoveredRelationId(null) }}>×</button>
+            </> : <>
+              <span className="freeform-guided-count">入 {selectedNodeRelations.incoming.length} / 出 {selectedNodeRelations.outgoing.length}</span>
+              <button type="button" onClick={() => viewGuidedRelation(selectedIds[0], 0)}>逐条查看</button>
+            </>}
+          </div>
+        ) : relationFocus && relationshipFocusFrom && relationshipFocusTo ? (
           <div className="freeform-relation-lens" aria-label="当前关系路径">
             <span title={relationshipFocusFrom.text}>{relationshipFocusFrom.text}</span>
             <span aria-hidden="true">→</span>

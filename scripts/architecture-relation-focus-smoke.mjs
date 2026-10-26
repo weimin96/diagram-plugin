@@ -147,7 +147,34 @@ setTimeout(() => {
                                   document.querySelector('#root-dense [data-element-id="' + id + '"].freeform-arrow')?.classList.contains('is-selected'))
                               result.denseGlobalPreservesEdges = document.querySelectorAll('#root-dense .freeform-arrow[data-element-id]').length === 12
                               result.denseGlobalMovesViewport = document.querySelector('#root-dense .freeform-svg')?.getAttribute('viewBox') !== previousViewBox
-                              document.getElementById('result').textContent = JSON.stringify(result)
+                              const hub = document.querySelector('#root-dense [data-element-id="dense-6"].freeform-box')
+                              hub?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 8, button: 0, clientX: 140, clientY: 490 }))
+                              hub?.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 8, button: 0, clientX: 140, clientY: 490 }))
+                              setTimeout(() => {
+                                const walkthrough = document.querySelector('#root-dense [aria-label="节点依赖逐条阅读"]')
+                                result.hubReadingOffer = walkthrough?.textContent?.includes('入 12 / 出 0')
+                                const beforeGuidedView = document.querySelector('#root-dense .freeform-svg')?.getAttribute('viewBox')
+                                walkthrough?.querySelector('button')?.click()
+                                setTimeout(() => {
+                                  result.guidedCamera = document.querySelector('#root-dense .freeform-svg')?.getAttribute('viewBox') !== beforeGuidedView
+                                  const first = [...document.querySelectorAll('#root-dense .freeform-arrow.is-relation-focused')].map((node) => node.getAttribute('data-element-id'))
+                                  result.guidedFirst = first.length === 1 && first[0]?.startsWith('dense-edge-')
+                                    && walkthrough?.textContent?.includes('1/12')
+                                  walkthrough?.querySelector('[aria-label="下一条依赖"]')?.click()
+                                  setTimeout(() => {
+                                    const next = [...document.querySelectorAll('#root-dense .freeform-arrow.is-relation-focused')].map((node) => node.getAttribute('data-element-id'))
+                                    result.guidedAdvances = next.length === 1 && next[0] !== first[0]
+                                      && walkthrough?.textContent?.includes('2/12')
+                                    result.guidedRetainsAll = document.querySelectorAll('#root-dense .freeform-arrow[data-element-id]').length === 12
+                                    walkthrough?.querySelector('[aria-label="退出逐条阅读"]')?.click()
+                                    setTimeout(() => {
+                                      result.guidedExit = !document.querySelector('#root-dense .freeform-arrow.is-relation-focused')
+                                        && Boolean(document.querySelector('#root-dense [aria-label="节点依赖逐条阅读"]'))
+                                      document.getElementById('result').textContent = JSON.stringify(result)
+                                    }, 90)
+                                  }, 90)
+                                }, 90)
+                              }, 90)
                             }, 100)
                           }, 100)
                         }, 100)
@@ -192,7 +219,9 @@ setTimeout(() => {
     || !result.navigatorSelectsExactEdge || !result.navigatorPreservesEdges
     || !result.denseDefaultKeyLens || !result.denseRetainsEdges || !result.denseCanReturnToAll
     || !result.denseRelationSearch || !result.denseRelationMatches || !result.denseGlobalExactEdge
-    || !result.denseGlobalPreservesEdges || !result.denseGlobalMovesViewport) {
+    || !result.denseGlobalPreservesEdges || !result.denseGlobalMovesViewport
+    || !result.hubReadingOffer || !result.guidedFirst || !result.guidedAdvances || !result.guidedCamera
+    || !result.guidedRetainsAll || !result.guidedExit) {
     throw new Error('The real React Canvas relationship lens failed visual/state interaction checks')
   }
 } finally {
