@@ -68,8 +68,12 @@ test('incremental reroute only changes incident edge geometry, preserving unrela
 test('moved endpoint recovers a previously real source stem without inventing a bundle', async () => {
   const reference = composeArchitectureGraph((await projectArchitectureCase()).intent).scene
   const nodes = reference.elements.filter((item) => item.type === 'node')
-  const left = nodes.find((item) => item.id === 'architecturePartitionFlow')!
-  const right = nodes.find((item) => item.id === 'canvasQuality')!
+  // In the current independently scored dense layout, these two peers
+  // disturb one verified source stem when exchanged. Use a geometry fixture
+  // whose precondition is true instead of assuming every node swap affects
+  // exactly one of the two existing real stems.
+  const left = nodes.find((item) => item.id === 'architectureDesign')!
+  const right = nodes.find((item) => item.id === 'architecturePortPlanning')!
   const changed = new Set([left.id, right.id])
   const reordered = {
     ...reference, elements: reference.elements.map((item) =>

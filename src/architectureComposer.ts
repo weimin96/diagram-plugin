@@ -688,22 +688,42 @@ function optimizeCongestedRoutes(result: ReturnType<typeof composeArchitectureGr
       ...scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow' && !item.bundleKey)
         .map((item) => item.id),
     ])].slice(0, maxAffectedEdges)
+    // Conflicting edges compete for the same corridor. A one-edge rip-up
+    // cannot always escape that local minimum because the other edge keeps
+    // its occupied lane. Negotiate the actual conflicting pair together in
+    // the same bounded full-scene selection, not a separate routing engine.
+    const pairs = quality.issues
+      .filter((issue) => issue.code === 'edge-crossing' || issue.code === 'edge-overlap')
+      .map((issue) => issue.elementIds.filter((id) => affected.includes(id)))
+      .filter((ids) => ids.length === 2)
+    const pairKeys = new Set<string>()
+    const work = [
+      ...affected.map((id) => [id]),
+      ...pairs.filter((ids) => {
+        const key = [...ids].sort().join('\u0000')
+        if (pairKeys.has(key)) return false
+        pairKeys.add(key)
+        return true
+      }).slice(0, 12),
+    ]
     let best: {
       scene: CanvasScene; quality: CanvasVisualQualityAssessment
       evaluation: ArchitectureLayoutAssessment; routeDiagnostics: ReturnType<typeof assessArchitectureRouteDiagnostics>
     } | undefined
-    for (const id of affected) {
-      const currentArrow = scene.elements.find((item) => item.id === id && item.type === 'arrow')
-      if (!currentArrow) continue
-      // An unchanged route cannot improve the globally assessed graph.
-      const seen = new Set<string>([JSON.stringify(currentArrow)])
-      for (const candidate of [
-        routeArchitectureArrowIds(scene, [id], true),
-        routeArchitectureArrowIds(scene, [id], false),
-        ...nudgeArchitectureCorridors(scene, id),
-      ]) {
-        const arrow = candidate.elements.find((item) => item.id === id)
-        const signature = JSON.stringify(arrow)
+    for (const ids of work) {
+      const signatureOf = (candidate: CanvasScene) => JSON.stringify(candidate.elements
+        .filter((item) => item.type === 'arrow' && ids.includes(item.id)))
+      const seen = new Set<string>([signatureOf(scene)])
+      const proposals = ids.length === 1 ? [
+        routeArchitectureArrowIds(scene, ids, true),
+        routeArchitectureArrowIds(scene, ids, false),
+        ...nudgeArchitectureCorridors(scene, ids[0]),
+      ] : [routeArchitectureArrowIds(scene, ids, true)]
+      for (const proposal of proposals) {
+        // The source bus is derived from final route geometry. Evaluate the
+        // same normalized scene that the editor will actually render.
+        const candidate = ids.length === 2 ? annotateSourceFanoutTrunks(proposal) : proposal
+        const signature = signatureOf(candidate)
         if (seen.has(signature)) continue
         seen.add(signature)
         const proposed = assessCanvasVisualQuality(candidate)
