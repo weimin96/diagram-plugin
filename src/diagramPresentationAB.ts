@@ -16,7 +16,8 @@ export type PresentationObservation = {
   candidates: { id: string; geometry?: DiagramRenderEvidence; error?: string }[]
 }
 
-const metrics = ['contentOverflow', 'nodeOverlaps', 'labelOverlaps', 'textOverlaps'] as const
+const metrics = ['contentOverflow', 'nodeOverlaps', 'labelOverlaps', 'textOverlaps',
+  'edgeLabelIntrusions', 'labelNodeIntrusions'] as const
 
 /** Only propose bounded reversible presentation edits supported by Mermaid.
  * Never change authored Mermaid, data, axes, relationships, or font size. */
@@ -32,7 +33,8 @@ export function proposePresentationCandidates(
           kind: 'radar-top-margin' as const, value: base + delta,
         })) : []
   }
-  if (type === 'flowchart' && report.findings.some((finding) => finding.code === 'label-overlap')) {
+  if (type === 'flowchart' && report.findings.some((finding) =>
+    ['label-overlap', 'edge-label-intrusion', 'label-node-intrusion'].includes(finding.code))) {
     const base = config.flowchart?.nodeSpacing
     return typeof base === 'number' && Number.isFinite(base)
       ? [10, 20].map((delta) => ({
@@ -44,8 +46,13 @@ export function proposePresentationCandidates(
     // Professional graph layouts expose their own spacing knobs. Only offer
     // a bounded candidate when a real browser overlap was observed.
     const hasNodes = report.findings.some((finding) => finding.code === 'node-overlap')
-    const hasLabels = report.findings.some((finding) => finding.code === 'label-overlap')
-    const axis = hasNodes ? 'nodeSpacing' : hasLabels ? 'rankSpacing' : null
+    const hasForeignEdges = report.findings.some((finding) => finding.code === 'edge-label-intrusion')
+    const hasLabels = report.findings.some((finding) =>
+      ['label-overlap', 'edge-label-intrusion', 'label-node-intrusion'].includes(finding.code))
+    // A different edge crossing a label is a corridor-width problem, not
+    // necessarily a vertical rank-spacing problem. Real ER Chrome A/B:
+    // rankSpacing+12/+24 kept both collisions; nodeSpacing+24 cleared both.
+    const axis = hasNodes || hasForeignEdges ? 'nodeSpacing' : hasLabels ? 'rankSpacing' : null
     if (!axis) return []
     // Mermaid 11's classDiagram v3 unified renderer takes the spacing
     // settings from config.state (not config.class). Its class-specific

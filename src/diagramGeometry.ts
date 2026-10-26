@@ -8,6 +8,42 @@ export interface DiagramRect {
   height: number
 }
 
+export interface DiagramPoint {
+  x: number
+  y: number
+}
+
+/** An actual line segment passing through the strict interior of a box.
+ * Merely touching its outline, or entering only the 2px safety margin,
+ * does not count as an occlusion. Works with orthogonal and sampled curved
+ * paths; coordinates must already be in the same space. */
+export function segmentCrossesRectInterior(
+  from: DiagramPoint, to: DiagramPoint, box: DiagramRect, inset = 2,
+): boolean {
+  const xMin = box.x + inset, xMax = box.x + box.width - inset
+  const yMin = box.y + inset, yMax = box.y + box.height - inset
+  if (xMin >= xMax || yMin >= yMax) return false
+  const dx = to.x - from.x, dy = to.y - from.y
+  let entry = 0, exit = 1
+  for (const [p, q] of [
+    [-dx, from.x - xMin], [dx, xMax - from.x],
+    [-dy, from.y - yMin], [dy, yMax - from.y],
+  ]) {
+    if (p === 0) {
+      if (q < 0) return false
+      continue
+    }
+    const t = q / p
+    if (p < 0) entry = Math.max(entry, t)
+    else exit = Math.min(exit, t)
+    if (entry > exit) return false
+  }
+  if (exit - entry <= 1e-6) return false
+  const mid = (entry + exit) / 2
+  const x = from.x + dx * mid, y = from.y + dy * mid
+  return x > xMin && x < xMax && y > yMin && y < yMax
+}
+
 /** SVG percent-sized roots (e.g. width="100%") require a real viewBox.
  * Do not silently treat percent width as 100px or infer a zero-height SVG. */
 export function readSvgDimensions(viewBox: string | null, width: string | null, height: string | null): {

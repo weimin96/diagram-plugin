@@ -137,6 +137,8 @@ DeepSeek Harness 需要执行真实 `read_image` 工具调用并在原始 JSONL 
 
 **更多语义图复用与真实 SVG 证据修复**：A/B 增加状态图、类图、ER 图的节点拥挤与关系标签拥挤的有界间距候选，仍仅由**实际浏览器已报告的重叠**触发，不改变源图。原候选检查错误地把 Mermaid `width="100%"` 的合法 SVG 误判为 100×0；已将标准 `viewBox` 解析集中到 `diagramGeometry.readSvgDimensions`，加入百分比根尺寸和空白字符回归。根据本机 Mermaid 11 类图 v3 的真实代码，节点/层次间距从 `state` 配置读取而非 `class` 配置（安装依赖 `chunk-TICWLB2K.mjs` 的 `draw`），修正候选实际写入路径。通过**临时注入探针信号且立即还原代码**的 Chrome 验证：状态图原尺寸 900×874，节点间距候选变为 912×874/924×874；ER 原尺寸 1478×916，候选变为 1550×916/1622×916；类图原尺寸 2665×541，候选变为 2665×571/2665×601。全部有效 SVG，但由于原场景没有真实碰撞，这些候选**均未采纳**。探针文件仅存于忽略的测试结果，不得将模拟问题信号视作产品真实质量问题。
 
+**关系标签与实际路径遮挡（第四阶段）**：`diagramBrowserGeometry.measureMermaidRelationOcclusion` 通过真实 Mermaid `data-id` 关联边标签与曲线，用 SVG 路径弧长采样投影到浏览器坐标，对严格内缩的矩形进行线段交集判定，**排除标签自己的真实关系**；同时检查关系标签覆盖其他节点。Chrome 自检 fixture 证明自己的边穿过标签不计错、外来关系才计错、移出后两项归零。路径预先采样并按屏幕坐标包围范围剪枝，避免对无关标签反复作线段判定。现有 20 个复杂场景中的 **ER 图首次发现两处其他线路穿过实际关系标签**，明暗主题一致，报告保留真实关系 ID；以前仅检查标签对标签、节点对节点而漏掉此问题。原 `rankSpacing+12/+24` 均未减少 2 处冲突，改为以实际问题驱动优先搜索节点间距：`nodeSpacing+12` 两主题各剩 1 处，`nodeSpacing+24` 两主题各剩 **0 处**，宽约 **1478→1622px（+9.7%）**，高仍 916px，其他基础冲突保持为零。正式 `pnpm visual:quality:ab` 推荐 `er-nodeSpacing+24`，报告 `applied=false`；**仅属机器几何改进，不等于独立 Luna Max 评分或人工批准**，未擅改项目 Mermaid 源图或全局渲染参数。浅色主题的真实前后像素对照已存放在忽略目录 `test-results/diagram-quality/review/er-15-entities-{original-light,node-spacing-plus24-light}.png`，便于后续人工审查。
+
 **Codex：** `pnpm plugin:install` 安装源码版本；Desktop 已开启时使用 `pnpm plugin:install:desktop` 刷新。公开 npm 版通过 `npx -y @weimin96/diagram-plugin@latest install --codex` 安装。注意不要同时开启 `diagram-plugin-local` 与 `diagram-plugin-npm`。
 
 **DSH Desktop：** 退出 Desktop、运行 `pnpm build`，再执行：

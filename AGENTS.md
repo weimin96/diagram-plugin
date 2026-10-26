@@ -28,6 +28,7 @@
 - `diagramGeometry.ts`：Canvas 与 Mermaid Chrome 测量复用相同的纯矩形几何；保持原有可编辑 Canvas 的接触/内缩阈值与浏览器的像素重叠阈值分别受控。`diagramQuality.repairSuggestions` 只能提出具有问题证据的整改方向，不自动改写源文档或宣称人工批准。
 - `diagramPresentationAB.ts`：仅为有浏览器问题证据的 Mermaid 展示参数提出有界、可逆候选；真实 Chrome 在明暗主题下对候选执行帕累托门禁（碰撞不退化、至少一项改善、画布尺寸受控）。输出仅是建议，不能自动篡改 Mermaid 源码、节点语义或声称人工批准。
 - Mermaid A/B 候选必须以真实 `viewBox` 度量 SVG，不能将 `width="100%"` 误认为 100px；Mermaid 11 类图 v3 读取 `state` 中的布局间距，参数有效性以实际当前版本的 Chrome A/B 为准，不制造只改配置却对成图无作用的伪优化。
+- `diagramBrowserGeometry.ts`：真实 SVG 的 `edgePaths path[data-id]` 与 `edgeLabel .label[data-id]` 可精确关联。判断关系穿过标签时必须排除自己的那条关系，并在浏览器坐标系对曲线采样与矩形严格相交；实际关系 ID 要传入诊断，几何警告不自动冒充审美合格或人工批准。
 - `CanvasEditor.tsx`、`canvas.ts`：渲染与交互消费同一文档合同；任何阅读聚焦都是非破坏式的，不自动改写、丢弃或伪造真实关系。
 - 密集且具有已验证关键关系的架构图默认以关键依赖层级阅读，`全部` 仍可随时显示所有真实关系；静态 SVG 只调整非重点线的视觉权重，不删除路径或损失端点悬停来源。缺乏可靠主链时不自动判断所谓“关键”。
 

@@ -3,7 +3,7 @@ import test from 'node:test'
 import { assessCanvasVisualQuality } from '../src/canvasQuality.js'
 import { parseCanvasScene, createCanvasSource } from '../src/canvas.js'
 import { summarizeCanvasQuality, summarizeMermaidQuality } from '../src/diagramQuality.js'
-import { countOverlappingRects, readSvgDimensions, rectContains, rectsOverlapWithInset } from '../src/diagramGeometry.js'
+import { countOverlappingRects, readSvgDimensions, rectContains, rectsOverlapWithInset, segmentCrossesRectInterior } from '../src/diagramGeometry.js'
 import { proposePresentationCandidates, selectPresentationCandidate, withPresentationCandidate } from '../src/diagramPresentationAB.js'
 import { assessMermaidVisualQuality } from '../src/mermaidQuality.js'
 import { mermaidDiagramTypes } from '../src/types.js'
@@ -97,6 +97,13 @@ test('shared rectangle semantics preserve Canvas insets and browser-pixel strict
     { width: 0, height: 0 }, 'never accept 100x0 fallback as valid browser geometry')
   assert.deepEqual(readSvgDimensions(null, '720px', '400'),
     { width: 720, height: 400 })
+  const labelBox = { x: 85, y: 40, width: 70, height: 20 }
+  assert.equal(segmentCrossesRectInterior({ x: 10, y: 50 }, { x: 280, y: 50 }, labelBox), true,
+    'a path crossing the actual text interior must count even when both endpoints are outside')
+  assert.equal(segmentCrossesRectInterior({ x: 10, y: 40 }, { x: 280, y: 40 }, labelBox), false,
+    'an edge touching the label outer border must not be counted')
+  assert.equal(segmentCrossesRectInterior({ x: 10, y: 43 }, { x: 280, y: 43 }, labelBox), true)
+  assert.equal(segmentCrossesRectInterior({ x: 10, y: 110 }, { x: 280, y: 110 }, labelBox), false)
 })
 
 test('reversible presentation A/B requires a strict improvement on two themes without side effects', () => {
@@ -137,6 +144,32 @@ test('reversible presentation A/B requires a strict improvement on two themes wi
   ]).selected?.id, proposed[1].id, 'reject any candidate that inflates width beyond the geometric cap')
   assert.deepEqual(proposePresentationCandidates(type, summarizeMermaidQuality(type, quality), baseConfig), [],
     'source-only evidence must not propose browser-dependent changes')
+
+  const er = 'er'
+  const erSource = createTemplate(er, 'Test')
+  const erReport = summarizeMermaidQuality(er, assessMermaidVisualQuality(er, erSource), {
+    width: 1478, height: 916, contentOverflow: 0, nodeOverlaps: 0, labelOverlaps: 0,
+    edgeLabelIntrusions: 2, labelNodeIntrusions: 0,
+    edgeLabelPairs: [{ label: 'relationship-a', edge: 'relationship-b' }],
+  })
+  assert.equal(erReport.geometry, 'passed', 'soft intrusions must not masquerade as a hard blocker')
+  assert.deepEqual(erReport.findings.find((finding) => finding.code === 'edge-label-intrusion')?.elementIds,
+    ['relationship-a', 'relationship-b'], 'actual relation IDs must survive the quality report')
+  assert.ok(erReport.repairSuggestions.some((item) => item.findingCode === 'edge-label-intrusion'))
+  assert.ok(Object.values(erReport.metrics).every((value) => typeof value === 'number'),
+    'raw DOM diagnostics must not leak arrays into the numeric metrics contract')
+  const erConfig = { er: { nodeSpacing: 32, rankSpacing: 62 } } as Parameters<typeof withPresentationCandidate>[0]
+  const erCandidates = proposePresentationCandidates(er, erReport, erConfig)
+  assert.deepEqual(erCandidates.map((item) => item.id), ['er-nodeSpacing+12', 'er-nodeSpacing+24'])
+  const erBaseline = { width: 1478, height: 916, contentOverflow: 0, nodeOverlaps: 0,
+    labelOverlaps: 0, textOverlaps: 0, edgeLabelIntrusions: 2, labelNodeIntrusions: 0 }
+  const erObservation = (mode: 'light' | 'dark') => ({ mode, baseline: erBaseline, candidates: [
+    { id: erCandidates[0].id, geometry: { ...erBaseline, width: 1550, edgeLabelIntrusions: 1 } },
+    { id: erCandidates[1].id, geometry: { ...erBaseline, width: 1622, edgeLabelIntrusions: 0 } },
+  ] })
+  assert.equal(selectPresentationCandidate(erCandidates,
+    [erObservation('light'), erObservation('dark')]).selected?.id, 'er-nodeSpacing+24',
+  'real A/B evidence favors eliminating both intrusions within the 15% width cap')
 
   for (const diagram of ['state', 'class', 'er'] as const) {
     for (const [kind, axis] of [['node-overlap', 'nodeSpacing'], ['label-overlap', 'rankSpacing']] as const) {

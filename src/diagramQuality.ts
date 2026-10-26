@@ -10,6 +10,9 @@ export interface DiagramRenderEvidence {
   labelOverlaps: number
   /** Text-text intersections, advisory because specialized charts may overlay labels intentionally. */
   textOverlaps?: number
+  edgeLabelIntrusions?: number
+  labelNodeIntrusions?: number
+  edgeLabelPairs?: { label: string; edge: string }[]
 }
 
 export interface DiagramQualityFinding {
@@ -70,6 +73,8 @@ function suggestRepair(
       case 'edge-overlap':
       case 'edge-through-node':
       case 'node-overlap':
+      case 'edge-label-intrusion':
+      case 'label-node-intrusion':
         add(issue.code, 'layout', '检查节点尺寸、端口与布局约束；仅采纳经过完整图几何和语义保真复验的候选。')
         break
       case 'text-overlap':
@@ -145,6 +150,17 @@ export function summarizeMermaidQuality(
     code: 'text-overlap', severity: 'warning', message: `实际渲染文字可能相互遮挡：${render.textOverlaps}`,
     elementIds: [], origin: 'browser',
   })
+  if (render?.edgeLabelIntrusions) findings.push({
+    code: 'edge-label-intrusion', severity: 'warning',
+    message: `其他真实关系线路穿过当前关系标签：${render.edgeLabelIntrusions}`,
+    elementIds: [...new Set((render.edgeLabelPairs ?? []).flatMap(({ label, edge }) => [label, edge]))],
+    origin: 'browser',
+  })
+  if (render?.labelNodeIntrusions) findings.push({
+    code: 'label-node-intrusion', severity: 'warning',
+    message: `关系标签遮挡节点：${render.labelNodeIntrusions}`,
+    elementIds: [], origin: 'browser',
+  })
   const invalidSize = Boolean(render && (![render.width, render.height].every(
     (value) => Number.isFinite(value) && value > 0)))
   if (invalidSize) findings.push({
@@ -152,6 +168,16 @@ export function summarizeMermaidQuality(
     elementIds: [], origin: 'browser',
   })
   const renderFailure = invalidSize || Boolean(render?.contentOverflow || render?.nodeOverlaps)
+  // Browser probes may attach diagnostic arrays. Metrics is a numeric
+  // contract; keep concrete relation IDs only in the corresponding finding.
+  const numericRender = render ? {
+    width: render.width, height: render.height,
+    contentOverflow: render.contentOverflow, nodeOverlaps: render.nodeOverlaps,
+    labelOverlaps: render.labelOverlaps,
+    ...(render.textOverlaps !== undefined ? { textOverlaps: render.textOverlaps } : {}),
+    ...(render.edgeLabelIntrusions !== undefined ? { edgeLabelIntrusions: render.edgeLabelIntrusions } : {}),
+    ...(render.labelNodeIntrusions !== undefined ? { labelNodeIntrusions: render.labelNodeIntrusions } : {}),
+  } : {}
   return {
     version: 1, type, engine: 'mermaid',
     needsRevision: quality.splitRecommended || renderFailure,
@@ -160,6 +186,6 @@ export function summarizeMermaidQuality(
     visualReview: 'not-assessed', humanApproval: 'not-approved',
     evidence: render ? 'browser' : 'source',
     findings, repairSuggestions: suggestRepair(type, findings),
-    metrics: { ...quality.metrics, ...(render ? { ...render } : {}) },
+    metrics: { ...quality.metrics, ...numericRender },
   }
 }

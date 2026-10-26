@@ -109,7 +109,7 @@ async function runVisualSmoke(chrome, externalCases, qualityBenchmark) {
     if (qualityBenchmark) {
       const lightRows = result.filter((item) => item.mode === 'light' && item.ok)
       for (const item of lightRows) {
-        console.log(`quality: ${item.name} · ${item.quality.density} · ${item.width}x${item.height} · overflow=${item.geometry.contentOverflow} · nodeOverlap=${item.geometry.nodeOverlaps} · labelOverlap=${item.geometry.labelOverlaps} · textOverlap=${item.geometry.textOverlaps}`)
+        console.log(`quality: ${item.name} · ${item.quality.density} · ${item.width}x${item.height} · overflow=${item.geometry.contentOverflow} · nodeOverlap=${item.geometry.nodeOverlaps} · labelOverlap=${item.geometry.labelOverlaps} · textOverlap=${item.geometry.textOverlaps} · edgeLabelIntrusion=${item.geometry.edgeLabelIntrusions} · labelNodeIntrusion=${item.geometry.labelNodeIntrusions}`)
       }
     }
     if (geometryFailures.length) {
@@ -243,6 +243,7 @@ import { fitMermaidSvgToContent } from ${JSON.stringify(path.join(root, 'src/mer
 import { summarizeMermaidQuality } from ${JSON.stringify(path.join(root, 'src/diagramQuality.ts'))}
 import { proposePresentationCandidates, withPresentationCandidate, selectPresentationCandidate } from ${JSON.stringify(path.join(root, 'src/diagramPresentationAB.ts'))}
 import { rectContains, countOverlappingRects, readSvgDimensions } from ${JSON.stringify(path.join(root, 'src/diagramGeometry.ts'))}
+import { measureMermaidRelationOcclusion } from ${JSON.stringify(path.join(root, 'src/diagramBrowserGeometry.ts'))}
 import { createTemplate } from ${JSON.stringify(templates)}
 import { mermaidDiagramTypes } from ${JSON.stringify(types)}
 import { mermaidVisualConfig, normalizeMermaidSourceForRender } from ${JSON.stringify(grammar)}
@@ -256,6 +257,37 @@ const output = []
 const externalCases = ${JSON.stringify(externalCases ?? null)}
 const presentationAB = ${JSON.stringify(presentationAB)}
 const radarBaseline = ${JSON.stringify(radarBaseline)}
+// Browser regression with real SVG geometry: the label should ignore its own
+// edge, detect a different edge through its text, and detect an overlapping
+// node. This covers the DOM/foreignObject path, not only pure math helpers.
+{
+  const fixture = document.createElement('div')
+  fixture.style.cssText = 'position:absolute;left:-100000px;top:0;visibility:hidden'
+  fixture.innerHTML = \`<svg xmlns="http://www.w3.org/2000/svg" width="300" height="140">
+    <g class="edgePaths">
+      <path data-id="own" d="M 10 50 L 280 50"/>
+      <path data-id="other" d="M 10 50 L 280 50"/>
+    </g>
+    <g class="edgeLabel"><g class="label" data-id="own" transform="translate(85,40)">
+      <foreignObject width="70" height="20"><div xmlns="http://www.w3.org/1999/xhtml" style="width:70px;height:20px">Own label</div></foreignObject>
+    </g></g>
+    <g class="nodes"><g class="node"><rect x="110" y="45" width="20" height="20"/></g></g>
+  </svg>\`
+  document.body.appendChild(fixture)
+  const svg = fixture.querySelector('svg')
+  const collision = measureMermaidRelationOcclusion(svg)
+  const path = svg.querySelector('path[data-id="other"]')
+  const rect = svg.querySelector('g.node rect')
+  path.setAttribute('d', 'M 10 110 L 280 110')
+  rect.setAttribute('x', '250')
+  const cleared = measureMermaidRelationOcclusion(svg)
+  fixture.remove()
+  if (collision.edgeLabelIntrusions !== 1 || collision.labelNodeIntrusions !== 1
+    || collision.samples[0]?.edge !== 'other'
+    || cleared.edgeLabelIntrusions !== 0 || cleared.labelNodeIntrusions !== 0) {
+    throw new Error('Real SVG relation visibility regression: ' + JSON.stringify({ collision, cleared }))
+  }
+}
 for (const mode of ['light', 'dark']) {
   const cases = externalCases || mermaidDiagramTypes.map(({ type }) => ({ type, name: type, source: createTemplate(type, '测试图表') }))
   for (const { type, name = type, source } of cases) {
@@ -347,6 +379,7 @@ function inspectRenderedSvg(svg, type) {
   const nodeSelector = type === 'flowchart' || type === 'state' || type === 'class' ? 'g.node' : ''
   const nodes = nodeSelector ? [...svgEl.querySelectorAll(nodeSelector)].map(safeRect).filter(Boolean) : []
   const labels = [...svgEl.querySelectorAll('g.edgeLabel')].map(safeRect).filter(Boolean)
+  const relationshipOcclusion = measureMermaidRelationOcclusion(svgEl)
   // Mermaid Sankey intentionally paints the same text twice at the exact
   // coordinates for contrast. Count distinct visual labels, not SVG layers.
   const seenText = new Set()
@@ -365,6 +398,9 @@ function inspectRenderedSvg(svg, type) {
     nodeOverlaps: countOverlappingRects(nodes, 4),
     labelOverlaps: countOverlappingRects(labels, 8),
     textOverlaps: countOverlappingRects(textBoxes, 2),
+    edgeLabelIntrusions: relationshipOcclusion.edgeLabelIntrusions,
+    labelNodeIntrusions: relationshipOcclusion.labelNodeIntrusions,
+    edgeLabelPairs: relationshipOcclusion.samples,
     overflowSamples: overflowEntries.slice(0, 10).map((entry) => entry.tag + ':' + entry.text),
   }
   host.remove()
