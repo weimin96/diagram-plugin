@@ -37,8 +37,8 @@ test('真实依赖密集图不能因不穿节点就获得错误的自动审查�
   const composed = composeArchitectureGraph(sample.intent)
   const q = composed.quality.metrics
   assert.equal(q.edgeNodeIntersections, 0)
-  assert.ok(q.edgeCrossings <= 1,
-    'alternating constrained placement/routing must prevent the original real-source crossing regression')
+  assert.equal(q.edgeCrossings, 0,
+    'prioritized full-scene negotiation and residual cleanup must eliminate the real-source crossings')
   assert.ok(q.edgeOverlaps <= 3,
     'joint terminal and corridor negotiation must preserve the real independent-overlap improvement')
   assert.ok(canvasBundleTrunks(composed.scene).length >= 2,
@@ -47,8 +47,8 @@ test('真实依赖密集图不能因不穿节点就获得错误的自动审查�
     'joint corridor negotiation must preserve the measured total-route improvement')
   assert.ok(composed.routeDiagnostics.perimeterDetours <= 8,
     'joint optimization must actually reduce real same-region exterior detours')
-  assert.ok(composed.evaluation.structuralScore >= 76,
-    'capacity-aware incoming ports and joint corridor negotiation must improve the complete scene')
+  assert.ok(composed.evaluation.structuralScore >= 81,
+    'prioritized routing and bounded residual cleanup must improve the complete scene')
   assert.ok(composed.candidates.some((candidate) =>
     candidate.layout === composed.evaluation.layout
     && candidate.density === composed.evaluation.density

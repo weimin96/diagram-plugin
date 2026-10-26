@@ -779,15 +779,32 @@ function optimizeCongestedRoutes(result: ReturnType<typeof composeArchitectureGr
 function negotiateFinalCorridors(result: ReturnType<typeof composeArchitectureGraphCandidate>) {
   let selected = result
   const requiredTrunks = canvasBundleTrunks(result.scene).length
-  for (let round = 0; round < 6; round++) {
+  // Allocate search budget by information value: resolve measured conflicts
+  // first, inspect every real relation before committing, then cheaply
+  // reconcile residual overlaps/ports. Every accepted scene still passes the
+  // same complete Canvas quality, route, readability and trunk gates.
+  const focusedRounds = 4, completeRounds = 2, residualRounds = 4
+  for (let round = 0; round < focusedRounds + completeRounds + residualRounds; round++) {
     let best: typeof result | undefined
     let bestGain = 0
     const proposals = proposeIngressPortSlots(selected.scene).map((scene) => ({ scene, routeChanged: false }))
-    const arrows = selected.scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow')
+    const prioritized = new Set([...selected.quality.issues
+      .filter((issue) => ['edge-crossing', 'edge-overlap', 'edge-through-node'].includes(issue.code))
+      .flatMap((issue) => issue.elementIds),
+      ...selected.routeDiagnostics.worstPerimeterDetours.map((detour) => detour.edgeId)])
+    const residualConflictOnly = round >= focusedRounds + completeRounds
+    const conflicts = new Set(selected.quality.issues
+      .filter((issue) => ['edge-crossing', 'edge-overlap'].includes(issue.code))
+      .flatMap((issue) => issue.elementIds))
+    const arrows = selected.scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow'
+      && (residualConflictOnly ? conflicts.has(item.id)
+        : round >= focusedRounds || prioritized.has(item.id)))
     for (const arrow of arrows) {
       proposals.push(
-        { scene: routeArchitectureArrowIds(selected.scene, [arrow.id], false), routeChanged: true },
-        { scene: routeArchitectureArrowIds(selected.scene, [arrow.id], true), routeChanged: true },
+        ...(!residualConflictOnly ? [
+          { scene: routeArchitectureArrowIds(selected.scene, [arrow.id], false), routeChanged: true },
+          { scene: routeArchitectureArrowIds(selected.scene, [arrow.id], true), routeChanged: true },
+        ] : []),
         ...nudgeArchitectureCorridors(selected.scene, arrow.id).map((scene) => ({ scene, routeChanged: true })),
       )
     }
