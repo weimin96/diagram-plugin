@@ -20,6 +20,14 @@ export interface DiagramQualityFinding {
   origin: 'source' | 'geometry' | 'browser'
 }
 
+/** Suggestions are reviewable next steps, never implicit rewrites. */
+export interface DiagramRepairSuggestion {
+  findingCode: string
+  target: 'source' | 'layout' | 'presentation'
+  action: string
+  automatic: false
+}
+
 /** One transport contract, not a replacement for each engine's exact metrics.
  * A browser measurement is NOT a perceptual review; a review is NOT approval. */
 export interface DiagramQualityReport {
@@ -32,7 +40,61 @@ export interface DiagramQualityReport {
   humanApproval: 'not-approved'
   evidence: 'source' | 'browser'
   findings: DiagramQualityFinding[]
+  repairSuggestions: DiagramRepairSuggestion[]
   metrics: Record<string, number>
+}
+
+function suggestRepair(
+  type: DiagramType, findings: readonly DiagramQualityFinding[],
+): DiagramRepairSuggestion[] {
+  const suggestions: DiagramRepairSuggestion[] = []
+  const used = new Set<string>()
+  const add = (code: string, target: DiagramRepairSuggestion['target'], action: string) => {
+    const key = code + ':' + target
+    if (used.has(key)) return
+    used.add(key)
+    suggestions.push({ findingCode: code, target, action, automatic: false })
+  }
+  for (const issue of findings) {
+    switch (issue.code) {
+      case 'source-readability': {
+        const action = type === 'sequence' ? '按消息阶段或参与者分视图，保持原消息顺序和方向。'
+          : type === 'flowchart' || type === 'state' ? '按真实子流程/状态层次规划总览与细节视图，保留全部转换和异常路径。'
+            : type === 'er' || type === 'class' ? '按领域/职责分视图，保留实体、属性、继承及原有关系。'
+              : type === 'gantt' || type === 'timeline' || type === 'journey' ? '按真实阶段划分阅读视图，不更改任务、日期或事件事实。'
+                : '检查数据密度与最长标签，优先调整阅读分组，不丢弃原始条目或数据。'
+        add(issue.code, 'source', action)
+        break
+      }
+      case 'edge-crossing':
+      case 'edge-overlap':
+      case 'edge-through-node':
+      case 'node-overlap':
+        add(issue.code, 'layout', '检查节点尺寸、端口与布局约束；仅采纳经过完整图几何和语义保真复验的候选。')
+        break
+      case 'text-overlap':
+      case 'text-overflow':
+      case 'label-overlap':
+      case 'label-outside-canvas': {
+        const action = type === 'radar' ? '检查雷达图标题与轴名称的布局距离，保持原始维度和数值。'
+          : type === 'xychart' || type === 'pie' || type === 'sankey' ? '检查数据标签与图例空间，不能改写数值或类别来掩盖碰撞。'
+            : '检查标题与标签的真实像素尺寸、换行和留白，不通过缩小字号掩盖溢出。'
+        add(issue.code, 'presentation', action)
+        break
+      }
+      case 'excessive-edge-detour':
+        add(issue.code, 'layout', '联合检查端口容量、节点层次和走廊，不删除或伪造实际依赖。')
+        break
+      case 'invalid-render-size':
+        add(issue.code, 'presentation', '先修复渲染尺寸与 SVG viewBox，再重新进行浏览器几何和像素验收。')
+        break
+      default:
+        if (issue.code === 'visual-review-blocked') {
+          add(issue.code, 'presentation', '按具体阻断项整改后重新生成当前版本截图；机器合格不能代替人工批准。')
+        }
+    }
+  }
+  return suggestions
 }
 
 export function summarizeCanvasQuality(
@@ -54,7 +116,8 @@ export function summarizeCanvasQuality(
     geometry: quality.needsRevision ? 'needs-revision' : 'passed',
     visualReview: review ? review.readyForVisualReview ? 'eligible' : 'blocked' : 'not-assessed',
     humanApproval: 'not-approved', evidence: 'source',
-    findings, metrics: { ...quality.metrics },
+    findings, repairSuggestions: suggestRepair('canvas', findings),
+    metrics: { ...quality.metrics },
   }
 }
 
@@ -96,7 +159,7 @@ export function summarizeMermaidQuality(
     // Browser pixel geometry alone cannot approve a composition or readability.
     visualReview: 'not-assessed', humanApproval: 'not-approved',
     evidence: render ? 'browser' : 'source',
-    findings,
+    findings, repairSuggestions: suggestRepair(type, findings),
     metrics: { ...quality.metrics, ...(render ? { ...render } : {}) },
   }
 }

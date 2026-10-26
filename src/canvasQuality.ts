@@ -10,6 +10,7 @@ import {
   type CanvasPoint,
   type CanvasScene,
 } from './canvas.js'
+import { rectsOverlapWithInset } from './diagramGeometry.js'
 
 export type CanvasQualityIssueCode =
   | 'node-overlap'
@@ -472,11 +473,7 @@ function architectureStructureIssues(scene: CanvasScene, boxes: CanvasBox[], arr
 }
 
 function boxesOverlap(left: Pick<CanvasBox, 'x' | 'y' | 'width' | 'height'>, right: Pick<CanvasBox, 'x' | 'y' | 'width' | 'height'>): boolean {
-  const inset = 2
-  return left.x + inset < right.x + right.width - inset
-    && left.x + left.width - inset > right.x + inset
-    && left.y + inset < right.y + right.height - inset
-    && left.y + left.height - inset > right.y + inset
+  return rectsOverlapWithInset(left, right, 2)
 }
 
 function arrowRoute(arrow: CanvasArrow, boxes: Map<string, CanvasBox>): CanvasPoint[] | undefined {

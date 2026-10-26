@@ -25,6 +25,7 @@
 - `architectureRouteRepair.ts`：在有边界预算内提出局部几何候选；不负责采纳。
 - `canvasQuality.ts`、`architectureRouteDiagnostics.ts`、`architecturePresentationQuality.ts`、`architectureVisualPlan.ts`：共享最终可编辑场景的结构、路线、阅读质量与审查资格事实。
 - `diagramQuality.ts`：Canvas 和 19 种 Mermaid 的统一质量报告**只负责汇总现有专业检查和浏览器测量**，不取代各类型语法、布局及质量规则。必须区分源码检查、可编辑几何检查、实际浏览器测量、独立感知评审和人工批准；未做的检查不得自动标为通过。
+- `diagramGeometry.ts`：Canvas 与 Mermaid Chrome 测量复用相同的纯矩形几何；保持原有可编辑 Canvas 的接触/内缩阈值与浏览器的像素重叠阈值分别受控。`diagramQuality.repairSuggestions` 只能提出具有问题证据的整改方向，不自动改写源文档或宣称人工批准。
 - `CanvasEditor.tsx`、`canvas.ts`：渲染与交互消费同一文档合同；任何阅读聚焦都是非破坏式的，不自动改写、丢弃或伪造真实关系。
 - 密集且具有已验证关键关系的架构图默认以关键依赖层级阅读，`全部` 仍可随时显示所有真实关系；静态 SVG 只调整非重点线的视觉权重，不删除路径或损失端点悬停来源。缺乏可靠主链时不自动判断所谓“关键”。
 

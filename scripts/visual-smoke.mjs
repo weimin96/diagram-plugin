@@ -9,6 +9,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const temp = await mkdtemp(path.join(os.tmpdir(), 'diagram-plugin-visual-'))
 const sourceDir = readSourceDirArg(process.argv.slice(2))
 const qualityBenchmark = process.argv.includes('--quality-benchmark')
+const reportFile = process.argv.find((arg) => arg.startsWith('--report-file='))?.slice('--report-file='.length)
 
 try {
   const chrome = await findChrome()
@@ -96,6 +97,20 @@ async function runVisualSmoke(chrome, externalCases, qualityBenchmark) {
     }
     if (hardOversized.length) {
       throw new Error(`Visual smoke oversized diagrams:\n${hardOversized.map((item) => `${item.mode}/${item.name ?? item.type}: ${item.width}x${item.height}`).join('\n')}`)
+    }
+    if (reportFile) {
+      const file = path.resolve(root, reportFile)
+      await mkdir(path.dirname(file), { recursive: true })
+      await writeFile(file, JSON.stringify({
+        schemaVersion: 1,
+        kind: 'mermaid-browser-quality',
+        cases: result.map(({ mode, name, type, qualityReport }) => ({
+          mode, name, type, quality: qualityReport,
+        })),
+        // These are machine observations only, not a Luna review or approval.
+        reviewedByHuman: false,
+      }, null, 2) + '\n')
+      console.log(`Browser quality report: ${file}`)
     }
     console.log(`Diagram Plugin visual smoke passed: ${result.length} browser renders${externalCases ? ' from external cases' : ''}.`)
   } finally {
@@ -195,6 +210,7 @@ function browserEntry(externalCases) {
 import mermaid from 'mermaid'
 import { fitMermaidSvgToContent } from ${JSON.stringify(path.join(root, 'src/mermaidSvg.ts'))}
 import { summarizeMermaidQuality } from ${JSON.stringify(path.join(root, 'src/diagramQuality.ts'))}
+import { rectContains, countOverlappingRects } from ${JSON.stringify(path.join(root, 'src/diagramGeometry.ts'))}
 import { createTemplate } from ${JSON.stringify(templates)}
 import { mermaidDiagramTypes } from ${JSON.stringify(types)}
 import { mermaidVisualConfig, normalizeMermaidSourceForRender } from ${JSON.stringify(grammar)}
@@ -251,7 +267,7 @@ function inspectRenderedSvg(svg, type) {
       text: (element.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 80),
     }))
     .filter((entry) => entry.box && entry.box.width > 0 && entry.box.height > 0 && entry.text.length > 0)
-  const overflowEntries = bounds ? contentEntries.filter((entry) => !containsBox(bounds, entry.box, 3)) : []
+  const overflowEntries = bounds ? contentEntries.filter((entry) => !rectContains(bounds, entry.box, 3)) : []
   const contentOverflow = overflowEntries.length
   const nodeSelector = type === 'flowchart' || type === 'state' || type === 'class' ? 'g.node' : ''
   const nodes = nodeSelector ? [...svgEl.querySelectorAll(nodeSelector)].map(safeRect).filter(Boolean) : []
@@ -271,9 +287,9 @@ function inspectRenderedSvg(svg, type) {
   })
   const result = {
     contentOverflow,
-    nodeOverlaps: countOverlaps(nodes, 4),
-    labelOverlaps: countOverlaps(labels, 8),
-    textOverlaps: countOverlaps(textBoxes, 2),
+    nodeOverlaps: countOverlappingRects(nodes, 4),
+    labelOverlaps: countOverlappingRects(labels, 8),
+    textOverlaps: countOverlappingRects(textBoxes, 2),
     overflowSamples: overflowEntries.slice(0, 10).map((entry) => entry.tag + ':' + entry.text),
   }
   host.remove()
@@ -287,25 +303,6 @@ function safeRect(element) {
   } catch {
     return undefined
   }
-}
-function containsBox(outer, inner, tolerance) {
-  return inner.x >= outer.x - tolerance
-    && inner.y >= outer.y - tolerance
-    && inner.x + inner.width <= outer.x + outer.width + tolerance
-    && inner.y + inner.height <= outer.y + outer.height + tolerance
-}
-function countOverlaps(boxes, tolerance) {
-  let overlaps = 0
-  for (let i = 0; i < boxes.length; i += 1) {
-    for (let j = i + 1; j < boxes.length; j += 1) {
-      const a = boxes[i]
-      const b = boxes[j]
-      const width = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)
-      const height = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y)
-      if (width > tolerance && height > tolerance) overlaps += 1
-    }
-  }
-  return overlaps
 }
 const pre = document.createElement('pre')
 pre.id = 'result'

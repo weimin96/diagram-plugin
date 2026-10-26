@@ -3,6 +3,7 @@ import test from 'node:test'
 import { assessCanvasVisualQuality } from '../src/canvasQuality.js'
 import { parseCanvasScene, createCanvasSource } from '../src/canvas.js'
 import { summarizeCanvasQuality, summarizeMermaidQuality } from '../src/diagramQuality.js'
+import { countOverlappingRects, rectContains, rectsOverlapWithInset } from '../src/diagramGeometry.js'
 import { assessMermaidVisualQuality } from '../src/mermaidQuality.js'
 import { mermaidDiagramTypes } from '../src/types.js'
 import { createTemplate } from '../src/templates.js'
@@ -21,6 +22,8 @@ test('one quality report preserves Canvas facts and never invents a human approv
   assert.equal(blocked.visualReview, 'blocked')
   assert.ok(blocked.needsRevision)
   assert.ok(blocked.findings.some((item) => item.code === 'visual-review-blocked'))
+  assert.ok(blocked.repairSuggestions.some((item) => item.findingCode === 'visual-review-blocked'
+    && item.automatic === false))
   const eligible = summarizeCanvasQuality(source, { readyForVisualReview: true, blockers: [] })
   assert.equal(eligible.visualReview, 'eligible')
   assert.equal(eligible.humanApproval, 'not-approved')
@@ -60,4 +63,29 @@ test('all 19 semantic engines use the same report, but source-only cannot claim 
   assert.ok(textWarning.findings.some((issue) => issue.code === 'text-overlap'
     && issue.severity === 'warning' && issue.origin === 'browser'))
   assert.equal(obstructed.humanApproval, 'not-approved')
+  assert.ok(obstructed.repairSuggestions.some((item) => item.findingCode === 'text-overflow'
+    && item.target === 'presentation' && item.automatic === false))
+  const denseSequence = summarizeMermaidQuality('sequence', assessMermaidVisualQuality(
+    'sequence', ['sequenceDiagram', ...Array.from({ length: 11 }, (_, i) => `participant P${i}`),
+      'P0->>P1: call'].join('\n')))
+  assert.ok(denseSequence.repairSuggestions.some((item) => item.target === 'source'
+    && item.action.includes('消息') && item.action.includes('顺序')))
+  assert.ok(textWarning.repairSuggestions.some((item) => item.action.includes('雷达图')
+    && item.target === 'presentation'))
+})
+
+test('shared rectangle semantics preserve Canvas insets and browser-pixel strict thresholds', () => {
+  const a = { x: 0, y: 0, width: 100, height: 60 }
+  const barely = { x: 97, y: 8, width: 120, height: 50 }
+  const overlaps = { x: 95, y: 8, width: 120, height: 50 }
+  assert.equal(rectsOverlapWithInset(a, barely, 2), false,
+    'Canvas intentionally ignores a 3px border contact')
+  assert.equal(rectsOverlapWithInset(a, overlaps, 2), true,
+    'Canvas still detects interior overlap beyond the existing 2px insets')
+  assert.equal(rectContains(a, { x: -2, y: -2, width: 50, height: 50 }, 2), true)
+  assert.equal(rectContains(a, { x: -4, y: 0, width: 50, height: 50 }, 2), false)
+  assert.equal(countOverlappingRects([a, barely], 4), 0)
+  assert.equal(countOverlappingRects([a, overlaps], 4), 1)
+  assert.equal(countOverlappingRects([a, overlaps, overlaps], 4), 3,
+    'each browser-rendered text pair is counted exactly once')
 })

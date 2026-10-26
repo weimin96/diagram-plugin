@@ -489,7 +489,10 @@ export function mermaidVisualConfig(type: MermaidDiagramType | 'unknown', palett
     radar: {
       width: 620,
       height: 520,
-      marginTop: 44,
+      // Leave space between the title and the upper axis label. Real Chrome
+      // geometry A/B: 44px had one text collision; 56px has zero with only
+      // 12px extra height. Keep authored radar data and axes untouched.
+      marginTop: 56,
       marginRight: 72,
       marginBottom: 54,
       marginLeft: 72,

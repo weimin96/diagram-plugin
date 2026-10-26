@@ -129,6 +129,10 @@ DeepSeek Harness 需要执行真实 `read_image` 工具调用并在原始 JSONL 
 - 复杂场景夹具从 12 个扩展到 **20 个**，覆盖所有 **19 种 Mermaid 类型**。Chrome 实测：默认模板 19×2=38 次渲染；复杂场景 20×2=40 次渲染；固定像素黄金图从 24 张扩展到 **40 张**（旧 24 张原封不动）。`tests/diagramSkills.test.ts` 以数据驱动方式阻止未来添加图表类型却缺少场景或黄金图；新增质量映射单测覆盖 19 种引擎、真实 Canvas 报告及失败证据，测试方法合计保持在 **300 条以内**。
 - **下一步**：用统一报告定位每种图表真实失败点，再优先抽取流程、状态、类、ER 与 Canvas 共用的纯测量/几何能力；仍由专业图表保留各自合法语法和渲染布局。不要把架构图整套正交路由搬进桑基图、时间线或数据图，也不要将所有 Mermaid 强制迁移为 Canvas。
 
+**共享几何与可执行整改依据（第二阶段）**：`diagramGeometry.ts` 的纯矩形检测同时用于 Canvas 节点相交与 Mermaid Chrome 证据，不改变原来的 2px 内缩、浏览器重叠阈值和内容容差。`DiagramQualityReport.repairSuggestions` 针对不同图表与具体已观测问题给出 `source/layout/presentation` 目标和约束，全部标记 `automatic=false`；它不是已经自动完成修复，更不能擅自删减源数据/关系。通过 `pnpm visual:quality:report` 将 19 类专业图表、20 个场景 × 明暗主题的实际 Chrome 观测写入忽略目录 `test-results/diagram-quality/mermaid-types.json`。发现雷达标题/轴标签 1 处警告；桑基文本增强描绘造成的 22 对重复 SVG Text 已按相同文本与几何去重，证实为 0 个独立碰撞；保留图片样式与原文数据不变。下一步针对有真实证据的文字排版与标签问题做保真 A/B 修复，仍需独立视觉评审与人工批准。
+
+**首个问题驱动修复案例**：Chrome 真实雷达图顶部轴标签与标题相交 1 处。对渲染配置的 `marginTop` 进行 56/72/88px A/B（旧值 44px）：三者均清除文字冲突，仅 56px 额外增加 12px 高度，故采用 56px 并更新对应明/暗像素基准。该修改保持 Mermaid 源文件、维度与数值不变；完整图表 Chrome 几何和像素门禁仍执行。这是手工经 A/B 证明的修复，尚非自动修改管线或 Luna Max 人工批准。
+
 **Codex：** `pnpm plugin:install` 安装源码版本；Desktop 已开启时使用 `pnpm plugin:install:desktop` 刷新。公开 npm 版通过 `npx -y @weimin96/diagram-plugin@latest install --codex` 安装。注意不要同时开启 `diagram-plugin-local` 与 `diagram-plugin-npm`。
 
 **DSH Desktop：** 退出 Desktop、运行 `pnpm build`，再执行：
