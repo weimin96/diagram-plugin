@@ -447,6 +447,21 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .freeform-architecture-dependency-navigation .freeform-menu-stack small { font-size: 10px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
 .freeform-architecture-dependency-navigation .freeform-menu-stack > button.is-selected { background: var(--surface-hover); color: var(--text-primary); }
 .freeform-architecture-dependency-navigation .freeform-menu-stack > button.is-selected::after { display: none; }
+.freeform-relation-explorer-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.freeform-relation-explorer-header strong { color: var(--text-primary); font-size: 12px; font-weight: 650; }
+.freeform-relation-explorer-header small, .freeform-architecture-relation-explorer > small { color: var(--text-tertiary); font-size: 11px; font-variant-numeric: tabular-nums; }
+.freeform-architecture-relation-explorer > input {
+  height: 30px; width: 100%; min-width: 0; padding: 0 9px;
+  border: 1px solid var(--border); border-radius: 6px; outline: none;
+  background: var(--surface-panel); color: var(--text-primary); font: inherit; font-size: 12px;
+}
+.freeform-architecture-relation-explorer > input:focus-visible { border-color: var(--accent); }
+.freeform-relation-explorer-list { display: grid; max-height: 178px; gap: 2px; overflow: auto; overscroll-behavior: contain; }
+.freeform-toolbar-menu .freeform-relation-explorer-list > button { height: auto; min-height: 40px; padding: 5px 8px; white-space: normal; }
+.freeform-relation-endpoints { display: grid; min-width: 0; gap: 1px; line-height: 1.3; }
+.freeform-relation-endpoints > span { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.freeform-relation-endpoints > span + span { color: var(--text-tertiary); }
+.freeform-relation-explorer-list > button small { display: block; font-size: 10px; color: var(--text-tertiary); }
 .freeform-menu-depth { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 6px; color: var(--text-tertiary); font-size: 12px; }
 .freeform-menu-depth select { height: 27px; min-width: 0; padding: 0 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--app-bg); color: var(--text-secondary); font-size: 12px; }
 .freeform-layout-select { height: 28px; max-width: 94px; padding: 0 22px 0 7px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 10px; }

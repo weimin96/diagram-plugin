@@ -9,6 +9,7 @@
 - 质量：`canvasQuality.ts`、`architectureRouteDiagnostics.ts`、`architecturePresentationQuality.ts` 和 `architectureVisualPlan.ts` 检查**最终** Canvas。`visualPlan.review.blockers` 是机器审查阻断的唯一输出，不得以未阻断的几何指标代替交付批准。
 - 编辑与持久化：Canvas 使用 `.diagram.json`，Mermaid 使用 `.mmd` / `.mermaid`；`CanvasEditor.tsx` 与 `canvas.ts` 共用节点、箭头与端口语义。保存/重开、revision 冲突、提案审批、文件原子写入和人工作图不得被自动重排破坏。
 - 密集架构图的节点属性面板会按实际有向关系列出入边（谁引用当前节点）与出边（当前节点引用谁），点击单条关系进入精准高亮；所有真实关系保持不变。`arch-*` 语义边界不会把单节点选择扩展为整组选中。Chrome 真实交互回归：`pnpm benchmark:architecture:relation-lens`。
+- **全图依赖定位**：架构工具的「定位依赖」提供按真实来源、目标、关系文字与 ID 的搜索；基于实际目标入度排列拥挤关系，平行关系按箭头 ID 分别列出。点选任何结果会聚焦准确关系并将视口移动到其真实两端节点，不重排节点或改写文档；局部视图和追踪模式下先解除临时过滤。实际 Chrome 回归验证检索、精确选中、全部箭头保留和切回完整关系。架构图的静态 PNG 几何与旧版不变，该入口改善交互可追踪性，**不代表自动布局的主观评分改善**。
 - 宿主：`src/hosts/`、`integrations/deepseek/` 与打包层隔离 Codex、DSH Desktop/Web 差异，复用同一图表领域代码和画板。
 
 下一阶段是**统一约束下的节点/分区/端口/走廊联合布局**。任何替代方案必须与现有 Canonical Canvas 合同进行同语义、同尺寸、同渲染/导出、同完整指标 A/B；未证明改善就撤销试验代码，不继续叠加条件路由器。ELK 和 D2/TALA 保留独立实验，不因单项指标较好或 native SVG 可看就进入正式依赖；还必须检查许可证与几何回灌保真。

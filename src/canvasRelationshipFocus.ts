@@ -14,6 +14,47 @@ export interface CanvasNodeRelation {
   label?: string
 }
 
+export interface CanvasIndexedRelation extends CanvasRelationshipFocus {
+  fromLabel: string
+  toLabel: string
+  label?: string
+  incomingCount: number
+}
+
+/** Read-only lookup for dense diagrams, ranked by real target fan-in.
+ * Never collapses parallel edges or derives relationships that do not exist.
+ * All results retain the original arrow ID for exact selection. */
+export function searchCanvasRelations(
+  nodes: readonly { id: string; text: string }[],
+  relations: readonly (CanvasRelationshipFocus & { label?: string })[],
+  query: string,
+  limit = 60,
+): { matches: CanvasIndexedRelation[]; total: number } {
+  const names = new Map(nodes.map((node) => [node.id, node.text]))
+  const counts = new Map<string, number>()
+  for (const relation of relations) {
+    if (!names.has(relation.from) || !names.has(relation.to)) continue
+    counts.set(relation.to, (counts.get(relation.to) ?? 0) + 1)
+  }
+  const needle = query.trim().toLocaleLowerCase()
+  const available: CanvasIndexedRelation[] = []
+  for (const relation of relations) {
+    const fromLabel = names.get(relation.from), toLabel = names.get(relation.to)
+    if (fromLabel === undefined || toLabel === undefined) continue
+    if (needle && ![fromLabel, toLabel, relation.from, relation.to, relation.label ?? '', relation.id]
+      .some((part) => part.toLocaleLowerCase().includes(needle))) continue
+    available.push({
+      id: relation.id, from: relation.from, to: relation.to, fromLabel, toLabel,
+      label: relation.label, incomingCount: counts.get(relation.to) ?? 0,
+    })
+  }
+  available.sort((a, b) => b.incomingCount - a.incomingCount
+    || a.toLabel.localeCompare(b.toLabel, 'en')
+    || a.fromLabel.localeCompare(b.fromLabel, 'en')
+    || a.id.localeCompare(b.id, 'en'))
+  return { matches: available.slice(0, limit), total: available.length }
+}
+
 /** Deterministic one-hop relationship index, preserving every real edge
  * (including parallel edges). Displaying a relation never changes its graph
  * direction, saved Canvas state, or the geometry of the original arrows. */

@@ -129,7 +129,27 @@ setTimeout(() => {
                         setTimeout(() => {
                           result.denseCanReturnToAll = !denseEditor?.classList.contains('has-key-dependency-lens')
                             && document.querySelectorAll('#root-dense .freeform-arrow[data-element-id]').length === 12
-                          document.getElementById('result').textContent = JSON.stringify(result)
+                          const search = document.querySelector('[aria-label="搜索真实依赖"]')
+                          result.denseRelationSearch = Boolean(search)
+                          if (search) {
+                            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(search, 'Module 5')
+                            search.dispatchEvent(new Event('input', { bubbles: true }))
+                          }
+                          setTimeout(() => {
+                            const matches = [...document.querySelectorAll('.freeform-relation-explorer-list button')]
+                            result.denseRelationMatches = matches.length === 2
+                              && matches.every((button) => button.textContent?.includes('Module 5'))
+                            const previousViewBox = document.querySelector('#root-dense .freeform-svg')?.getAttribute('viewBox')
+                            matches[0]?.click()
+                            setTimeout(() => {
+                              result.denseGlobalExactEdge = denseEditor?.classList.contains('has-relation-lens')
+                                && ['dense-edge-5', 'dense-edge-11'].some((id) =>
+                                  document.querySelector('#root-dense [data-element-id="' + id + '"].freeform-arrow')?.classList.contains('is-selected'))
+                              result.denseGlobalPreservesEdges = document.querySelectorAll('#root-dense .freeform-arrow[data-element-id]').length === 12
+                              result.denseGlobalMovesViewport = document.querySelector('#root-dense .freeform-svg')?.getAttribute('viewBox') !== previousViewBox
+                              document.getElementById('result').textContent = JSON.stringify(result)
+                            }, 100)
+                          }, 100)
                         }, 100)
                       }, 100)
                     }, 100)
@@ -170,7 +190,9 @@ setTimeout(() => {
     || !result.focusOverridesKey || !result.keyResumes || !result.keyReset || !result.allEdgesRetained
     || !result.nodeRelationCounts || result.nodeRelationNames?.length !== 2
     || !result.navigatorSelectsExactEdge || !result.navigatorPreservesEdges
-    || !result.denseDefaultKeyLens || !result.denseRetainsEdges || !result.denseCanReturnToAll) {
+    || !result.denseDefaultKeyLens || !result.denseRetainsEdges || !result.denseCanReturnToAll
+    || !result.denseRelationSearch || !result.denseRelationMatches || !result.denseGlobalExactEdge
+    || !result.denseGlobalPreservesEdges || !result.denseGlobalMovesViewport) {
     throw new Error('The real React Canvas relationship lens failed visual/state interaction checks')
   }
 } finally {

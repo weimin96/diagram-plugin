@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { canvasNodeRelations, resolveCanvasRelationshipFocus } from '../src/canvasRelationshipFocus.js'
+import { canvasNodeRelations, resolveCanvasRelationshipFocus, searchCanvasRelations } from '../src/canvasRelationshipFocus.js'
 import { projectArchitectureCase } from '../scripts/architecture-project-cases.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { serializeCanvasScene } from '../src/canvas.js'
@@ -43,6 +43,33 @@ test('node relationship navigator keeps all actual incoming and outgoing edges, 
   assert.deepEqual(relations.outgoing.map((edge) => [edge.id, edge.oppositeId]), [['c', 'api']])
   assert.equal(JSON.stringify(edges), original, 'navigator must not mutate or infer graph edges')
   assert.deepEqual(canvasNodeRelations('missing', nodes, edges), { incoming: [], outgoing: [] })
+})
+
+test('global relation lookup prioritizes real fan-in and retains parallel edge identity', () => {
+  const nodes = [
+    { id: 'hub', text: 'Canvas' }, { id: 'left', text: 'Architecture Composer' },
+    { id: 'right', text: 'Route Solver' },
+  ]
+  const edges = [
+    { id: 'a', from: 'left', to: 'hub', label: 'render' },
+    { id: 'b', from: 'left', to: 'hub', label: 'export' },
+    { id: 'c', from: 'right', to: 'hub' },
+    { id: 'd', from: 'hub', to: 'right' },
+    { id: 'invalid', from: 'missing', to: 'hub' },
+  ]
+  const original = JSON.stringify(edges)
+  const all = searchCanvasRelations(nodes, edges, '')
+  assert.equal(all.total, 4)
+  assert.deepEqual(all.matches.map((item) => item.id), ['a', 'b', 'c', 'd'],
+    'real target fan-in surfaces the crowded hub without merging parallel edges')
+  assert.deepEqual(all.matches.slice(0, 3).map((item) => item.incomingCount), [3, 3, 3])
+  assert.deepEqual(searchCanvasRelations(nodes, edges, 'composer').matches.map((item) => item.id),
+    ['a', 'b'], 'source label can locate exact relationships')
+  assert.deepEqual(searchCanvasRelations(nodes, edges, 'render').matches.map((item) => item.id),
+    ['a'], 'relationship label can locate exact relationships')
+  assert.deepEqual(searchCanvasRelations(nodes, edges, 'CANVAS', 2).matches.map((item) => item.id),
+    ['a', 'b'], 'matching is case insensitive and limiting results never alters the source')
+  assert.equal(JSON.stringify(edges), original)
 })
 
 test('real source-module arrows focus only their actual direction and never mutate Canvas', async () => {

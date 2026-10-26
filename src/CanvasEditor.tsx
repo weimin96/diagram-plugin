@@ -1,7 +1,7 @@
 import { routeArchitectureArrowIds, routeArchitectureEdges, routeArchitectureEdgesIncremental } from './architectureRouting.js'
 import { canvasVisualSkin, canvasStyledBox, canvasFillTextColor, diagramVisualStyles, type DiagramVisualStyle } from './diagramVisualStyles.js'
 import { canvasArrowLabelText } from './canvasLabelText.js'
-import { canvasNodeRelations, resolveCanvasRelationshipFocus } from './canvasRelationshipFocus.js'
+import { canvasNodeRelations, resolveCanvasRelationshipFocus, searchCanvasRelations } from './canvasRelationshipFocus.js'
 import { canvasKeyDependencyLens, preferKeyDependencyLens } from './canvasDependencyLens.js'
 import { canvasArchitecturePlainTitleLines } from './canvasNodeTitleLayout.js'
 import { CanvasRectIndex } from './canvasRectIndex.js'
@@ -408,6 +408,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   const [architectureScope, setArchitectureScope] = useState<CanvasArchitectureScope | null>(null)
   const [keyDependenciesOnly, setKeyDependenciesOnly] = useState(() =>
     parsed.scene ? preferKeyDependencyLens(parsed.scene) : false)
+  const [relationQuery, setRelationQuery] = useState('')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [hoveredRelationId, setHoveredRelationId] = useState<string | null>(null)
   const keyDependencyLens = useMemo(() => parsed.scene?.architecture
@@ -416,6 +417,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
     // This is a per-diagram reading preference, not saved Canvas state.
     setKeyDependenciesOnly(parsed.scene ? preferKeyDependencyLens(parsed.scene) : false)
     setHoveredRelationId(null)
+    setRelationQuery('')
   }, [focusKey])
   const [connectFrom, setConnectFrom] = useState<string | null>(null)
   const [connectFromAnchor, setConnectFromAnchor] = useState<CanvasAnchor>('auto')
@@ -915,6 +917,9 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   }, [architectureScope, lodScene, lodLevel, lodSelection])
   const sourceBoxes = useMemo(() => parsed.scene?.elements.filter((item): item is CanvasNode | CanvasNote => item.type !== 'arrow') ?? [], [parsed.scene])
   const sourceArrows = useMemo(() => parsed.scene?.elements.filter((item): item is CanvasArrow => item.type === 'arrow') ?? [], [parsed.scene])
+  const relationCatalog = useMemo(() => parsed.scene?.architecture && toolbarMenu === 'architecture'
+    ? searchCanvasRelations(sourceBoxes, sourceArrows, relationQuery) : null,
+  [parsed.scene?.architecture, toolbarMenu, sourceBoxes, sourceArrows, relationQuery])
   const selectedNodeRelations = useMemo(() => selectedIds.length === 1 && sourceBoxes.some((node) => node.id === selectedIds[0])
     ? canvasNodeRelations(selectedIds[0], sourceBoxes, sourceArrows) : null,
   [selectedIds, sourceBoxes, sourceArrows])
@@ -2847,6 +2852,47 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                         onClick={() => { setKeyDependenciesOnly(true); setHoveredRelationId(null); setSelectedIds([]) }}>关键</button>
                     </div>
                   </section>
+                  {sourceArrows.length ? (
+                    <section className="freeform-architecture-relation-explorer" aria-label="全图真实依赖索引">
+                      <div className="freeform-relation-explorer-header">
+                        <strong>定位依赖</strong>
+                        <small>{relationCatalog?.total ?? 0}{relationQuery.trim() ? ` / ${sourceArrows.length}` : ' 条'}</small>
+                      </div>
+                      <input
+                        type="search"
+                        aria-label="搜索真实依赖"
+                        placeholder="搜索来源、目标或关系"
+                        value={relationQuery}
+                        onChange={(event) => setRelationQuery(event.target.value)}
+                      />
+                      <div className="freeform-relation-explorer-list">
+                        {relationCatalog?.matches.map((relation) => (
+                          <button key={relation.id} type="button"
+                            aria-label={`定位依赖 ${relation.fromLabel} → ${relation.toLabel}`}
+                            title={`${relation.fromLabel} → ${relation.toLabel}${relation.label ? ` · ${relation.label}` : ''}`}
+                            onClick={() => {
+                              if (architectureScope) leaveArchitectureScope()
+                              setTool('select')
+                              setTraceDirection(null)
+                              setSelectedGroupTarget(null)
+                              setSelectedIds([relation.id])
+                              setHoveredRelationId(null)
+                              setToolbarMenu(null)
+                              focusBoxes([relation.from, relation.to])
+                            }}>
+                            <span className="freeform-relation-endpoints">
+                              <span title={relation.fromLabel}>{relation.fromLabel}</span>
+                              <span title={relation.toLabel}>→ {relation.toLabel}</span>
+                            </span>
+                            {relation.label ? <small>{relation.label}</small> : null}
+                          </button>
+                        ))}
+                        {!relationCatalog?.total ? <p>没有匹配关系</p> : null}
+                      </div>
+                      {(relationCatalog?.total ?? 0) > (relationCatalog?.matches.length ?? 0)
+                        ? <small>仅显示前 {relationCatalog?.matches.length} 条，请继续筛选</small> : null}
+                    </section>
+                  ) : null}
 
                   <section className="freeform-compact-control-row">
                     <span>密度</span>
