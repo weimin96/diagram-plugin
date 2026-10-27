@@ -37,6 +37,8 @@ const fitCorridors = args.includes('--fit-corridors')
 if (fitCorridors && !sameCanvas) throw new Error('--fit-corridors requires --same-canvas')
 const jointPorts = args.includes('--joint-ports')
 if (jointPorts && !fitCorridors) throw new Error('--joint-ports requires --same-canvas --fit-corridors')
+const autoSizePorts = args.includes('--auto-size-ports')
+if (autoSizePorts && !jointPorts) throw new Error('--auto-size-ports requires --joint-ports')
 const wrappingArg = args.find((arg) => arg.startsWith('--wrapping='))?.slice(11)
 if (wrappingArg !== undefined && !['OFF', 'SINGLE_EDGE', 'MULTI_EDGE'].includes(wrappingArg)) {
   throw new Error('Use --wrapping=OFF|SINGLE_EDGE|MULTI_EDGE')
@@ -60,14 +62,19 @@ type Result = { case: string; engine: string; ms: number; nodes: number; edges: 
   fitFont: number; warnings: string[]; eligible?: boolean; rejectionReasons?: string[];
   nonOrthogonalSegments?: number; frameOverlapArea?: number; frameOverflowPx?: number; error?: string;
   faithful?: boolean; semanticViolations?: string[]; perimeterDetours?: number;
-  portNormals?: number; routeBends?: number }
+  portNormals?: number; routeBends?: number; sidePortCapacityDeficits?: number;
+  /** Evidence only: a new generated layout may deliberately change heights,
+   * but it MUST NOT pass the strict saved-Canvas replacement gate. */
+  resizedNodeHeights?: Array<{ id: string; previous: number; candidate: number }>
+  geometryGatePassed?: boolean }
 const results: Result[] = []
 function additionalGeometry(scene: CanvasScene) {
   const measured = assessArchitectureRouteDiagnostics(scene)
   return { width: scene.width, height: scene.height, aspectRatio: Math.round(scene.width / scene.height * 100) / 100,
     groupOverlaps: measured.frameOverlaps, totalRouteLength: measured.totalRouteLength,
     crossPartitionRouteLength: measured.crossPartitionRouteLength,
-    unrelatedFrameIntrusionLength: measured.unrelatedFrameIntrusionLength }
+    unrelatedFrameIntrusionLength: measured.unrelatedFrameIntrusionLength,
+    sidePortCapacityDeficits: measured.sidePortCapacityDeficits.length }
 }
 const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (char) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!
@@ -81,12 +88,15 @@ for (const entry of entries) {
     { engine: 'current', scene: original.scene, ms: baselineMs },
   ]
   const candidates = variants.flatMap((variant) => [
-    { variant, joint: false },
-    ...(jointPorts && variant === 'native' ? [{ variant, joint: true }] : []),
+    { variant, joint: false, autoHeight: false },
+    ...(jointPorts && variant === 'native' ? [
+      { variant, joint: true, autoHeight: false },
+      ...(autoSizePorts ? [{ variant, joint: true, autoHeight: true }] : []),
+    ] : []),
   ])
-  for (const { variant, joint } of candidates) {
+  for (const { variant, joint, autoHeight } of candidates) {
     const start = performance.now()
-    const engineName = `elk-${variant}${joint ? '-joint' : ''}`
+    const engineName = `elk-${variant}${joint ? '-joint' : ''}${autoHeight ? '-autoheight' : ''}`
     try {
       const config = {
         direction, ...(spacing === undefined ? {} : { nodeSpacing: spacing, layerSpacing: spacing }),
@@ -94,7 +104,9 @@ for (const entry of entries) {
         wrapping, aspectRatio,
       }
       const initial = await layoutWithElk(original.scene, variant, config)
-      const scene = joint ? await layoutWithElk(initial, variant, { ...config, portSideMode: 'relative' }) : initial
+      const scene = joint ? await layoutWithElk(initial, variant, {
+        ...config, portSideMode: 'relative', ...(autoHeight ? { growGeneratedPortHeight: true } : {}),
+      }) : initial
       const matched = sameCanvas
         ? (fitCorridors ? fitElkCorridorsWithinOriginalCanvas(original.scene, scene)
           : placeElkWithinOriginalCanvas(original.scene, scene)) : undefined
@@ -122,6 +134,14 @@ for (const entry of entries) {
     const measured = measureEditableArchitecture(item.scene)
     const fidelity = compareEditableArchitectureSemantics(original.scene, item.scene)
     const verdict = item.engine === 'current' ? undefined : judgeExternalLayout(baseline, measured)
+    const originalNodes = new Map(original.scene.elements.filter((element) => element.type === 'node')
+      .map((element) => [element.id, element]))
+    const resizedNodeHeights = item.scene.elements.filter((element) => element.type === 'node')
+      .flatMap((element) => {
+        const before = originalNodes.get(element.id)
+        return before && element.height !== before.height
+          ? [{ id: element.id, previous: before.height, candidate: element.height }] : []
+      })
     results.push({
       case: entry.id, engine: item.engine, nodes: entry.intent.nodes.length,
       edges: entry.intent.relations.length, ms: item.ms, crossings: metrics.edgeCrossings,
@@ -131,6 +151,9 @@ for (const entry of entries) {
       fitFont: presentation.estimatedTitlePxAtFit, warnings: [...presentation.warnings],
       faithful: fidelity.faithful, semanticViolations: fidelity.reasons,
       eligible: verdict ? verdict.eligible && fidelity.faithful && !item.canvasSizeRejection : undefined,
+      ...(item.engine.endsWith('-autoheight') ? {
+        resizedNodeHeights, geometryGatePassed: !!verdict?.eligible && !item.canvasSizeRejection,
+      } : {}),
       rejectionReasons: [...(verdict?.reasons ?? []), ...fidelity.reasons,
         ...(item.canvasSizeRejection ? [item.canvasSizeRejection] : [])],
       nonOrthogonalSegments: measured.nonOrthogonalSegments,
@@ -145,14 +168,14 @@ for (const entry of entries) {
 
 const eligible = results.filter((item) => item.engine !== 'current' && item.eligible)
 await writeFile(path.join(output, 'report.json'), JSON.stringify({
-  version: 3, suite, caseCount: entries.length, direction, spacing: spacing ?? null, compactBounds, sameCanvas, fitCorridors, jointPorts,
+  version: 3, suite, caseCount: entries.length, direction, spacing: spacing ?? null, compactBounds, sameCanvas, fitCorridors, jointPorts, autoSizePorts,
   wrapping: wrapping ?? null, aspectRatio: aspectRatio ?? null,
   source: suite === 'project' || suite === 'project-multi'
     ? 'Real scoped TypeScript import graph including type-only relations' : 'Reference/synthetic',
   candidateCount: results.filter((item) => item.engine !== 'current').length,
   eligibleCount: eligible.length,
   recommendation: eligible.length ? 'Inspect eligible candidates visually; not approved' : 'Keep current production layout engine',
-  note: 'Timing scopes differ: current.ms includes the entire composer with multi-candidate refinement; elk-*.ms includes only experimental relayout on an already composed scene. ELK native imports section geometry; native-compound transforms edge.container-local sections into world coordinates and connects noncentral ports to Canvas side-center anchors via orthogonal bridges. The optional fit-corridors experiment compresses node-free X gutters without shrinking nodes or fonts; every candidate still requires full editable-geometry and semantic gates. Eligibility is not human approval. This is NOT an end-to-end speed comparison. Reference/synthetic cases are not production data.',
+  note: 'Timing scopes differ: current.ms includes entire Composer, ELK time only relayout on a composed scene. Native route positions are editable. The optional auto-size-ports candidate changes previously auto-generated node heights to meet side-port capacity; geometryGatePassed is NOT saved-Canvas fidelity and NEVER makes eligible=true without strict geometry/semantic agreement. A new-intent sizing contract is not yet approved. No layout is imported into production. Candidate acceptance is not human approval or end-to-end speed comparison.',
   results,
 }, null, 2) + '\n')
 const groups = entries.map((entry) => ({
@@ -165,7 +188,7 @@ await writeFile(path.join(output, 'index.html'), `<!doctype html><html lang="zh-
 <body><h1>ELK / 当前布局 A/B</h1><small>同一语义数据、同一 Canvas 渲染和质量检测；ELK 仅实验，不会自动替换正式引擎</small>
 ${groups.map(({ entry, results }) => `<section class="case"><h2>${escapeHtml(entry.id)}</h2><small>${escapeHtml(entry.description)}</small><div class="grid">
 ${results.map((r) => `<div class="panel"><b>${escapeHtml(r.engine)}</b>${r.error ? `<p>${escapeHtml(r.error)}</p>` : `<img loading="lazy" src="./${escapeHtml(r.case)}--${escapeHtml(r.engine)}.svg">`}
-<p>${r.ms}ms · 交叉 ${r.crossings} · 重叠 ${r.overlaps} · 穿节点 ${r.throughNodes} · 非正交 ${r.nonOrthogonalSegments ?? '—'} · 分区冲突 ${r.groupOverlaps}（${r.frameOverlapArea ?? '—'}px²）· 分区越界 ${r.frameOverflowPx ?? '—'}px · 画布 ${r.width}×${r.height} · 跨区线长 ${r.crossPartitionRouteLength}px · 无关分区穿越 ${r.unrelatedFrameIntrusionLength}px · 字体 ${r.fitFont}px</p>${r.engine !== 'current' && !r.error ? `<p>${r.eligible ? '仅通过候选几何门禁，待人工视觉审查' : `拒绝替换：${escapeHtml(r.rejectionReasons?.join('；') || '候选不合格')}`}</p>` : ''}</div>`).join('')}</div></section>`).join('')}
+<p>${r.ms}ms · 交叉 ${r.crossings} · 重叠 ${r.overlaps} · 穿节点 ${r.throughNodes} · 非正交 ${r.nonOrthogonalSegments ?? '—'} · 侧边容量缺口 ${r.sidePortCapacityDeficits ?? '—'} · 分区冲突 ${r.groupOverlaps}（${r.frameOverlapArea ?? '—'}px²）· 分区越界 ${r.frameOverflowPx ?? '—'}px · 画布 ${r.width}×${r.height} · 跨区线长 ${r.crossPartitionRouteLength}px · 无关分区穿越 ${r.unrelatedFrameIntrusionLength}px · 字体 ${r.fitFont}px</p>${r.resizedNodeHeights?.length ? `<p>新生成尺寸实验：${escapeHtml(r.resizedNodeHeights.map((node) => `${node.id} ${node.previous}→${node.candidate}px`).join('、'))}。几何门禁 ${r.geometryGatePassed ? '通过' : '未通过'}；旧画布尺寸保真仍拒绝替换。</p>` : ''}${r.engine !== 'current' && !r.error ? `<p>${r.eligible ? '仅通过候选几何门禁，待人工视觉审查' : `拒绝替换：${escapeHtml(r.rejectionReasons?.join('；') || '候选不合格')}`}</p>` : ''}</div>`).join('')}</div></section>`).join('')}
 </body></html>`)
 console.table(results.map(({ case: id, engine, ms, crossings, overlaps, throughNodes, groupOverlaps, aspectRatio, eligible, error }) =>
   ({ id, engine, ms, crossings, overlaps, throughNodes, groupOverlaps, aspectRatio, eligible, error: error?.slice(0, 60) ?? '' })))

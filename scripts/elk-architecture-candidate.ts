@@ -16,6 +16,9 @@ export type ElkLayoutConfig = {
   /** Isolated, two-pass native route experiment. The caller provides the
    * first-pass node geometry and ELK allocates independent, fixed-side ports. */
   portSideMode?: 'relative'
+  /** Newly generated layouts only: grow node height to hold every real
+   * side port. This changes geometry and is NOT an editable-scene relayout. */
+  growGeneratedPortHeight?: boolean
   /** Only allow a rigid whole-scene translation matching ALL pinned nodes
    * inside the original Canvas; never perform a partial pinned ELK relayout. */
   rigidLockedPlacement?: boolean
@@ -205,6 +208,12 @@ export async function layoutWithElk(scene: CanvasScene, variant: ElkBenchmarkVar
   if (config.portSideMode && !nativeRoutes) {
     throw new Error('ELK fixed-side ports require native edge geometry')
   }
+  if (config.growGeneratedPortHeight && config.portSideMode !== 'relative') {
+    throw new Error('ELK generated-node port sizing requires relative fixed-side ports')
+  }
+  if (config.growGeneratedPortHeight && nodes.some((node) => node.locked)) {
+    throw new Error('ELK generated-node port sizing cannot change locked author geometry')
+  }
   if (config.rigidLockedPlacement && !nativeRoutes) {
     throw new Error('Rigid locked placement requires native ELK edge geometry')
   }
@@ -233,7 +242,13 @@ export async function layoutWithElk(scene: CanvasScene, variant: ElkBenchmarkVar
     }])
     return { sourcePort, targetPort }
   }) : []
-  const children = nodes.map((node) => ({ id: node.id, width: node.width, height: node.height,
+  const children = nodes.map((node) => ({ id: node.id, width: node.width,
+    height: config.growGeneratedPortHeight
+      ? Math.max(node.height, (1 + Math.max(
+        inputPorts.get(node.id)?.filter((port) => port.layoutOptions['elk.port.side'] === 'EAST').length ?? 0,
+        inputPorts.get(node.id)?.filter((port) => port.layoutOptions['elk.port.side'] === 'WEST').length ?? 0,
+      )) * CANVAS_PORT_MIN_SEPARATION_PX)
+      : node.height,
     ...(config.portSideMode ? {
       ports: inputPorts.get(node.id) ?? [],
       layoutOptions: { 'elk.portConstraints': 'FIXED_SIDE', 'elk.spacing.portPort': '14' },
@@ -293,10 +308,12 @@ export async function layoutWithElk(scene: CanvasScene, variant: ElkBenchmarkVar
   const margin = 30
   const width = Math.ceil((layout.width ?? 1200) + 2 * margin)
   const height = Math.ceil((layout.height ?? 800) + 2 * margin)
+  const sizedNodes = new Map(children.map((node) => [node.id, node.height]))
   const relocated = new Map(nodes.map((node) => {
     const position = absolute.get(node.id)
     return [node.id, {
       ...node,
+      ...(config.growGeneratedPortHeight ? { height: sizedNodes.get(node.id)! } : {}),
       x: position ? Math.round(position.x + margin) : node.x,
       y: position ? Math.round(position.y + margin) : node.y,
     }] as const
@@ -330,12 +347,11 @@ export async function layoutWithElk(scene: CanvasScene, variant: ElkBenchmarkVar
           labelPosition: undefined,
         }
       }
-      const position = absolute.get(item.id)
       // In opt-in rigid-lock mode all nodes use the same tentative ELK
       // geometry; the final whole-scene translation restores every pin.
       // Preserving a locked node here would misalign it with native edges.
-      return position && (!item.locked || config.rigidLockedPlacement)
-        ? { ...item, x: Math.round(position.x + margin), y: Math.round(position.y + margin) }
+      return absolute.has(item.id) && (!item.locked || config.rigidLockedPlacement)
+        ? relocated.get(item.id) ?? item
         : item
     }),
   }

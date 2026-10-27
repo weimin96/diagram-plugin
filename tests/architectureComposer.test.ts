@@ -54,7 +54,7 @@ test('layout candidate selection penalizes small fit text and unrelated region i
   const presentation = { referenceWidth: 1200, estimatedTitlePxAtFit: 12, nodeBoundsCoverage: .75, nodeAreaCoverage: .2, warnings: [] }
   const route = {
     totalRouteLength: 1000, totalRouteBends: 0, worstRouteBends: [],
-    ingressPortConflicts: 0, terminalNormalViolations: 0,
+    ingressPortConflicts: 0, sidePortCapacityDeficits: [], terminalNormalViolations: 0,
     worstTerminalNormalViolations: [], crossPartitionRouteLength: 500, crossPartitionDirectDistance: 400,
     crossPartitionRelations: 2, backwardCrossPartitionRelations: 0, frameOverlaps: 0,
     frameOverlapArea: 0, worstFrameOverlaps: [], unrelatedFrameIntrusionLength: 0, worstFrameIntrusions: [],

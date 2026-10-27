@@ -94,6 +94,17 @@ node --import tsx scripts/benchmark-architecture-engines.ts \
 
 另行验证将同一节点的 11 条真实入边强行分散至多边端口，会导致 **7～10 处新交叉**，因此未合入该策略；目前双遍候选依旧存在 **9 处独立入边端口间距冲突**，真实的 80px 侧边装不下 11 个按 14px 间隔排列的端口。下一阶段需把**边界容量、侧边选择、节点尺寸与层级**作为同一完整布局问题检验，而非针对 `canvas` 节点添加特例或通过隐藏关系伪造可读性。原始证据与可编辑场景保存在忽略目录 `test-results/architecture-convergence/elk-joint-ports/`。
 
+**端口容量与新生成节点高度实验（2026-10-27）**：隔离 A/B 增加 `--auto-size-ports`（依赖 `--joint-ports --fit-corridors --same-canvas`），只为新生成图的第二遍 ELK 候选，按同侧实际关系端点数与统一 `CANVAS_PORT_MIN_SEPARATION_PX=14` 计算节点最小高度。现有可编辑 Canvas 的 strict fidelity **始终拒绝高度变化**，锁定节点直接拒绝；`geometryGatePassed` 只表示其他几何门禁通过，不等于替换资格。生产的 `architectureRouteDiagnostics.sidePortCapacityDeficits` 新增**只读诊断**，按各节点/侧边的真实进出关系端点数（相同 bundleKey 的端点复用）、侧边当前容量和带端角余量的所需长度报告不可满足的容量，**不自动更改节点尺寸或评分门禁**。
+
+```sh
+node --import tsx scripts/benchmark-architecture-engines.ts \
+  --suite=project-multi --spacing=8 --wrapping=MULTI_EDGE --aspect-ratio=0.8 \
+  --compact-bounds --same-canvas --fit-corridors --joint-ports --auto-size-ports \
+  --out=test-results/architecture-convergence/elk-port-capacity/benchmark
+```
+
+目标真实 15/21 Canvas 编辑流水线：唯一容量超限节点 `canvas` 左侧 **15 个不同连接端点，80px 仅容纳 4 个保留端角余量的端口，所需高度 224px**。新生成尺寸实验将其自动增高为 224px，原画布仍为 960×1206、正交无交叉/重叠、端点法向缺陷 0、入边端口冲突 **9→0**，线路长度 **6510→6006px**、外围绕行 **2→1**；严格原 Canvas 几何尺寸合同拒绝，这是**预期保护**。同截图协议的 Luna Max 两次评分 **64 / 64.5（中位 64.3，关系可追踪性 2.5/5）**，上一版双遍端口候选 **63.5 / 61.5（中位 62.5，可追踪性 2/5）**；比较器仍返回 `inconclusive`，未获人工批准。三组真实图中另外两组因交叉/线长/尺寸退化拒绝；20 组参考与压力图的 120 个 ELK 候选**0 通过完整门禁**，其中六个双遍实验发生 ELK 内部错误，已保留原始报告，不掩盖失败。故这一自动尺寸策略目前**没有跨拓扑泛化证据，不进入生产 Composer**，只作为可复现研究候选。
+
 隔离适配器的 `rigidLockedPlacement` 仅在**完整 ELK 原生端口几何 + 单一刚性平移**能够恢复所有锁定节点原坐标且不超出原画布时成功；多个锁定节点要求不一致的位移时明确失败，绝不强行改写人工位置。语义保真门禁同时检查 `locked` 属性本身未被候选丢弃。该能力还不是通用固定节点的布局求解器，若新图包含不可整体平移保持的人工编辑位置，应保留当前引擎。实际安装的 `elkjs@0.12.0` 声明双许可 `EPL-2.0 OR GPL-3.0-or-later`，发布前还需对依赖许可与 npm 分发方式完成合规核对。本轮不修改正式 Composer，也不增加生产 ELK 依赖。
 
 **2026-10-27 P0 端口容量第一阶段**：沿用现有 Canvas/Composer/Router，针对同一节点同侧的 3–6 条真实入边新增联合端口分配候选，只有物理边界间隔足够、末端仍严格正交时才提出。原有逐条候选继续存在，Composer 仍用完整场景的交叉、独立重叠、穿节点、真实共享主干、分区侵入、路长和字号决定是否采纳；没有引入新布局器或修改 Canvas 文件格式。路由诊断增加 `ingressPortConflicts`，只统计不同真实关系在同一节点同侧的不足 14px 端口间隔，排除已验证同一共享主干；该指标**只提供证据，不单独进入候选收益函数**，防止压过真实结构质量。基准 HTML 与 JSON 保留该数字。

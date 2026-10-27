@@ -93,6 +93,24 @@ test('独立入边的实际端口容量可计量，共享主干不误报', () =>
     (item.id === 'a' || item.id === 'b') && item.type === 'arrow'
       ? { ...item, bundleKey: 'verified-source-trunk' } : item) }
   assert.equal(assessArchitectureRouteDiagnostics(shared).ingressPortConflicts, 0)
+  const overCapacity: CanvasScene = { ...scene, elements: [
+    ...scene.elements,
+    { id: 'd', type: 'arrow', from: 'source-a', to: 'target', toAnchor: 'left', toPortRatio: 0.2 },
+    { id: 'e', type: 'arrow', from: 'source-c', to: 'target', toAnchor: 'left', toPortRatio: 0.95 },
+  ] }
+  const capacity = assessArchitectureRouteDiagnostics(overCapacity).sidePortCapacityDeficits
+  assert.deepEqual(capacity, [{ nodeId: 'target', side: 'left', portCount: 5,
+    availablePorts: 4, sideSpanPx: 80, requiredSpanPx: 84 }],
+  'capacity includes distinct real incoming relationships and reserves corner insets')
+  assert.deepEqual(assessArchitectureRouteDiagnostics(scene).sidePortCapacityDeficits, [],
+    'ordinary small fan-in should not be classified as physically impossible')
+  const outgoing: CanvasScene = { ...overCapacity, elements: overCapacity.elements.map((item) =>
+    item.type === 'arrow' ? {
+      ...item, from: item.to, to: item.from, fromAnchor: 'left' as const,
+      toAnchor: 'auto' as const, fromPortRatio: item.toPortRatio, toPortRatio: undefined,
+    } : item) }
+  assert.deepEqual(assessArchitectureRouteDiagnostics(outgoing).sidePortCapacityDeficits, capacity,
+    'physical port demand must include real outgoing arrows, not just ingress')
 })
 
 test('真实端点法向诊断区分错误切向连接与合法的正交出入边，不更改画布', () => {

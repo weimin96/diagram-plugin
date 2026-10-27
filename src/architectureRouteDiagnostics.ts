@@ -16,6 +16,14 @@ export interface ArchitectureRouteDiagnostics {
   /** Pairs of independent incoming arrows competing for the same physical
    * node-side port capacity; not a substitute for full-route collision checks. */
   ingressPortConflicts: number
+  /** Advisory physical demand, including ingress and egress on the same
+   * side. Leave one port-spacing of inset at each corner. This reports an
+   * infeasible side capacity; it never silently resizes an authored node. */
+  sidePortCapacityDeficits: Array<{
+    nodeId: string; side: 'top' | 'right' | 'bottom' | 'left'
+    portCount: number; availablePorts: number
+    sideSpanPx: number; requiredSpanPx: number
+  }>
   crossPartitionRouteLength: number
   crossPartitionDirectDistance: number
   crossPartitionRelations: number
@@ -114,6 +122,22 @@ export function assessArchitectureRouteDiagnostics(scene: CanvasScene): Architec
   let totalRouteBends = 0
   const routeBends: ArchitectureRouteDiagnostics['worstRouteBends'] = []
   const ingressBySide = new Map<string, Array<{ position: number; bundleKey?: string }>>()
+  const demandedBySide = new Map<string, {
+    nodeId: string; side: 'top' | 'right' | 'bottom' | 'left'; span: number; owners: Set<string>
+  }>()
+  const reserveSideCapacity = (
+    node: CanvasNode, side: 'top' | 'right' | 'bottom' | 'left' | 'auto' | undefined,
+    edgeId: string, owner: string,
+  ) => {
+    if (!side || side === 'auto' || node.rotation) return
+    const key = `${node.id}\u0000${side}`
+    const entry = demandedBySide.get(key) ?? {
+      nodeId: node.id, side, span: side === 'left' || side === 'right' ? node.height : node.width,
+      owners: new Set<string>(),
+    }
+    entry.owners.add(owner || edgeId)
+    demandedBySide.set(key, entry)
+  }
   let crossPartitionRouteLength = 0
   let crossPartitionDirectDistance = 0
   let crossPartitionRelations = 0
@@ -127,6 +151,10 @@ export function assessArchitectureRouteDiagnostics(scene: CanvasScene): Architec
     if (arrow.type !== 'arrow') continue
     const source = nodes.get(arrow.from), target = nodes.get(arrow.to)
     if (!source || !target) continue
+    reserveSideCapacity(source, arrow.fromAnchor, arrow.id,
+      arrow.bundleKey ? `from:${arrow.bundleKey}` : arrow.id)
+    reserveSideCapacity(target, arrow.toAnchor, arrow.id,
+      arrow.bundleKey ? `to:${arrow.bundleKey}` : arrow.id)
     if (arrow.toAnchor && arrow.toAnchor !== 'auto' && !target.rotation) {
       const span = arrow.toAnchor === 'left' || arrow.toAnchor === 'right' ? target.height : target.width
       const key = `${target.id}\u0000${arrow.toAnchor}`
@@ -213,6 +241,16 @@ export function assessArchitectureRouteDiagnostics(scene: CanvasScene): Architec
       }
     }
   }
+  const sidePortCapacityDeficits = [...demandedBySide.values()].flatMap((entry) => {
+    const portCount = entry.owners.size
+    const availablePorts = Math.max(0, Math.floor(entry.span / CANVAS_PORT_MIN_SEPARATION_PX) - 1)
+    return portCount > availablePorts ? [{
+      nodeId: entry.nodeId, side: entry.side, portCount, availablePorts,
+      sideSpanPx: entry.span,
+      requiredSpanPx: (portCount + 1) * CANVAS_PORT_MIN_SEPARATION_PX,
+    }] : []
+  }).sort((a, b) => (b.requiredSpanPx - b.sideSpanPx) - (a.requiredSpanPx - a.sideSpanPx)
+    || a.nodeId.localeCompare(b.nodeId, 'en') || a.side.localeCompare(b.side, 'en'))
   return {
     totalRouteLength: Math.round(totalRouteLength),
     totalRouteBends,
@@ -221,6 +259,7 @@ export function assessArchitectureRouteDiagnostics(scene: CanvasScene): Architec
     terminalNormalViolations: portNormalViolations.length,
     worstTerminalNormalViolations: portNormalViolations.slice(0, 12),
     ingressPortConflicts,
+    sidePortCapacityDeficits,
     crossPartitionRouteLength: Math.round(crossPartitionRouteLength),
     crossPartitionDirectDistance: Math.round(crossPartitionDirectDistance),
     crossPartitionRelations,

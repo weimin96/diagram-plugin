@@ -8,6 +8,7 @@ import { compactElkSceneBounds, fitElkCorridorsWithinOriginalCanvas, layoutWithE
 import { projectArchitectureCases } from '../scripts/architecture-project-cases.js'
 import { architectureBenchmarkCases } from '../scripts/architecture-benchmark-cases.js'
 import { compareEditableArchitectureSemantics, judgeExternalLayout, measureEditableArchitecture } from '../scripts/architecture-layout-gate.js'
+import { assessArchitectureRouteDiagnostics } from '../src/architectureRouteDiagnostics.js'
 
 test('ELK 实验候选不修改原图，节点/关系/语义分区与历史序列化保持完整', async () => {
   const input = composeArchitectureGraph(architectureCases.find((item) => item.id === 'data-platform')!.intent).scene
@@ -208,4 +209,37 @@ test('ELK 隔离联合布局只能压缩空走廊来适配真实 Canvas，保留
   'saving and reopening must preserve each real port, route and relation')
   await assert.rejects(layoutWithElk(original, 'flat', { portSideMode: 'relative' }),
     /require native edge geometry/, 'do not apply native port geometry to a non-native route variant')
+
+  // A fresh intent is allowed to EXPERIMENT with sizing. This is not a legal
+  // relayout of an existing saved Canvas, so strict fidelity must still fail.
+  const grown = await layoutWithElk(candidate, 'native', {
+    nodeSpacing: 8, layerSpacing: 8, wrapping: 'MULTI_EDGE', aspectRatio: 0.8,
+    compactBounds: true, portSideMode: 'relative', growGeneratedPortHeight: true,
+  })
+  const capacityFit = fitElkCorridorsWithinOriginalCanvas(original, grown)
+  assert.ok(capacityFit, 'auto-generated node sizing must still fit the source Canvas')
+  assert.deepEqual([capacityFit.width, capacityFit.height], [original.width, original.height])
+  const originalHeights = new Map(original.elements.filter((item): item is CanvasNode => item.type === 'node')
+    .map((item) => [item.id, item.height]))
+  const changedHeights = capacityFit.elements.filter((item) => item.type === 'node'
+    && item.height !== originalHeights.get(item.id))
+  assert.ok(changedHeights.length > 0, 'the experiment must actually increase an over-capacity node')
+  assert.ok(changedHeights.every((item) => item.type === 'node'
+    && item.height > (originalHeights.get(item.id) ?? Infinity)))
+  const measuredCapacity = measureEditableArchitecture(capacityFit)
+  assert.equal(measuredCapacity.quality.edgeCrossings, 0)
+  assert.equal(measuredCapacity.quality.edgeOverlaps, 0)
+  assert.equal(measuredCapacity.nonOrthogonalSegments, 0)
+  assert.equal(assessArchitectureRouteDiagnostics(capacityFit).ingressPortConflicts, 0)
+  assert.ok(measuredCapacity.routeLength < measureEditableArchitecture(joint).routeLength)
+  assert.equal(judgeExternalLayout(measureEditableArchitecture(original), measuredCapacity).eligible, true)
+  assert.equal(compareEditableArchitectureSemantics(original, capacityFit).faithful, false,
+    'the strict saved-Canvas replacement contract must not silently accept resized authored nodes')
+  await assert.rejects(layoutWithElk(candidate, 'native', { growGeneratedPortHeight: true }),
+    /requires relative fixed-side ports/)
+  const lockedCandidate = { ...candidate, elements: candidate.elements.map((item) =>
+    item.type === 'node' ? { ...item, locked: true } : item) }
+  await assert.rejects(layoutWithElk(lockedCandidate, 'native', {
+    portSideMode: 'relative', growGeneratedPortHeight: true,
+  }), /cannot change locked author geometry/)
 })
