@@ -13,6 +13,9 @@ export type ElkLayoutConfig = {
   /** ELK Layered graph-level wrapping; only used by isolated experiments. */
   wrapping?: 'OFF' | 'SINGLE_EDGE' | 'MULTI_EDGE'
   aspectRatio?: number
+  /** Isolated, two-pass native route experiment. The caller provides the
+   * first-pass node geometry and ELK allocates independent, fixed-side ports. */
+  portSideMode?: 'relative'
   /** Only allow a rigid whole-scene translation matching ALL pinned nodes
    * inside the original Canvas; never perform a partial pinned ELK relayout. */
   rigidLockedPlacement?: boolean
@@ -199,6 +202,9 @@ export async function layoutWithElk(scene: CanvasScene, variant: ElkBenchmarkVar
   const arrows = scene.elements.filter((item) => item.type === 'arrow')
   if (!nodes.length) throw new Error('No Canvas nodes to lay out')
   const nativeRoutes = variant === 'native' || variant === 'native-compound'
+  if (config.portSideMode && !nativeRoutes) {
+    throw new Error('ELK fixed-side ports require native edge geometry')
+  }
   if (config.rigidLockedPlacement && !nativeRoutes) {
     throw new Error('Rigid locked placement requires native ELK edge geometry')
   }
@@ -207,9 +213,37 @@ export async function layoutWithElk(scene: CanvasScene, variant: ElkBenchmarkVar
   }
   const compound = variant === 'compound' || variant === 'native-compound'
   const nodeIds = new Set(nodes.map((item) => item.id))
-  const children = nodes.map((node) => ({ id: node.id, width: node.width, height: node.height }))
+  const seedPositions = new Map(nodes.map((node) => [node.id, node]))
+  const inputPorts = new Map<string, Array<{
+    id: string; width: number; height: number; layoutOptions: { 'elk.port.side': string }
+  }>>()
+  const portEdges = config.portSideMode ? arrows.map((edge, index) => {
+    const sourcePort = `elk-source-${index}`
+    const targetPort = `elk-target-${index}`
+    const source = seedPositions.get(edge.from), target = seedPositions.get(edge.to)
+    if (!source || !target) throw new Error(`Invalid relation endpoint: ${edge.id}`)
+    const sourceOnLeft = source.x + source.width / 2 < target.x + target.width / 2
+    inputPorts.set(edge.from, [...(inputPorts.get(edge.from) ?? []), {
+      id: sourcePort, width: 0, height: 0,
+      layoutOptions: { 'elk.port.side': sourceOnLeft ? 'EAST' : 'WEST' },
+    }])
+    inputPorts.set(edge.to, [...(inputPorts.get(edge.to) ?? []), {
+      id: targetPort, width: 0, height: 0,
+      layoutOptions: { 'elk.port.side': sourceOnLeft ? 'WEST' : 'EAST' },
+    }])
+    return { sourcePort, targetPort }
+  }) : []
+  const children = nodes.map((node) => ({ id: node.id, width: node.width, height: node.height,
+    ...(config.portSideMode ? {
+      ports: inputPorts.get(node.id) ?? [],
+      layoutOptions: { 'elk.portConstraints': 'FIXED_SIDE', 'elk.spacing.portPort': '14' },
+    } : {}),
+  }))
   const edges = arrows.filter((edge) => nodeIds.has(edge.from) && nodeIds.has(edge.to))
-    .map((edge) => ({ id: edge.id, sources: [edge.from], targets: [edge.to] }))
+    .map((edge, index) => ({ id: edge.id,
+      sources: [!config.portSideMode ? edge.from : portEdges[index].sourcePort],
+      targets: [!config.portSideMode ? edge.to : portEdges[index].targetPort],
+    }))
   if (edges.length !== arrows.length) throw new Error('Invalid relation endpoint')
 
   const groups = new Map<string, typeof children>()

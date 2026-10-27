@@ -7,7 +7,7 @@ import { assessCanvasVisualQuality } from '../src/canvasQuality.js'
 import { compactElkSceneBounds, fitElkCorridorsWithinOriginalCanvas, layoutWithElk, placeElkWithinOriginalCanvas } from '../scripts/elk-architecture-candidate.js'
 import { projectArchitectureCases } from '../scripts/architecture-project-cases.js'
 import { architectureBenchmarkCases } from '../scripts/architecture-benchmark-cases.js'
-import { compareEditableArchitectureSemantics, measureEditableArchitecture } from '../scripts/architecture-layout-gate.js'
+import { compareEditableArchitectureSemantics, judgeExternalLayout, measureEditableArchitecture } from '../scripts/architecture-layout-gate.js'
 
 test('ELK 实验候选不修改原图，节点/关系/语义分区与历史序列化保持完整', async () => {
   const input = composeArchitectureGraph(architectureCases.find((item) => item.id === 'data-platform')!.intent).scene
@@ -180,4 +180,32 @@ test('ELK 隔离联合布局只能压缩空走廊来适配真实 Canvas，保留
     item.type === 'node' ? { ...item, locked: true } : item) }
   assert.equal(fitElkCorridorsWithinOriginalCanvas(locked, candidate), null,
     'independent manually locked nodes cannot be shifted by an unapproved free-space transform')
+
+  const second = await layoutWithElk(candidate, 'native', {
+    nodeSpacing: 8, layerSpacing: 8, wrapping: 'MULTI_EDGE', aspectRatio: 0.8,
+    compactBounds: true, portSideMode: 'relative',
+  })
+  const joint = fitElkCorridorsWithinOriginalCanvas(original, second)
+  assert.ok(joint, 'two-pass ELK must also retain the exact Canvas without resizing cards')
+  assert.deepEqual([joint.width, joint.height], [original.width, original.height])
+  assert.equal(compareEditableArchitectureSemantics(original, joint).faithful, true)
+  assert.equal(judgeExternalLayout(measureEditableArchitecture(original), measureEditableArchitecture(joint)).eligible, true)
+  assert.equal(measureEditableArchitecture(joint).quality.edgeOverlaps, 0)
+  assert.equal(measureEditableArchitecture(joint).quality.edgeCrossings, 0)
+  assert.ok(measureEditableArchitecture(joint).routeLength < measureEditableArchitecture(fitted).routeLength,
+    'true per-edge ports should improve final route length, not merely pass geometry')
+  const reopened = parseCanvasScene(serializeCanvasScene(joint))
+  assert.deepEqual(reopened.elements.filter((item) => item.type === 'node').map(({ id, x, y, width, height }) =>
+    ({ id, x, y, width, height })),
+  joint.elements.filter((item) => item.type === 'node').map(({ id, x, y, width, height }) =>
+    ({ id, x, y, width, height })))
+  assert.deepEqual(reopened.elements.filter((item) => item.type === 'arrow').map(({ id, from, to, points,
+    fromAnchor, toAnchor, fromPortRatio, toPortRatio }) =>
+    ({ id, from, to, points, fromAnchor, toAnchor, fromPortRatio, toPortRatio })),
+  joint.elements.filter((item) => item.type === 'arrow').map(({ id, from, to, points,
+    fromAnchor, toAnchor, fromPortRatio, toPortRatio }) =>
+    ({ id, from, to, points, fromAnchor, toAnchor, fromPortRatio, toPortRatio })),
+  'saving and reopening must preserve each real port, route and relation')
+  await assert.rejects(layoutWithElk(original, 'flat', { portSideMode: 'relative' }),
+    /require native edge geometry/, 'do not apply native port geometry to a non-native route variant')
 })

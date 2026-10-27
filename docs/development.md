@@ -81,6 +81,19 @@ node --import tsx scripts/benchmark-architecture-engines.ts \
 
 同一 Chrome 截图采集协议下，Codex `gpt-6-luna/max` 两次独立读图：原布局 **51.5 / 50（中位 50.8）**，空走廊压缩后的 ELK 布局 **58.5 / 57（中位 57.8）**。评分确有观测提升，但比较器仍输出 **`inconclusive`**，不能把两个样本的分数直接当成可靠审美提升；特别是**真实关系追踪性中位均为 1.75/5**，远未解决高汇聚线路的可读性。相同指纹的原始评审与报告保存在 `elk-elastic-multi/*.codex.visual-repeat.json` 及其 `.visual-repeat-samples/`；独立模型评价仍不是人工 `approval=approved`。
 
+**ELK 联合端口二次布局（2026-10-27，仍为隔离实验）**：使用 `--joint-ports`（要求同时提供 `--same-canvas --fit-corridors`）时，只为原生 `elk-native` 追加第二个完整布局候选。首次 ELK 生成真实节点位置；第二次以实际相对位置确定独立关系的进出边方向，使用 ELK `FIXED_SIDE` 的逐关系端口而非给模型造共享总线；全部候选仍接受现有的语义、边界、同画布、折点、字体、路长、交叉和重叠门禁。该实验不修改生产 Composer，也不因为有单个合格案例就自动切换引擎。
+
+```sh
+node --import tsx scripts/benchmark-architecture-engines.ts \
+  --suite=project-multi --spacing=8 --wrapping=MULTI_EDGE --aspect-ratio=0.8 \
+  --compact-bounds --same-canvas --fit-corridors --joint-ports \
+  --out=test-results/architecture-convergence/elk-joint-ports
+```
+
+三组真实源码子图共 15 个 ELK 候选，有 2 个通过外部几何与保真门禁，均来自 Canvas 编辑流水线（单遍原生布局与双遍联合布局）；另外两组继续拒绝。目标 15 节点 / 21 关系的双遍版本维持 **0 交叉、0 独立重叠、0 端点法向缺陷、960×1206 画布、12.5px 字体**，相较单遍版本的线路 **10,804→6,510px**、转折 **48→40**、外围绕行 **5→2**。同协议真实 Chrome 截图的两次独立 Luna Max 得分，单遍 **58.5 / 57（平均 57.8）**，双遍 **63.5 / 61.5（平均 62.5）**，双遍的关系可追踪性中位数 **1.75→2/5**；比较器仍为 `inconclusive`，也没有人工批准。此结果不等于普适视觉收益或端到端耗时改善。
+
+另行验证将同一节点的 11 条真实入边强行分散至多边端口，会导致 **7～10 处新交叉**，因此未合入该策略；目前双遍候选依旧存在 **9 处独立入边端口间距冲突**，真实的 80px 侧边装不下 11 个按 14px 间隔排列的端口。下一阶段需把**边界容量、侧边选择、节点尺寸与层级**作为同一完整布局问题检验，而非针对 `canvas` 节点添加特例或通过隐藏关系伪造可读性。原始证据与可编辑场景保存在忽略目录 `test-results/architecture-convergence/elk-joint-ports/`。
+
 隔离适配器的 `rigidLockedPlacement` 仅在**完整 ELK 原生端口几何 + 单一刚性平移**能够恢复所有锁定节点原坐标且不超出原画布时成功；多个锁定节点要求不一致的位移时明确失败，绝不强行改写人工位置。语义保真门禁同时检查 `locked` 属性本身未被候选丢弃。该能力还不是通用固定节点的布局求解器，若新图包含不可整体平移保持的人工编辑位置，应保留当前引擎。实际安装的 `elkjs@0.12.0` 声明双许可 `EPL-2.0 OR GPL-3.0-or-later`，发布前还需对依赖许可与 npm 分发方式完成合规核对。本轮不修改正式 Composer，也不增加生产 ELK 依赖。
 
 **2026-10-27 P0 端口容量第一阶段**：沿用现有 Canvas/Composer/Router，针对同一节点同侧的 3–6 条真实入边新增联合端口分配候选，只有物理边界间隔足够、末端仍严格正交时才提出。原有逐条候选继续存在，Composer 仍用完整场景的交叉、独立重叠、穿节点、真实共享主干、分区侵入、路长和字号决定是否采纳；没有引入新布局器或修改 Canvas 文件格式。路由诊断增加 `ingressPortConflicts`，只统计不同真实关系在同一节点同侧的不足 14px 端口间隔，排除已验证同一共享主干；该指标**只提供证据，不单独进入候选收益函数**，防止压过真实结构质量。基准 HTML 与 JSON 保留该数字。

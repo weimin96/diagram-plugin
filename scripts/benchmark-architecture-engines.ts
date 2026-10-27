@@ -35,6 +35,8 @@ const compactBounds = args.includes('--compact-bounds')
 const sameCanvas = args.includes('--same-canvas')
 const fitCorridors = args.includes('--fit-corridors')
 if (fitCorridors && !sameCanvas) throw new Error('--fit-corridors requires --same-canvas')
+const jointPorts = args.includes('--joint-ports')
+if (jointPorts && !fitCorridors) throw new Error('--joint-ports requires --same-canvas --fit-corridors')
 const wrappingArg = args.find((arg) => arg.startsWith('--wrapping='))?.slice(11)
 if (wrappingArg !== undefined && !['OFF', 'SINGLE_EDGE', 'MULTI_EDGE'].includes(wrappingArg)) {
   throw new Error('Use --wrapping=OFF|SINGLE_EDGE|MULTI_EDGE')
@@ -78,26 +80,33 @@ for (const entry of entries) {
   const measures: Array<{ engine: string; scene: typeof original.scene; ms: number; canvasSizeRejection?: string }> = [
     { engine: 'current', scene: original.scene, ms: baselineMs },
   ]
-  for (const variant of variants) {
+  const candidates = variants.flatMap((variant) => [
+    { variant, joint: false },
+    ...(jointPorts && variant === 'native' ? [{ variant, joint: true }] : []),
+  ])
+  for (const { variant, joint } of candidates) {
     const start = performance.now()
+    const engineName = `elk-${variant}${joint ? '-joint' : ''}`
     try {
-      const scene = await layoutWithElk(original.scene, variant, {
+      const config = {
         direction, ...(spacing === undefined ? {} : { nodeSpacing: spacing, layerSpacing: spacing }),
         compactBounds,
         wrapping, aspectRatio,
-      })
+      }
+      const initial = await layoutWithElk(original.scene, variant, config)
+      const scene = joint ? await layoutWithElk(initial, variant, { ...config, portSideMode: 'relative' }) : initial
       const matched = sameCanvas
         ? (fitCorridors ? fitElkCorridorsWithinOriginalCanvas(original.scene, scene)
           : placeElkWithinOriginalCanvas(original.scene, scene)) : undefined
       measures.push({
-        engine: `elk-${variant}`,
+        engine: engineName,
         scene: matched ?? scene, ms: Math.round(performance.now() - start),
         ...(sameCanvas && !matched ? { canvasSizeRejection:
           `保持原画布 ${original.scene.width}×${original.scene.height}px、边框安全间距和锁定节点位置时无法容纳该候选` } : {}),
       })
     } catch (error) {
       results.push({
-        case: entry.id, engine: `elk-${variant}`, nodes: entry.intent.nodes.length,
+        case: entry.id, engine: engineName, nodes: entry.intent.nodes.length,
         edges: entry.intent.relations.length, ms: Math.round(performance.now() - start),
         crossings: -1, overlaps: -1, throughNodes: -1, labelCollisions: -1, fitFont: 0,
         width: 0, height: 0, aspectRatio: 0, groupOverlaps: -1, totalRouteLength: -1,
@@ -136,7 +145,7 @@ for (const entry of entries) {
 
 const eligible = results.filter((item) => item.engine !== 'current' && item.eligible)
 await writeFile(path.join(output, 'report.json'), JSON.stringify({
-  version: 3, suite, caseCount: entries.length, direction, spacing: spacing ?? null, compactBounds, sameCanvas, fitCorridors,
+  version: 3, suite, caseCount: entries.length, direction, spacing: spacing ?? null, compactBounds, sameCanvas, fitCorridors, jointPorts,
   wrapping: wrapping ?? null, aspectRatio: aspectRatio ?? null,
   source: suite === 'project' || suite === 'project-multi'
     ? 'Real scoped TypeScript import graph including type-only relations' : 'Reference/synthetic',
