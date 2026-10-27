@@ -200,7 +200,7 @@ ${results.map((result) => `<section><header><div><h2>${escapeHtml(result.title)}
 <span>布局排序：${result.layoutOrderingStrategy}</span>
 <span>${escapeHtml(result.visualPlan.reference.label)} · ${result.visualPlan.recommendedView === 'overview' ? '先看总览' : '直接查看详情'}</span>
 <span>${result.nodes} 节点 / ${result.relations} 关系</span>
-<span>布局前单侧端口容量假设 ${result.prelayoutDemand.assumedSingleSidePortCapacity} · 超容量节点 ${result.prelayoutDemand.overCapacityNodes.length} · 未知分区节点 ${result.prelayoutDemand.nodesWithoutVerifiedPartition}</span>
+<span>布局前单侧端口容量假设 ${result.prelayoutDemand.assumedSingleSidePortCapacity} · 超容量节点 ${result.prelayoutDemand.overCapacityNodes.length} · 逻辑跨层切面压力峰值 ${result.prelayoutDemand.maxLogicalFrontierRelations} 条真实关系 · 未知分区节点 ${result.prelayoutDemand.nodesWithoutVerifiedPartition}</span>
 <span>${result.structuralScore} / 90</span>
 <span>${result.visualPlan.review.readyForVisualReview ? '待人工视觉审查' : '阻断视觉审查'}</span>
 <span>适配字号约 ${result.presentation.estimatedTitlePxAtFit}px</span>

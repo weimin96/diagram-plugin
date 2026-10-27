@@ -43,6 +43,7 @@ export function measureArchitectureLayoutDemand(
   // layer ordering cannot represent. Neither SCCs nor partitions are invented.
   const discovery = new Map<string, number>(), low = new Map<string, number>()
   const stack: string[] = [], onStack = new Set<string>(), cycles: string[][] = []
+  const components: string[][] = []
   let clock = 0
   function visit(node: string) {
     const time = clock++
@@ -64,10 +65,59 @@ export function measureArchitectureLayoutDemand(
         onStack.delete(popped)
         component.push(popped)
       } while (popped !== node)
+      components.push(component)
       if (component.length > 1 || edges.has(`${node}\0${node}`)) cycles.push(component.sort())
     }
   }
   for (const node of intent.nodes) if (!discovery.has(node.id)) visit(node.id)
+
+  // Collapse real cyclic strongly connected components BEFORE planning layer
+  // demand. A cycle cannot be assigned a fictitious directed DAG layer order.
+  // Every long edge crossing multiple DAG layer cuts contributes once to each
+  // crossed frontier; the result is logical relation pressure, NOT a physical
+  // routing lane count (bundling and geometric placement are still unknown).
+  const orderedComponents = components.map((component) => component.slice().sort())
+    .sort((a, b) => a[0].localeCompare(b[0], 'en'))
+  const componentOf = new Map(orderedComponents.flatMap((component, index) =>
+    component.map((node) => [node, index] as const)))
+  const successors = orderedComponents.map(() => new Set<number>())
+  const indegree = orderedComponents.map(() => 0)
+  let cyclicInternalRelations = 0
+  for (const edge of intent.relations) {
+    const source = componentOf.get(edge.from)!, target = componentOf.get(edge.to)!
+    if (source === target) {
+      cyclicInternalRelations++
+    } else if (!successors[source].has(target)) {
+      successors[source].add(target)
+      indegree[target]++
+    }
+  }
+  const layer = orderedComponents.map(() => 0)
+  const queue = indegree.flatMap((degree, index) => degree === 0 ? [index] : [])
+  let visited = 0
+  while (queue.length) {
+    const head = queue.shift()!
+    visited++
+    for (const target of [...successors[head]].sort((a, b) => a - b)) {
+      layer[target] = Math.max(layer[target], layer[head] + 1)
+      if (--indegree[target] === 0) queue.push(target)
+    }
+  }
+  if (visited !== orderedComponents.length) throw new Error('SCC condensation must form a DAG')
+  const frontierRelations = new Map<number, Array<{ from: string; to: string }>>()
+  for (const edge of intent.relations) {
+    const start = layer[componentOf.get(edge.from)!]
+    const end = layer[componentOf.get(edge.to)!]
+    for (let cut = start; cut < end; cut++) {
+      frontierRelations.set(cut, [...(frontierRelations.get(cut) ?? []), edge])
+    }
+  }
+  const routingFrontiers = [...frontierRelations].sort(([a], [b]) => a - b)
+    .map(([afterLayer, crossing]) => ({
+      afterLayer, relationCount: crossing.length,
+      distinctSources: new Set(crossing.map((edge) => edge.from)).size,
+      distinctTargets: new Set(crossing.map((edge) => edge.to)).size,
+    }))
 
   const spacing = CANVAS_PORT_MIN_SEPARATION_PX
   const capacity = Math.max(0, Math.floor(referenceSideSpanPx / spacing) - 1)
@@ -95,6 +145,10 @@ export function measureArchitectureLayoutDemand(
     assumedSingleSidePortCapacity: capacity,
     overCapacityNodes: demands.filter((node) => node.singleSidePortDeficit > 0),
     cycleComponents: cycles.sort((a, b) => a[0].localeCompare(b[0], 'en')),
+    cyclicInternalRelations,
+    topologicalLayerCount: Math.max(0, ...layer) + (layer.length ? 1 : 0),
+    routingFrontiers,
+    maxLogicalFrontierRelations: Math.max(0, ...routingFrontiers.map((frontier) => frontier.relationCount)),
     declaredPartitionCount: new Set([...degrees.values()].flatMap((node) => node.partition ? [node.partition] : [])).size,
     nodesWithoutVerifiedPartition: demands.filter((node) => !node.partition).length,
     confirmedCrossPartitionRelations,

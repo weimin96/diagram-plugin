@@ -71,9 +71,23 @@ test('真实架构基准的每条关系必须来自仓库源码的实际 TS impo
   assert.equal(topology.unknownPartitionRelations, 1)
   assert.equal(topology.nodesWithoutVerifiedPartition, 1)
   assert.equal(topology.primaryPathIsReal, true)
+  assert.equal(topology.cyclicInternalRelations, 3)
+  assert.equal(topology.topologicalLayerCount, 2)
+  assert.deepEqual(topology.routingFrontiers, [{ afterLayer: 0,
+    relationCount: 1, distinctSources: 1, distinctTargets: 1 }])
   assert.equal(measureArchitectureLayoutDemand({ ...typed, primaryPath: ['a', 'c'] }, 80).primaryPathIsReal, false)
   assert.equal(measureArchitectureLayoutDemand({ ...typed, relations: [...typed.relations].reverse() }, 80)
     .confirmedCrossPartitionRelations, topology.confirmedCrossPartitionRelations)
+  assert.deepEqual(measureArchitectureLayoutDemand({ ...typed, relations: [...typed.relations].reverse() }, 80)
+    .routingFrontiers, topology.routingFrontiers,
+  'logical DAG frontier pressure cannot depend on import enumeration order')
+  const longEdge = measureArchitectureLayoutDemand({ title: 'Synthetic long edge',
+    nodes: [{ id: 'x', text: 'X' }, { id: 'y', text: 'Y' }, { id: 'z', text: 'Z' }],
+    relations: [{ from: 'x', to: 'y' }, { from: 'y', to: 'z' }, { from: 'x', to: 'z' }],
+  }, 80)
+  assert.equal(longEdge.topologicalLayerCount, 3)
+  assert.deepEqual(longEdge.routingFrontiers.map((frontier) => frontier.relationCount), [2, 2],
+    'a real long dependency consumes two logical layer-cut frontiers without fabricating new edges')
   assert.throws(() => measureArchitectureLayoutDemand({ ...typed,
     relations: [...typed.relations, { from: 'a', to: 'missing' }] }, 80), /Unknown architecture relation endpoint/)
   assert.throws(() => measureArchitectureLayoutDemand(typed, 0), /finite positive/)
