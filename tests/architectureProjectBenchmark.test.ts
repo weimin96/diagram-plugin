@@ -2,33 +2,41 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 import ts from 'typescript'
-import { projectArchitectureCase, coreArchitectureModules } from '../scripts/architecture-project-cases.js'
+import { projectArchitectureCase, projectArchitectureCases, coreArchitectureModules,
+  qualityPipelineModules, canvasEditingModules } from '../scripts/architecture-project-cases.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { canvasBundleTrunks, parseCanvasScene, serializeCanvasScene } from '../src/canvas.js'
 
 test('真实架构基准的每条关系必须来自仓库源码的实际 TS import', async () => {
-  const sample = await projectArchitectureCase()
-  assert.equal(sample.source, 'project')
+  const samples = await projectArchitectureCases()
+  assert.deepEqual(samples.map((sample) => sample.intent.nodes.map((node) => node.id)), [
+    [...coreArchitectureModules], [...qualityPipelineModules], [...canvasEditingModules],
+  ], 'each benchmark must describe an independent, declared group of actual modules')
+  assert.equal(new Set(samples.map((sample) => sample.id)).size, samples.length)
   assert.equal(coreArchitectureModules.length, 12)
-  assert.equal(sample.intent.nodes.length, 12)
-  assert.ok(sample.intent.relations.length >= 20,
+  assert.equal(samples[0].intent.nodes.length, 12)
+  assert.ok(samples[0].intent.relations.length >= 20,
     'the bounded core subsystem must exercise a genuinely dense import topology')
-  const selected = new Set(sample.intent.nodes.map((node) => node.id))
-  const observed = new Set<string>()
-  for (const node of sample.intent.nodes) {
-    assert.deepEqual(node.sourcePaths, [`src/${node.id}.ts`])
-    const filename = new URL(`../src/${node.id}.ts`, import.meta.url)
-    const ast = ts.createSourceFile(node.id, await readFile(filename, 'utf8'), ts.ScriptTarget.Latest, true)
-    for (const statement of ast.statements) {
-      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue
-      const imported = statement.moduleSpecifier.text
-      if (!imported.startsWith('./')) continue
-      const dependency = imported.split('/').at(-1)!.replace(/\.(?:js|ts|tsx)$/, '')
-      if (dependency !== node.id && selected.has(dependency)) observed.add(`${node.id}\u0000${dependency}`)
+  for (const sample of samples) {
+    assert.equal(sample.source, 'project')
+    const selected = new Set(sample.intent.nodes.map((node) => node.id))
+    const observed = new Set<string>()
+    for (const node of sample.intent.nodes) {
+      assert.deepEqual(node.sourcePaths, [`src/${node.id}.ts`])
+      const filename = new URL(`../src/${node.id}.ts`, import.meta.url)
+      const ast = ts.createSourceFile(node.id, await readFile(filename, 'utf8'), ts.ScriptTarget.Latest, true)
+      for (const statement of ast.statements) {
+        if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue
+        const imported = statement.moduleSpecifier.text
+        if (!imported.startsWith('./')) continue
+        const dependency = imported.split('/').at(-1)!.replace(/\.(?:js|ts|tsx)$/, '')
+        if (dependency !== node.id && selected.has(dependency)) observed.add(`${node.id}\u0000${dependency}`)
+      }
     }
+    assert.ok(observed.size >= 5, 'every real subgraph must contain verifiable relationships')
+    assert.deepEqual(sample.intent.relations.map((edge) => `${edge.from}\u0000${edge.to}`).sort(),
+      [...observed].sort(), 'never add an inferred dependency or omit an actual selected-module import')
   }
-  assert.deepEqual(sample.intent.relations.map((edge) => `${edge.from}\u0000${edge.to}`).sort(),
-    [...observed].sort(), 'never add an inferred dependency or omit an actual selected-module import')
 })
 
 test('真实依赖密集图不能因不穿节点就获得错误的自动审查资格', async () => {

@@ -20,6 +20,7 @@
     "benchmark:architecture": "node --import tsx scripts/benchmark-architecture.ts",
     "benchmark:architecture:review": "node --import tsx scripts/benchmark-architecture.ts --suite=extended --require-review-ready",
     "benchmark:architecture:project": "node --import tsx scripts/benchmark-architecture.ts --suite=project",
+    "benchmark:architecture:project:multi": "node --import tsx scripts/benchmark-architecture.ts --suite=project-multi",
     "benchmark:architecture:acceptance": "node --import tsx scripts/benchmark-architecture.ts --suite=project --require-review-ready",
     "benchmark:architecture:project:visual": "node --import tsx scripts/benchmark-architecture-design.ts --project --screenshots",
     "benchmark:architecture:design": "node --import tsx scripts/benchmark-architecture-design.ts",

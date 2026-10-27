@@ -136,6 +136,19 @@ function preservesArchitectureHardGeometry(
     && after.labelOverflows <= before.labelOverflows
 }
 
+/** The same corridor safety contract applies to route, slot, and final-port
+ * candidates. Each stage owns its own length budget and improvement policy;
+ * only the invariant frame/intrusion/length checks are shared here. */
+function preservesArchitectureCorridorEnvelope(
+  reference: ReturnType<typeof assessArchitectureRouteDiagnostics>,
+  next: ReturnType<typeof assessArchitectureRouteDiagnostics>,
+  maxRouteLength: number,
+): boolean {
+  return next.frameOverlapArea <= reference.frameOverlapArea
+    && next.unrelatedFrameIntrusionLength <= reference.unrelatedFrameIntrusionLength
+    && next.totalRouteLength <= maxRouteLength
+}
+
 /** Only reroute implicated edges, and accept strictly improving results; never move authored nodes. */
 function refineArchitectureRoutes(
   initialScene: CanvasScene,
@@ -749,9 +762,8 @@ function optimizeCongestedRoutes(result: ReturnType<typeof composeArchitectureGr
         if (next.rawSelectionScore < previous.rawSelectionScore) continue
         if (canvasBundleTrunks(candidate).length < minimumTrunks) continue
         const diagnostics = assessArchitectureRouteDiagnostics(candidate)
-        if (diagnostics.frameOverlapArea > initialRoute.frameOverlapArea
-          || diagnostics.unrelatedFrameIntrusionLength > initialRoute.unrelatedFrameIntrusionLength
-          || diagnostics.totalRouteLength > initialRoute.totalRouteLength * 1.1) continue
+        if (!preservesArchitectureCorridorEnvelope(initialRoute, diagnostics,
+          initialRoute.totalRouteLength * 1.1)) continue
         if (next.rawSelectionScore === previous.rawSelectionScore) {
           const incumbent = best?.routeDiagnostics ?? routeDiagnostics
           // A route-only tie is meaningful only if nothing visible worsens.
@@ -834,9 +846,8 @@ function negotiateFinalCorridors(result: ReturnType<typeof composeArchitectureGr
         || canvasBundleTrunks(scene).length < requiredTrunks) continue
       const routeDiagnostics = assessArchitectureRouteDiagnostics(scene)
       if (routeDiagnostics.perimeterDetours > selected.routeDiagnostics.perimeterDetours
-        || routeDiagnostics.frameOverlapArea > selected.routeDiagnostics.frameOverlapArea
-        || routeDiagnostics.unrelatedFrameIntrusionLength > selected.routeDiagnostics.unrelatedFrameIntrusionLength
-        || routeDiagnostics.totalRouteLength > selected.routeDiagnostics.totalRouteLength * 1.02) continue
+        || !preservesArchitectureCorridorEnvelope(selected.routeDiagnostics, routeDiagnostics,
+          selected.routeDiagnostics.totalRouteLength * 1.02)) continue
       const evaluation = evaluateArchitectureLayout(scene, quality, selected.evaluation.layout, selected.evaluation.density)
       if (evaluation.rawSelectionScore < selected.evaluation.rawSelectionScore) continue
       const gain = (selected.routeDiagnostics.perimeterDetours - routeDiagnostics.perimeterDetours) * 25
@@ -875,9 +886,8 @@ function negotiateFinalCorridors(result: ReturnType<typeof composeArchitectureGr
       const routeDiagnostics = assessArchitectureRouteDiagnostics(scene)
       if (routeDiagnostics.ingressPortConflicts >= selected.routeDiagnostics.ingressPortConflicts
         || routeDiagnostics.perimeterDetours > selected.routeDiagnostics.perimeterDetours
-        || routeDiagnostics.frameOverlapArea > selected.routeDiagnostics.frameOverlapArea
-        || routeDiagnostics.unrelatedFrameIntrusionLength > selected.routeDiagnostics.unrelatedFrameIntrusionLength
-        || routeDiagnostics.totalRouteLength > routeBudget) continue
+        || !preservesArchitectureCorridorEnvelope(selected.routeDiagnostics, routeDiagnostics,
+          routeBudget)) continue
       const assessed = assessCompleteArchitectureScene(
         scene, selected.evaluation.layout, selected.evaluation.density, selected.semanticComposition,
       )
@@ -936,9 +946,8 @@ function negotiateDenseNodeSlots(result: ReturnType<typeof composeArchitectureGr
             && metrics.edgeOverlaps === baseline.edgeOverlaps)
           || canvasBundleTrunks(scene).length < initialTrunks) continue
         const routeDiagnostics = assessArchitectureRouteDiagnostics(scene)
-        if (routeDiagnostics.frameOverlapArea > baselineRoute.frameOverlapArea
-          || routeDiagnostics.unrelatedFrameIntrusionLength > baselineRoute.unrelatedFrameIntrusionLength
-          || routeDiagnostics.totalRouteLength > baselineRoute.totalRouteLength * 1.1) continue
+        if (!preservesArchitectureCorridorEnvelope(baselineRoute, routeDiagnostics,
+          baselineRoute.totalRouteLength * 1.1)) continue
         const presentation = assessArchitecturePresentation(scene)
         if (presentation.estimatedTitlePxAtFit < result.presentation.estimatedTitlePxAtFit) continue
         const evaluation = evaluateArchitectureLayout(scene, quality, result.evaluation.layout, result.evaluation.density)
