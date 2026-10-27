@@ -60,6 +60,7 @@ export function compareEditableArchitectureSemantics(
         || item.groupId !== next.groupId || item.emphasis !== next.emphasis) {
         reasons.push(`${id}: 节点文字、尺寸或归属改变`)
       }
+      if (item.locked !== next.locked) reasons.push(`${id}: 锁定属性改变`)
       if (item.locked && (item.x !== next.x || item.y !== next.y)) {
         reasons.push(`${id}: 锁定节点位置改变`)
       }

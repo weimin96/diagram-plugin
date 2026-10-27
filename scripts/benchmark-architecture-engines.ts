@@ -9,7 +9,7 @@ import { assessArchitectureRouteDiagnostics } from '../src/architectureRouteDiag
 import type { CanvasScene } from '../src/canvas.js'
 import { architectureBenchmarkCases } from './architecture-benchmark-cases.js'
 import { projectArchitectureCase, projectArchitectureCases } from './architecture-project-cases.js'
-import { layoutWithElk, type ElkBenchmarkVariant } from './elk-architecture-candidate.js'
+import { layoutWithElk, placeElkWithinOriginalCanvas, type ElkBenchmarkVariant } from './elk-architecture-candidate.js'
 import { compareEditableArchitectureSemantics, judgeExternalLayout, measureEditableArchitecture } from './architecture-layout-gate.js'
 
 const args = process.argv.slice(2)
@@ -27,11 +27,22 @@ const direction = args.find((arg) => arg.startsWith('--direction='))?.slice(12) 
 if (direction !== 'RIGHT' && direction !== 'DOWN') throw new Error('Use --direction=RIGHT|DOWN')
 const spacingArg = args.find((arg) => arg.startsWith('--spacing='))?.slice(10)
 const spacing = spacingArg === undefined ? undefined : Number(spacingArg)
-if (spacing !== undefined && (!Number.isInteger(spacing) || spacing < 20 || spacing > 200)) {
-  throw new Error('--spacing must be an integer between 20 and 200')
+if (spacing !== undefined && (!Number.isInteger(spacing) || spacing < 8 || spacing > 200)) {
+  throw new Error('--spacing must be an integer between 8 and 200')
 }
 const requireEligible = args.includes('--require-eligible')
 const compactBounds = args.includes('--compact-bounds')
+const sameCanvas = args.includes('--same-canvas')
+const wrappingArg = args.find((arg) => arg.startsWith('--wrapping='))?.slice(11)
+if (wrappingArg !== undefined && !['OFF', 'SINGLE_EDGE', 'MULTI_EDGE'].includes(wrappingArg)) {
+  throw new Error('Use --wrapping=OFF|SINGLE_EDGE|MULTI_EDGE')
+}
+const wrapping = wrappingArg as 'OFF' | 'SINGLE_EDGE' | 'MULTI_EDGE' | undefined
+const ratioArg = args.find((arg) => arg.startsWith('--aspect-ratio='))?.slice(15)
+const aspectRatio = ratioArg === undefined ? undefined : Number(ratioArg)
+if (aspectRatio !== undefined && (!Number.isFinite(aspectRatio) || aspectRatio < 0.2 || aspectRatio > 5)) {
+  throw new Error('--aspect-ratio must be 0.2..5')
+}
 const entries = (suite === 'project' ? [await projectArchitectureCase()]
   : suite === 'project-multi' ? await projectArchitectureCases() : architectureBenchmarkCases(suite))
   .filter((entry) => !caseArg || entry.id === caseArg)
@@ -62,7 +73,7 @@ for (const entry of entries) {
   const original = composeArchitectureGraph(entry.intent)
   const baseline = measureEditableArchitecture(original.scene)
   const baselineMs = Math.round(performance.now() - baselineStart)
-  const measures: Array<{ engine: string; scene: typeof original.scene; ms: number }> = [
+  const measures: Array<{ engine: string; scene: typeof original.scene; ms: number; canvasSizeRejection?: string }> = [
     { engine: 'current', scene: original.scene, ms: baselineMs },
   ]
   for (const variant of variants) {
@@ -71,8 +82,15 @@ for (const entry of entries) {
       const scene = await layoutWithElk(original.scene, variant, {
         direction, ...(spacing === undefined ? {} : { nodeSpacing: spacing, layerSpacing: spacing }),
         compactBounds,
+        wrapping, aspectRatio,
       })
-      measures.push({ engine: `elk-${variant}`, scene, ms: Math.round(performance.now() - start) })
+      const matched = sameCanvas ? placeElkWithinOriginalCanvas(original.scene, scene) : undefined
+      measures.push({
+        engine: `elk-${variant}`,
+        scene: matched ?? scene, ms: Math.round(performance.now() - start),
+        ...(sameCanvas && !matched ? { canvasSizeRejection:
+          `保持原画布 ${original.scene.width}×${original.scene.height}px、边框安全间距和锁定节点位置时无法容纳该候选` } : {}),
+      })
     } catch (error) {
       results.push({
         case: entry.id, engine: `elk-${variant}`, nodes: entry.intent.nodes.length,
@@ -99,8 +117,9 @@ for (const entry of entries) {
       ...additionalGeometry(item.scene),
       fitFont: presentation.estimatedTitlePxAtFit, warnings: [...presentation.warnings],
       faithful: fidelity.faithful, semanticViolations: fidelity.reasons,
-      eligible: verdict ? verdict.eligible && fidelity.faithful : undefined,
-      rejectionReasons: [...(verdict?.reasons ?? []), ...fidelity.reasons],
+      eligible: verdict ? verdict.eligible && fidelity.faithful && !item.canvasSizeRejection : undefined,
+      rejectionReasons: [...(verdict?.reasons ?? []), ...fidelity.reasons,
+        ...(item.canvasSizeRejection ? [item.canvasSizeRejection] : [])],
       nonOrthogonalSegments: measured.nonOrthogonalSegments,
       frameOverlapArea: measured.frameOverlapArea, frameOverflowPx: measured.frameOverflowPx,
       perimeterDetours: measured.perimeterDetours,
@@ -113,7 +132,8 @@ for (const entry of entries) {
 
 const eligible = results.filter((item) => item.engine !== 'current' && item.eligible)
 await writeFile(path.join(output, 'report.json'), JSON.stringify({
-  version: 3, suite, caseCount: entries.length, direction, spacing: spacing ?? null, compactBounds,
+  version: 3, suite, caseCount: entries.length, direction, spacing: spacing ?? null, compactBounds, sameCanvas,
+  wrapping: wrapping ?? null, aspectRatio: aspectRatio ?? null,
   source: suite === 'project' || suite === 'project-multi'
     ? 'Real scoped TypeScript import graph including type-only relations' : 'Reference/synthetic',
   candidateCount: results.filter((item) => item.engine !== 'current').length,

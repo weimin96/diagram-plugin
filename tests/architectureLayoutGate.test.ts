@@ -112,4 +112,8 @@ test('external layout cannot falsify or drop an editable source relation', () =>
     ...original, elements: original.elements.map((node) =>
       node.id === 'a' ? { ...node, x: 25 } : node),
   }).faithful, false)
+  assert.equal(compareEditableArchitectureSemantics(original, {
+    ...original, elements: original.elements.map((node) =>
+      node.id === 'a' ? { ...node, locked: false } : node),
+  }).faithful, false, 'a candidate cannot silently discard the lock flag')
 })

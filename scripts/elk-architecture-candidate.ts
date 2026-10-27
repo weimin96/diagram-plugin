@@ -10,6 +10,12 @@ export type ElkLayoutConfig = {
   direction?: 'RIGHT' | 'DOWN'
   nodeSpacing?: number
   layerSpacing?: number
+  /** ELK Layered graph-level wrapping; only used by isolated experiments. */
+  wrapping?: 'OFF' | 'SINGLE_EDGE' | 'MULTI_EDGE'
+  aspectRatio?: number
+  /** Only allow a rigid whole-scene translation matching ALL pinned nodes
+   * inside the original Canvas; never perform a partial pinned ELK relayout. */
+  rigidLockedPlacement?: boolean
   /** Experimental frame-only transformation: preserve every route/port and
    * node dimension, trim redundant outer ELK padding to 30px. */
   compactBounds?: boolean
@@ -43,6 +49,20 @@ function collectNativeEdges(graph: ElkNode, positions: Map<string, CanvasPoint>)
   }
   walk(graph)
   return result
+}
+
+function translateElkGeometry(scene: CanvasScene, dx: number, dy: number): CanvasScene {
+  const move = (point: CanvasPoint): CanvasPoint => ({ x: point.x + dx, y: point.y + dy })
+  return {
+    ...scene,
+    elements: scene.elements.map((item) => item.type === 'arrow' ? {
+      ...item,
+      points: item.points?.map(move),
+      start: item.start ? move(item.start) : undefined,
+      end: item.end ? move(item.end) : undefined,
+      labelPosition: item.labelPosition ? move(item.labelPosition) : undefined,
+    } : { ...item, x: item.x + dx, y: item.y + dy }),
+  }
 }
 
 /** A translation, not scaling or layout: never improve fit by shrinking
@@ -80,19 +100,39 @@ export function compactElkSceneBounds(scene: CanvasScene, padding = 30): CanvasS
   const minY = Math.min(...points.map((point) => point.y))
   const maxY = Math.max(...points.map((point) => point.y))
   const dx = padding - minX, dy = padding - minY
-  const move = (point: CanvasPoint): CanvasPoint => ({ x: point.x + dx, y: point.y + dy })
   return {
-    ...scene,
+    ...translateElkGeometry(scene, dx, dy),
     width: Math.ceil(maxX - minX + padding * 2),
     height: Math.ceil(maxY - minY + padding * 2),
-    elements: scene.elements.map((item) => item.type === 'arrow' ? {
-      ...item,
-      points: item.points?.map(move),
-      start: item.start ? move(item.start) : undefined,
-      end: item.end ? move(item.end) : undefined,
-      labelPosition: item.labelPosition ? move(item.labelPosition) : undefined,
-    } : { ...item, x: item.x + dx, y: item.y + dy }),
   }
+}
+
+/** Feasibility check for an EXACT original Canvas size and untouched locked
+ * coordinates. Rigid translation is the only permitted adaptation: an ELK
+ * result that needs squeezing or contradicts two locked nodes is rejected. */
+export function placeElkWithinOriginalCanvas(
+  original: CanvasScene, candidate: CanvasScene, padding = 30,
+): CanvasScene | null {
+  const packed = compactElkSceneBounds(candidate, padding)
+  if (packed.width > original.width || packed.height > original.height) return null
+  const packedNodes = new Map(packed.elements.filter((item): item is CanvasNode => item.type === 'node')
+    .map((item) => [item.id, item]))
+  const locked = original.elements.filter((item): item is CanvasNode => item.type === 'node' && !!item.locked)
+  const dx = locked.length
+    ? locked[0].x - (packedNodes.get(locked[0].id)?.x ?? Infinity)
+    : Math.floor((original.width - packed.width) / 2)
+  const dy = locked.length
+    ? locked[0].y - (packedNodes.get(locked[0].id)?.y ?? Infinity)
+    : Math.floor((original.height - packed.height) / 2)
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)
+    || dx < 0 || dy < 0
+    || dx + packed.width > original.width || dy + packed.height > original.height
+    || locked.some((node) => {
+      const next = packedNodes.get(node.id)
+      return !next || next.x + dx !== node.x || next.y + dy !== node.y
+    })) return null
+  return { ...translateElkGeometry(packed, dx, dy),
+    width: original.width, height: original.height }
 }
 
 /** Prototype adapter: geometry only. Existing CanvasScene is never changed in place. */
@@ -101,7 +141,10 @@ export async function layoutWithElk(scene: CanvasScene, variant: ElkBenchmarkVar
   const arrows = scene.elements.filter((item) => item.type === 'arrow')
   if (!nodes.length) throw new Error('No Canvas nodes to lay out')
   const nativeRoutes = variant === 'native' || variant === 'native-compound'
-  if (nativeRoutes && nodes.some((node) => node.locked)) {
+  if (config.rigidLockedPlacement && !nativeRoutes) {
+    throw new Error('Rigid locked placement requires native ELK edge geometry')
+  }
+  if (nativeRoutes && nodes.some((node) => node.locked) && !config.rigidLockedPlacement) {
     throw new Error('ELK native import cannot preserve locked Canvas node coordinates')
   }
   const compound = variant === 'compound' || variant === 'native-compound'
@@ -129,6 +172,8 @@ export async function layoutWithElk(scene: CanvasScene, variant: ElkBenchmarkVar
       'elk.edgeRouting': 'ORTHOGONAL',
       'elk.spacing.nodeNode': String(config.nodeSpacing ?? 64),
       'elk.layered.spacing.nodeNodeBetweenLayers': String(config.layerSpacing ?? 90),
+      ...(config.wrapping ? { 'elk.layered.wrapping.strategy': config.wrapping } : {}),
+      ...(config.aspectRatio ? { 'elk.aspectRatio': String(config.aspectRatio) } : {}),
       'elk.padding': '[top=35,left=35,bottom=35,right=35]',
       ...(compound ? { 'elk.hierarchyHandling': 'INCLUDE_CHILDREN' } : {}),
     },
@@ -194,7 +239,10 @@ export async function layoutWithElk(scene: CanvasScene, variant: ElkBenchmarkVar
         }
       }
       const position = absolute.get(item.id)
-      return position && !item.locked
+      // In opt-in rigid-lock mode all nodes use the same tentative ELK
+      // geometry; the final whole-scene translation restores every pin.
+      // Preserving a locked node here would misalign it with native edges.
+      return position && (!item.locked || config.rigidLockedPlacement)
         ? { ...item, x: Math.round(position.x + margin), y: Math.round(position.y + margin) }
         : item
     }),
@@ -202,5 +250,10 @@ export async function layoutWithElk(scene: CanvasScene, variant: ElkBenchmarkVar
   // Reuse the project's canonical editable routing model. This isolates the
   // ordering/positioning contribution of ELK without inventing new arrow semantics.
   const routed = nativeRoutes ? repositioned : routeArchitectureEdges(repositioned)
+  if (config.rigidLockedPlacement) {
+    const placed = placeElkWithinOriginalCanvas(scene, routed)
+    if (!placed) throw new Error('ELK native result cannot preserve original Canvas size and all locked nodes')
+    return placed
+  }
   return config.compactBounds ? compactElkSceneBounds(routed) : routed
 }

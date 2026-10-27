@@ -2,11 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { architectureCases } from './fixtures/architecture/cases.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
-import { canvasArrowBoxRoute, canvasGroupFrames, parseCanvasScene, serializeCanvasScene } from '../src/canvas.js'
+import { canvasArrowBoxRoute, canvasGroupFrames, parseCanvasScene, serializeCanvasScene, type CanvasNode } from '../src/canvas.js'
 import { assessCanvasVisualQuality } from '../src/canvasQuality.js'
-import { compactElkSceneBounds, layoutWithElk } from '../scripts/elk-architecture-candidate.js'
+import { compactElkSceneBounds, layoutWithElk, placeElkWithinOriginalCanvas } from '../scripts/elk-architecture-candidate.js'
 import { architectureBenchmarkCases } from '../scripts/architecture-benchmark-cases.js'
-import { measureEditableArchitecture } from '../scripts/architecture-layout-gate.js'
+import { compareEditableArchitectureSemantics, measureEditableArchitecture } from '../scripts/architecture-layout-gate.js'
 
 test('ELK 实验候选不修改原图，节点/关系/语义分区与历史序列化保持完整', async () => {
   const input = composeArchitectureGraph(architectureCases.find((item) => item.id === 'data-platform')!.intent).scene
@@ -76,6 +76,15 @@ test('ELK 原生路径保留可编辑折点、端点和 SVG/JSON 兼容', async 
   }
   assert.deepEqual(measureEditableArchitecture(compact).quality, measureEditableArchitecture(result).quality)
   assert.equal(parseCanvasScene(serializeCanvasScene(compact)).elements.length, compact.elements.length)
+  const sameSize = { ...scene, width: compact.width + 100, height: compact.height + 80 }
+  const repositioned = placeElkWithinOriginalCanvas(sameSize, compact)
+  assert.ok(repositioned, 'a candidate smaller than the source canvas must fit by translation')
+  assert.equal(repositioned.width, sameSize.width)
+  assert.equal(repositioned.height, sameSize.height)
+  assert.deepEqual(measureEditableArchitecture(repositioned).quality, measureEditableArchitecture(compact).quality)
+  assert.equal(placeElkWithinOriginalCanvas({ ...sameSize, width: compact.width - 1 }, compact), null,
+    'never squeeze coordinates to pass exact-size validation')
+  assert.equal(parseCanvasScene(serializeCanvasScene(repositioned)).elements.length, compact.elements.length)
 })
 
 test('ELK 实验对无效依赖直接失败，不创建悬空连线', async () => {
@@ -111,4 +120,31 @@ test('ELK 原生候选遇到锁定节点时显式拒绝而非错位布线', asyn
   const locked = { ...input, elements: input.elements.map((item) =>
     item.type === 'node' ? { ...item, locked: true } : item) }
   await assert.rejects(layoutWithElk(locked, 'native-compound'), /locked Canvas node/)
+  const laidOut = await layoutWithElk(input, 'native', { compactBounds: true })
+  const primary = laidOut.elements.find((item): item is CanvasNode => item.type === 'node')!
+  const pinnedInput = {
+    ...input, width: laidOut.width + 100, height: laidOut.height + 100,
+    elements: input.elements.map((item) => item.id === primary.id && item.type === 'node'
+      ? { ...item, x: primary.x + 40, y: primary.y + 40, locked: true } : item),
+  }
+  const rigid = await layoutWithElk(pinnedInput, 'native', { rigidLockedPlacement: true })
+  assert.equal(rigid.width, pinnedInput.width)
+  assert.equal(rigid.height, pinnedInput.height)
+  assert.equal(compareEditableArchitectureSemantics(pinnedInput, rigid).faithful, true,
+    'the matched result must retain the pinned source graph and its lock contract')
+  assert.deepEqual(rigid.elements.find((item) => item.id === primary.id),
+    { ...primary, x: primary.x + 40, y: primary.y + 40, locked: true },
+    'one pinned node is preserved exactly when rigid scene translation is feasible')
+  assert.equal(parseCanvasScene(serializeCanvasScene(rigid)).elements.length, pinnedInput.elements.length)
+  const other = laidOut.elements.find((item): item is CanvasNode => item.type === 'node' && item.id !== primary.id)!
+  const inconsistentLocks = {
+    ...pinnedInput,
+    elements: pinnedInput.elements.map((item) => item.id === other.id && item.type === 'node'
+      ? { ...item, x: other.x + 45, y: other.y + 40, locked: true } : item),
+  }
+  await assert.rejects(layoutWithElk(inconsistentLocks, 'native', { rigidLockedPlacement: true }),
+    /cannot preserve original Canvas size and all locked nodes/,
+    'two incompatible pins must fail, not silently move one of them')
+  await assert.rejects(layoutWithElk(pinnedInput, 'flat', { rigidLockedPlacement: true }),
+    /requires native ELK edge geometry/, 'partial rerouting must never be mistaken for rigid native geometry')
 })
