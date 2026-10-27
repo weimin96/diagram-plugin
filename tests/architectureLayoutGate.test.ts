@@ -11,7 +11,7 @@ const baseline: Metrics = {
     labelOverlaps: 0, labelNodeIntersections: 0, labelOverflows: 0, longLabels: 0,
     isolatedHubs: 0, repeatedCards: 0, crossLaneRelations: 0, excessiveEdgeDetours: 0,
   }, fitPx: 12, frames: 2, frameOverlapArea: 24000, intrusionPx: 0, nonOrthogonalSegments: 0,
-  routeLength: 1800, perimeterDetours: 1, portNormals: 0, routeBends: 5,
+  routeLength: 1800, perimeterDetours: 1, portNormals: 0, routeBends: 5, frameOverflowPx: 0,
 }
 
 test('better overlap does not compensate an unreadable external layout', () => {
@@ -72,6 +72,11 @@ test('外部引擎不能通过减少相交边框数量来掩盖更大的分区�
   })
   assert.equal(decision.eligible, false)
   assert.ok(decision.reasons.some((reason) => reason.includes('分区重叠面积增加')))
+  const clippedFrame = judgeExternalLayout(baseline, { ...baseline,
+    quality: { ...baseline.quality, edgeOverlaps: 0 }, frameOverflowPx: 12,
+  })
+  assert.equal(clippedFrame.eligible, false, 'clipped group headers cannot pass visual-readiness gate')
+  assert.ok(clippedFrame.reasons.some((reason) => reason.includes('分区边框或标题超出画布')))
 })
 
 test('no decrease in font size or longer exterior paths is silently accepted', () => {

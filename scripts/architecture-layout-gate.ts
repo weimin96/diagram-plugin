@@ -1,4 +1,4 @@
-import { canvasArrowBoxRoute, type CanvasNode, type CanvasScene } from '../src/canvas.js'
+import { canvasArrowBoxRoute, canvasGroupFrames, type CanvasNode, type CanvasScene } from '../src/canvas.js'
 import { assessCanvasVisualQuality } from '../src/canvasQuality.js'
 import { assessArchitecturePresentation } from '../src/architecturePresentationQuality.js'
 import { assessArchitectureRouteDiagnostics } from '../src/architectureRouteDiagnostics.js'
@@ -9,6 +9,10 @@ export function measureEditableArchitecture(scene: CanvasScene) {
   const quality = assessCanvasVisualQuality(scene).metrics
   const presentation = assessArchitecturePresentation(scene)
   const region = assessArchitectureRouteDiagnostics(scene)
+  const frameOverflowPx = canvasGroupFrames(scene).reduce((total, frame) =>
+    total + Math.max(0, -frame.x) + Math.max(0, -frame.y)
+      + Math.max(0, frame.x + frame.width - scene.width)
+      + Math.max(0, frame.y + frame.height - scene.height), 0)
   const byId = new Map(scene.elements.filter((item): item is CanvasNode => item.type === 'node').map((item) => [item.id, item]))
   const nonOrthogonalSegments = scene.elements.filter((item) => item.type === 'arrow')
     .reduce((total, arrow) => {
@@ -20,7 +24,7 @@ export function measureEditableArchitecture(scene: CanvasScene) {
     }, 0)
   return {
     quality, nonOrthogonalSegments,
-    routeBends: region.totalRouteBends,
+    routeBends: region.totalRouteBends, frameOverflowPx,
     portNormals: region.terminalNormalViolations,
     fitPx: presentation.estimatedTitlePxAtFit,
     frames: region.frameOverlaps,
@@ -89,6 +93,9 @@ export function judgeExternalLayout(
   }
   if (b.edgeOverlaps > a.edgeOverlaps) reasons.push(`重叠增加 ${a.edgeOverlaps}→${b.edgeOverlaps}`)
   if (candidate.frames > baseline.frames) reasons.push('分区边界交叠增加')
+  if (candidate.frameOverflowPx > 0) {
+    reasons.push(`分区边框或标题超出画布 ${candidate.frameOverflowPx}px`)
+  }
   if (candidate.frameOverlapArea > baseline.frameOverlapArea) {
     reasons.push(`分区重叠面积增加 ${baseline.frameOverlapArea}→${candidate.frameOverlapArea}px²`)
   }

@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { architectureCases } from './fixtures/architecture/cases.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
-import { canvasArrowBoxRoute, parseCanvasScene, serializeCanvasScene } from '../src/canvas.js'
+import { canvasArrowBoxRoute, canvasGroupFrames, parseCanvasScene, serializeCanvasScene } from '../src/canvas.js'
 import { assessCanvasVisualQuality } from '../src/canvasQuality.js'
-import { layoutWithElk } from '../scripts/elk-architecture-candidate.js'
+import { compactElkSceneBounds, layoutWithElk } from '../scripts/elk-architecture-candidate.js'
 import { architectureBenchmarkCases } from '../scripts/architecture-benchmark-cases.js'
 import { measureEditableArchitecture } from '../scripts/architecture-layout-gate.js'
 
@@ -51,6 +51,31 @@ test('ELK 原生路径保留可编辑折点、端点和 SVG/JSON 兼容', async 
   }
   assert.ok(arrows.some((arrow) => arrow.fromPortRatio !== undefined || arrow.toPortRatio !== undefined))
   assert.equal(parseCanvasScene(serializeCanvasScene(result)).elements.length, result.elements.length)
+  const compact = compactElkSceneBounds(result)
+  const compactAgain = compactElkSceneBounds(compact)
+  assert.deepEqual(compactAgain, compact, 'bounds normalization must be idempotent')
+  assert.ok(compact.width <= result.width && compact.height <= result.height)
+  for (const frame of canvasGroupFrames(compact)) {
+    assert.ok(frame.x >= 0 && frame.y >= 0, 'never clip an architecture frame title/header')
+    assert.ok(frame.x + frame.width <= compact.width && frame.y + frame.height <= compact.height,
+      'preserve entire authored/automatic group boundary')
+  }
+  assert.ok(compact.elements.every((item, index) => item.id === result.elements[index].id))
+  const sourceBox = new Map(result.elements.filter((item) => item.type === 'node').map((item) => [item.id, item]))
+  const compactBox = new Map(compact.elements.filter((item) => item.type === 'node').map((item) => [item.id, item]))
+  for (const arrow of arrows) {
+    const shifted = compact.elements.find((item) => item.id === arrow.id)
+    assert.ok(shifted?.type === 'arrow')
+    const before = canvasArrowBoxRoute(sourceBox.get(arrow.from)!, sourceBox.get(arrow.to)!, arrow)
+    const after = canvasArrowBoxRoute(compactBox.get(shifted.from)!, compactBox.get(shifted.to)!, shifted)
+    assert.equal(before.length, after.length)
+    for (let i = 1; i < before.length; i++) {
+      assert.deepEqual({ x: after[i].x - after[0].x, y: after[i].y - after[0].y },
+        { x: before[i].x - before[0].x, y: before[i].y - before[0].y }, arrow.id)
+    }
+  }
+  assert.deepEqual(measureEditableArchitecture(compact).quality, measureEditableArchitecture(result).quality)
+  assert.equal(parseCanvasScene(serializeCanvasScene(compact)).elements.length, compact.elements.length)
 })
 
 test('ELK 实验对无效依赖直接失败，不创建悬空连线', async () => {

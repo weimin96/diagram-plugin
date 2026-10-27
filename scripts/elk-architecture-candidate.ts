@@ -1,6 +1,6 @@
 import ELK from 'elkjs/lib/elk.bundled.js'
 import type { ElkExtendedEdge, ElkNode } from 'elkjs/lib/elk-api.js'
-import type { CanvasArrow, CanvasNode, CanvasPoint, CanvasScene } from '../src/canvas.js'
+import { canvasArrowBoxRoute, canvasGroupFrames, type CanvasArrow, type CanvasNode, type CanvasPoint, type CanvasScene } from '../src/canvas.js'
 import { routeArchitectureEdges } from '../src/architectureDesign.js'
 import { canvasNativeOrthogonalRoute } from './canvas-native-route.js'
 
@@ -10,6 +10,9 @@ export type ElkLayoutConfig = {
   direction?: 'RIGHT' | 'DOWN'
   nodeSpacing?: number
   layerSpacing?: number
+  /** Experimental frame-only transformation: preserve every route/port and
+   * node dimension, trim redundant outer ELK padding to 30px. */
+  compactBounds?: boolean
 }
 
 type Shape = { id: string; x?: number; y?: number; width?: number; height?: number; children?: Shape[] }
@@ -40,6 +43,56 @@ function collectNativeEdges(graph: ElkNode, positions: Map<string, CanvasPoint>)
   }
   walk(graph)
   return result
+}
+
+/** A translation, not scaling or layout: never improve fit by shrinking
+ * authored text or geometry. Include the complete routed arrow envelopes,
+ * not just the node bounds, so exterior paths remain inside the Canvas. */
+export function compactElkSceneBounds(scene: CanvasScene, padding = 30): CanvasScene {
+  if (!Number.isFinite(padding) || padding < 0) throw new Error('Invalid Canvas padding')
+  if (scene.lanes?.length || scene.elements.some((item) => item.type === 'note')) {
+    throw new Error('ELK boundary compaction supports only node/edge architecture scenes')
+  }
+  const nodes = new Map(scene.elements.filter((item): item is CanvasNode => item.type === 'node')
+    .map((item) => [item.id, item]))
+  const points = [...nodes.values()].flatMap((item) => [
+    { x: item.x, y: item.y }, { x: item.x + item.width, y: item.y + item.height },
+  ])
+  // Auto-generated group frames extend beyond their member node rectangles,
+  // including their top title band. Omitting them clips the boundary/header
+  // while all nodes and arrows superficially pass the usual collision gate.
+  for (const frame of canvasGroupFrames(scene)) {
+    points.push({ x: frame.x, y: frame.y },
+      { x: frame.x + frame.width, y: frame.y + frame.height })
+  }
+  for (const arrow of scene.elements) {
+    if (arrow.type !== 'arrow') continue
+    const source = nodes.get(arrow.from), target = nodes.get(arrow.to)
+    if (!source || !target) throw new Error(`Unknown ELK relation endpoint: ${arrow.id}`)
+    points.push(...canvasArrowBoxRoute(source, target, arrow))
+    if (arrow.labelPosition) points.push(arrow.labelPosition)
+  }
+  if (!points.length || points.some((point) => !Number.isFinite(point.x) || !Number.isFinite(point.y))) {
+    throw new Error('Invalid ELK geometry for boundary compaction')
+  }
+  const minX = Math.min(...points.map((point) => point.x))
+  const maxX = Math.max(...points.map((point) => point.x))
+  const minY = Math.min(...points.map((point) => point.y))
+  const maxY = Math.max(...points.map((point) => point.y))
+  const dx = padding - minX, dy = padding - minY
+  const move = (point: CanvasPoint): CanvasPoint => ({ x: point.x + dx, y: point.y + dy })
+  return {
+    ...scene,
+    width: Math.ceil(maxX - minX + padding * 2),
+    height: Math.ceil(maxY - minY + padding * 2),
+    elements: scene.elements.map((item) => item.type === 'arrow' ? {
+      ...item,
+      points: item.points?.map(move),
+      start: item.start ? move(item.start) : undefined,
+      end: item.end ? move(item.end) : undefined,
+      labelPosition: item.labelPosition ? move(item.labelPosition) : undefined,
+    } : { ...item, x: item.x + dx, y: item.y + dy }),
+  }
 }
 
 /** Prototype adapter: geometry only. Existing CanvasScene is never changed in place. */
@@ -148,5 +201,6 @@ export async function layoutWithElk(scene: CanvasScene, variant: ElkBenchmarkVar
   }
   // Reuse the project's canonical editable routing model. This isolates the
   // ordering/positioning contribution of ELK without inventing new arrow semantics.
-  return nativeRoutes ? repositioned : routeArchitectureEdges(repositioned)
+  const routed = nativeRoutes ? repositioned : routeArchitectureEdges(repositioned)
+  return config.compactBounds ? compactElkSceneBounds(routed) : routed
 }

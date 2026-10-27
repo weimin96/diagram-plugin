@@ -31,6 +31,7 @@
     "benchmark:architecture:visual:repeat": "node --import tsx scripts/architecture-visual-repeat.ts",
     "benchmark:architecture:engines": "node --import tsx scripts/benchmark-architecture-engines.ts",
     "benchmark:architecture:engines:project": "node --import tsx scripts/benchmark-architecture-engines.ts --suite=project",
+    "benchmark:architecture:engines:project:multi": "node --import tsx scripts/benchmark-architecture-engines.ts --suite=project-multi",
     "benchmark:architecture:d2": "node --import tsx scripts/benchmark-architecture-d2.ts",
     "perf:canvas": "node scripts/benchmark-canvas.mjs",
     "visual:regression": "node scripts/visual-regression.mjs",

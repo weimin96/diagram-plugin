@@ -8,17 +8,20 @@ import { assessArchitecturePresentation } from '../src/architecturePresentationQ
 import { assessArchitectureRouteDiagnostics } from '../src/architectureRouteDiagnostics.js'
 import type { CanvasScene } from '../src/canvas.js'
 import { architectureBenchmarkCases } from './architecture-benchmark-cases.js'
-import { projectArchitectureCase } from './architecture-project-cases.js'
+import { projectArchitectureCase, projectArchitectureCases } from './architecture-project-cases.js'
 import { layoutWithElk, type ElkBenchmarkVariant } from './elk-architecture-candidate.js'
 import { compareEditableArchitectureSemantics, judgeExternalLayout, measureEditableArchitecture } from './architecture-layout-gate.js'
 
 const args = process.argv.slice(2)
 const suiteArg = args.find((arg) => arg.startsWith('--suite='))
 const suite = suiteArg?.slice(8) ?? 'core'
-if (suite !== 'core' && suite !== 'extended' && suite !== 'stress' && suite !== 'project') throw new Error('Unknown suite')
+if (suite !== 'core' && suite !== 'extended' && suite !== 'stress'
+  && suite !== 'project' && suite !== 'project-multi') throw new Error('Unknown suite')
 const caseArg = args.find((arg) => arg.startsWith('--case='))?.slice(7)
 const output = path.resolve(args.find((arg) => arg.startsWith('--out='))?.slice(6)
-  ?? (suite === 'project' ? 'test-results/architecture-engines-project' : 'test-results/architecture-engines'))
+  ?? (suite === 'project' ? 'test-results/architecture-engines-project'
+    : suite === 'project-multi' ? 'test-results/architecture-engines-project-multi'
+      : 'test-results/architecture-engines'))
 const variants: ElkBenchmarkVariant[] = ['flat', 'compound', 'native', 'native-compound']
 const direction = args.find((arg) => arg.startsWith('--direction='))?.slice(12) ?? 'RIGHT'
 if (direction !== 'RIGHT' && direction !== 'DOWN') throw new Error('Use --direction=RIGHT|DOWN')
@@ -28,7 +31,9 @@ if (spacing !== undefined && (!Number.isInteger(spacing) || spacing < 20 || spac
   throw new Error('--spacing must be an integer between 20 and 200')
 }
 const requireEligible = args.includes('--require-eligible')
-const entries = (suite === 'project' ? [await projectArchitectureCase()] : architectureBenchmarkCases(suite))
+const compactBounds = args.includes('--compact-bounds')
+const entries = (suite === 'project' ? [await projectArchitectureCase()]
+  : suite === 'project-multi' ? await projectArchitectureCases() : architectureBenchmarkCases(suite))
   .filter((entry) => !caseArg || entry.id === caseArg)
 if (!entries.length) throw new Error('No matching benchmark case')
 await mkdir(output, { recursive: true })
@@ -38,7 +43,7 @@ type Result = { case: string; engine: string; ms: number; nodes: number; edges: 
   width: number; height: number; aspectRatio: number; groupOverlaps: number; totalRouteLength: number;
   crossPartitionRouteLength: number; unrelatedFrameIntrusionLength: number
   fitFont: number; warnings: string[]; eligible?: boolean; rejectionReasons?: string[];
-  nonOrthogonalSegments?: number; frameOverlapArea?: number; error?: string;
+  nonOrthogonalSegments?: number; frameOverlapArea?: number; frameOverflowPx?: number; error?: string;
   faithful?: boolean; semanticViolations?: string[]; perimeterDetours?: number;
   portNormals?: number; routeBends?: number }
 const results: Result[] = []
@@ -65,6 +70,7 @@ for (const entry of entries) {
     try {
       const scene = await layoutWithElk(original.scene, variant, {
         direction, ...(spacing === undefined ? {} : { nodeSpacing: spacing, layerSpacing: spacing }),
+        compactBounds,
       })
       measures.push({ engine: `elk-${variant}`, scene, ms: Math.round(performance.now() - start) })
     } catch (error) {
@@ -95,7 +101,8 @@ for (const entry of entries) {
       faithful: fidelity.faithful, semanticViolations: fidelity.reasons,
       eligible: verdict ? verdict.eligible && fidelity.faithful : undefined,
       rejectionReasons: [...(verdict?.reasons ?? []), ...fidelity.reasons],
-      nonOrthogonalSegments: measured.nonOrthogonalSegments, frameOverlapArea: measured.frameOverlapArea,
+      nonOrthogonalSegments: measured.nonOrthogonalSegments,
+      frameOverlapArea: measured.frameOverlapArea, frameOverflowPx: measured.frameOverflowPx,
       perimeterDetours: measured.perimeterDetours,
       portNormals: measured.portNormals, routeBends: measured.routeBends,
     })
@@ -106,8 +113,9 @@ for (const entry of entries) {
 
 const eligible = results.filter((item) => item.engine !== 'current' && item.eligible)
 await writeFile(path.join(output, 'report.json'), JSON.stringify({
-  version: 3, suite, caseCount: entries.length, direction, spacing: spacing ?? null,
-  source: suite === 'project' ? 'Real scoped TypeScript import graph including type-only relations' : 'Reference/synthetic',
+  version: 3, suite, caseCount: entries.length, direction, spacing: spacing ?? null, compactBounds,
+  source: suite === 'project' || suite === 'project-multi'
+    ? 'Real scoped TypeScript import graph including type-only relations' : 'Reference/synthetic',
   candidateCount: results.filter((item) => item.engine !== 'current').length,
   eligibleCount: eligible.length,
   recommendation: eligible.length ? 'Inspect eligible candidates visually; not approved' : 'Keep current production layout engine',
@@ -124,7 +132,7 @@ await writeFile(path.join(output, 'index.html'), `<!doctype html><html lang="zh-
 <body><h1>ELK / 当前布局 A/B</h1><small>同一语义数据、同一 Canvas 渲染和质量检测；ELK 仅实验，不会自动替换正式引擎</small>
 ${groups.map(({ entry, results }) => `<section class="case"><h2>${escapeHtml(entry.id)}</h2><small>${escapeHtml(entry.description)}</small><div class="grid">
 ${results.map((r) => `<div class="panel"><b>${escapeHtml(r.engine)}</b>${r.error ? `<p>${escapeHtml(r.error)}</p>` : `<img loading="lazy" src="./${escapeHtml(r.case)}--${escapeHtml(r.engine)}.svg">`}
-<p>${r.ms}ms · 交叉 ${r.crossings} · 重叠 ${r.overlaps} · 穿节点 ${r.throughNodes} · 非正交 ${r.nonOrthogonalSegments ?? '—'} · 分区冲突 ${r.groupOverlaps}（${r.frameOverlapArea ?? '—'}px²）· 画布 ${r.width}×${r.height} · 跨区线长 ${r.crossPartitionRouteLength}px · 无关分区穿越 ${r.unrelatedFrameIntrusionLength}px · 字体 ${r.fitFont}px</p>${r.engine !== 'current' && !r.error ? `<p>${r.eligible ? '仅通过候选几何门禁，待人工视觉审查' : `拒绝替换：${escapeHtml(r.rejectionReasons?.join('；') || '候选不合格')}`}</p>` : ''}</div>`).join('')}</div></section>`).join('')}
+<p>${r.ms}ms · 交叉 ${r.crossings} · 重叠 ${r.overlaps} · 穿节点 ${r.throughNodes} · 非正交 ${r.nonOrthogonalSegments ?? '—'} · 分区冲突 ${r.groupOverlaps}（${r.frameOverlapArea ?? '—'}px²）· 分区越界 ${r.frameOverflowPx ?? '—'}px · 画布 ${r.width}×${r.height} · 跨区线长 ${r.crossPartitionRouteLength}px · 无关分区穿越 ${r.unrelatedFrameIntrusionLength}px · 字体 ${r.fitFont}px</p>${r.engine !== 'current' && !r.error ? `<p>${r.eligible ? '仅通过候选几何门禁，待人工视觉审查' : `拒绝替换：${escapeHtml(r.rejectionReasons?.join('；') || '候选不合格')}`}</p>` : ''}</div>`).join('')}</div></section>`).join('')}
 </body></html>`)
 console.table(results.map(({ case: id, engine, ms, crossings, overlaps, throughNodes, groupOverlaps, aspectRatio, eligible, error }) =>
   ({ id, engine, ms, crossings, overlaps, throughNodes, groupOverlaps, aspectRatio, eligible, error: error?.slice(0, 60) ?? '' })))
