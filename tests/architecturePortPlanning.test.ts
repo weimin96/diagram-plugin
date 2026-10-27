@@ -67,6 +67,12 @@ test('congested ingress proposals keep exact graph semantics, orthogonal termina
   const jointRatios = joint.elements.filter((item): item is CanvasArrow =>
     item.type === 'arrow').map((item) => item.toPortRatio ?? 0.5)
   assert.equal(new Set(jointRatios).size, arrows.length, 'joint allocation must have distinct real ports')
+  const pair: CanvasScene = { ...scene, elements: [upper, target, lower, arrows[0], arrows[1]] }
+  assert.ok(proposeIngressPortSlots(pair).some((candidate) => {
+    const endpoints = candidate.elements.filter((item): item is CanvasArrow => item.type === 'arrow')
+    return endpoints.length === 2 && endpoints.every((item) => item.toPortRatio !== undefined)
+      && Math.abs(endpoints[0].toPortRatio! - endpoints[1].toPortRatio!) * target.height >= 14
+  }), 'two incoming edges sharing a port also need a coordinated candidate')
   for (const candidate of candidates) {
     assert.deepEqual(candidate.elements.filter((item) => item.type === 'node'), [upper, target, lower, middle])
     assert.deepEqual(candidate.elements.filter((item) => item.type === 'arrow')

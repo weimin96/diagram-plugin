@@ -849,6 +849,49 @@ function negotiateFinalCorridors(result: ReturnType<typeof composeArchitectureGr
     if (!best) break
     selected = best
   }
+  // Resolve the remaining port-capacity conflicts only AFTER the ordinary
+  // corridor search has completed. If capacity were rewarded during routing,
+  // a locally cleaner endpoint could consume the lane needed to eliminate
+  // a real crossing elsewhere in the graph.
+  const routeBudget = selected.routeDiagnostics.totalRouteLength * 1.015
+  for (let pass = 0; pass < 4 && selected.routeDiagnostics.ingressPortConflicts > 0; pass++) {
+    let best: typeof selected | undefined
+    for (const scene of proposeIngressPortSlots(selected.scene)) {
+      const quality = assessCanvasVisualQuality(scene)
+      const before = selected.quality.metrics, after = quality.metrics
+      if (after.nodeOverlaps > before.nodeOverlaps
+        || after.edgeNodeIntersections > before.edgeNodeIntersections
+        || after.edgeCrossings > before.edgeCrossings
+        || after.edgeOverlaps > before.edgeOverlaps
+        || after.labelNodeIntersections > before.labelNodeIntersections
+        || after.labelOverlaps > before.labelOverlaps
+        || after.labelOverflows > before.labelOverflows
+        || canvasBundleTrunks(scene).length < requiredTrunks) continue
+      const routeDiagnostics = assessArchitectureRouteDiagnostics(scene)
+      if (routeDiagnostics.ingressPortConflicts >= selected.routeDiagnostics.ingressPortConflicts
+        || routeDiagnostics.perimeterDetours > selected.routeDiagnostics.perimeterDetours
+        || routeDiagnostics.frameOverlapArea > selected.routeDiagnostics.frameOverlapArea
+        || routeDiagnostics.unrelatedFrameIntrusionLength > selected.routeDiagnostics.unrelatedFrameIntrusionLength
+        || routeDiagnostics.totalRouteLength > routeBudget) continue
+      const assessed = assessCompleteArchitectureScene(
+        scene, selected.evaluation.layout, selected.evaluation.density, selected.semanticComposition,
+      )
+      if (assessed.evaluation.rawSelectionScore < selected.evaluation.rawSelectionScore
+        || assessed.presentation.estimatedTitlePxAtFit < selected.presentation.estimatedTitlePxAtFit
+        || (best && (routeDiagnostics.ingressPortConflicts > best.routeDiagnostics.ingressPortConflicts
+          || (routeDiagnostics.ingressPortConflicts === best.routeDiagnostics.ingressPortConflicts
+            && routeDiagnostics.totalRouteLength >= best.routeDiagnostics.totalRouteLength)))) continue
+      best = {
+        ...selected, scene, ...assessed,
+        candidates: selected.candidates.map((item) =>
+          item.layout === assessed.evaluation.layout && item.density === assessed.evaluation.density
+            ? assessed.evaluation : item),
+        reroutedEdges: selected.reroutedEdges + 1,
+      }
+    }
+    if (!best) break
+    selected = best
+  }
   return selected
 }
 

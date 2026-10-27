@@ -131,7 +131,7 @@ export function proposeIngressPortSlots(scene: CanvasScene): CanvasScene[] {
     // The existing single-edge search cannot exchange two occupied endpoints.
     // Allocate an entire physical side together, preserving approach order,
     // then let the Composer validate every resulting route on the full scene.
-    if (arrivals.length >= 3 && arrivals.length <= 6
+    if (arrivals.length <= 6
       && span * (1 - 2 * inset) / (arrivals.length - 1) >= CANVAS_PORT_MIN_SEPARATION_PX) {
       const ordered = arrivals.map((arrow) => {
         const source = nodes.get(arrow.from)
@@ -143,7 +143,7 @@ export function proposeIngressPortSlots(scene: CanvasScene): CanvasScene[] {
       const replacements = new Map<string, CanvasArrow>()
       for (const [index, { arrow }] of ordered.entries()) {
         const ratio = slots[index]
-        if (Math.abs(ratio - (arrow.toPortRatio ?? 0.5)) * span < 8) continue
+        if (ratio === (arrow.toPortRatio ?? 0.5)) continue
         const proposed = replaceTerminal(arrow, ratio, horizontalSide ? 0 : 16)
         if (!proposed) {
           replacements.clear()
@@ -151,7 +151,7 @@ export function proposeIngressPortSlots(scene: CanvasScene): CanvasScene[] {
         }
         replacements.set(arrow.id, proposed)
       }
-      if (replacements.size > 1) proposals.push({
+      if (replacements.size > 0) proposals.push({
         ...scene, elements: scene.elements.map((item) => replacements.get(item.id) ?? item),
       })
     }

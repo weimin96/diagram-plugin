@@ -41,6 +41,8 @@ test('真实依赖密集图不能因不穿节点就获得错误的自动审查�
     'prioritized full-scene negotiation and residual cleanup must eliminate the real-source crossings')
   assert.ok(q.edgeOverlaps <= 3,
     'joint terminal and corridor negotiation must preserve the real independent-overlap improvement')
+  assert.ok(composed.routeDiagnostics.ingressPortConflicts <= 1,
+    'final joint port allocation must resolve real endpoint congestion without losing other routes')
   assert.ok(canvasBundleTrunks(composed.scene).length >= 2,
     'negotiating independent corridors must not erase genuine shared source trunks')
   assert.ok(composed.routeDiagnostics.totalRouteLength <= 11_800,
