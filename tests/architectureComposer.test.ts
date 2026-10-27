@@ -6,6 +6,9 @@ import test from 'node:test'
 import { architecturePresentationSelectionPenalty, composeArchitectureGraph, type ArchitectureIntentGraph } from '../src/architectureComposer.js'
 import { parseCanvasScene, serializeCanvasScene, type CanvasArrow } from '../src/canvas.js'
 import { DiagramStore } from '../src/store.js'
+import { proposePartitionEnvelopeLayout } from '../scripts/partition-envelope-candidate.js'
+import { architectureBenchmarkCases } from '../scripts/architecture-benchmark-cases.js'
+import { compareEditableArchitectureSemantics, judgeExternalLayout, measureEditableArchitecture } from '../scripts/architecture-layout-gate.js'
 
 const input: ArchitectureIntentGraph = {
   title: '平台架构',
@@ -152,6 +155,29 @@ test('多区域候选局部重排减少交叉且不改动节点与语义关系',
   assert.ok(composed.reroutedEdges >= 1 && composed.reroutedEdges <= 3)
   assert.deepEqual(arrows.map((arrow) => [arrow.from, arrow.to]), relations.map(([from, to]) => [from, to]))
   assert.deepEqual(composed.scene.elements.filter((item) => item.type === 'node').map((node) => node.id), nodes.map(([id]) => id))
+
+  // Exercise the separate generated-layout experiment against a second,
+  // multi-partition graph. Do not merge it into the Composer production path.
+  const multiRegion = composeArchitectureGraph(architectureBenchmarkCases('extended')
+    .find((sample) => sample.id === 'agent-runtime')!.intent).scene
+  const snapshot = serializeCanvasScene(multiRegion)
+  const sourceQuality = measureEditableArchitecture(multiRegion)
+  assert.ok(sourceQuality.frameOverlapArea > 0, 'the input must reproduce real sibling-frame contention')
+  const candidate = proposePartitionEnvelopeLayout(multiRegion, 'horizontal')
+  assert.ok(candidate, 'complete sibling groups should be movable as rigid units')
+  const after = measureEditableArchitecture(candidate)
+  assert.equal(after.frameOverlapArea, 0)
+  assert.equal(after.quality.edgeCrossings, sourceQuality.quality.edgeCrossings)
+  assert.equal(after.quality.edgeOverlaps, sourceQuality.quality.edgeOverlaps)
+  assert.equal(judgeExternalLayout(sourceQuality, after).eligible, true)
+  assert.equal(compareEditableArchitectureSemantics(multiRegion, candidate).faithful, true)
+  assert.deepEqual([candidate.width, candidate.height], [multiRegion.width, multiRegion.height])
+  assert.equal(serializeCanvasScene(multiRegion), snapshot, 'the original architecture remains unchanged')
+  assert.equal(serializeCanvasScene(proposePartitionEnvelopeLayout(multiRegion, 'horizontal')!),
+    serializeCanvasScene(candidate), 'the same graph produces deterministic region placement')
+  assert.equal(proposePartitionEnvelopeLayout({ ...multiRegion, elements: multiRegion.elements.map((item) =>
+    item.type === 'node' ? { ...item, locked: true } : item) }, 'horizontal'), null,
+  'manual geometry is outside this new-generation experiment')
 })
 
 test('invalid semantic relations are rejected before any write', async () => {

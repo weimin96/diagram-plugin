@@ -107,6 +107,17 @@ node --import tsx scripts/benchmark-architecture-engines.ts \
 
 **ELK 双遍计算稳定性收敛（2026-10-27）**：已定位 `elkjs@0.12.0` 在合法扇出图上的固定侧端口 `FIXED_SIDE` 与第二遍 `MULTI_EDGE` wrapping 组合会抛出内部 `TypeError: Cannot read properties of undefined (reading 'c')`。隔离实验的固定方案是**第一遍保留 MULTI_EDGE 规划节点层级，第二遍统一使用 `wrapping=OFF` 规划真实端口**，并在适配器入口显式拒绝不安全组合，而不是捕获异常并暗中重试。23 个拓扑对照（3 个实际 import 子图 + 20 个参考/压力图）中，原组合异常 **3/23→0/23**；正式扩展 A/B 的 **120 个候选错误 6→0**，但严格合格数量仍为 **0/120**；3 组实际子图的 18 个候选仍为 **2 个合格**，只来自同一个单分区 Canvas 流水线。该流水线 5 种输入排列（原始、逆序、升/降序、轮转）均保持零交叉、零独立重叠；自动增高仍违反原 Canvas 的尺寸保真，不能代替旧图。另做的 ELK 层级分区实验虽降低部分分区相交面积，却增加线长、交叉或溢出，未形成可采纳候选，相关未纳入正式代码。**结论：消除 ELK 崩溃不等于解决分区约束。**分区明确的多组架构图仍应保持当前引擎，下一步需要联合求解分区包围盒、节点容量与走廊，而不是反复调 ELK 参数。
 
+**完整分区包围盒刚性候选（2026-10-27，隔离实验）**：在仓库已有 `partitionFirst`（碰撞后主要向下移动）基础上，新增开发态 `scripts/partition-envelope-candidate.ts`，对新生成架构的真实兄弟分区框提出横向、纵向及最小画布增长三种有界刚性位移，不改变分区内节点相对位置；**仅在真的存在同级分区相交时**生成候选。位移完成后使用项目既有正交路由器重算**全部真实关系**，而不是平移旧折线假装已重新连通。拒绝混合用户手工分组、锁定节点、注释及泳道的输入，不允许隐藏/删减节点、关系或共享主干。使用现有权威基准的显式 `--partition-envelopes` 选项执行全场景 A/B：
+
+```sh
+node --import tsx scripts/benchmark-architecture.ts --suite=extended --partition-envelopes \
+  --out test-results/architecture-convergence/partition-joint/official-extended
+node --import tsx scripts/benchmark-architecture.ts --suite=project-multi --partition-envelopes \
+  --out test-results/architecture-convergence/partition-joint/official-project
+```
+
+基准要求语义/节点尺寸保真、原 Canvas **宽高均不变**、全部交叉/重叠/字号/端口容量与法向/真实共享主干/路长完整门禁均不退化。20 个虚构参考及压力场景中 45 个实际生成的候选，**4 个通过几何与同尺寸门禁，仅来自 `agent-runtime` 和其长标题变体**；3 组真实 TypeScript import 子图没有符合此实验触发条件的候选。`agent-runtime` 的水平候选把同级分区相交 **1→0、9912→0px²**，交叉 0、独立重叠 0、端口冲突/正交转折不变，画布继续是 **1726×1008**，线长 **5376→5834px（+8.5%）**。相同 Chrome 截图协议的 Codex `gpt-6-luna/max` 两次独立读图，原布局 **56.5/61.5（均值 59）**、候选 **56.5/63.5（均值 60）**，仅有微弱分区与一致性评价改善，真实关系可追踪性中位数都为 **2.25/5**。**不能以 1 分差异宣称视觉质量提高，人工审核仍未批准。**当前尚无跨不同拓扑的质量净收益证据，不接入正式 Composer。下一轮不再对分区做无界事后位移，而是设计分区占位、端口容量及跨区走廊的统一前置可行域与后续求解。
+
 隔离适配器的 `rigidLockedPlacement` 仅在**完整 ELK 原生端口几何 + 单一刚性平移**能够恢复所有锁定节点原坐标且不超出原画布时成功；多个锁定节点要求不一致的位移时明确失败，绝不强行改写人工位置。语义保真门禁同时检查 `locked` 属性本身未被候选丢弃。该能力还不是通用固定节点的布局求解器，若新图包含不可整体平移保持的人工编辑位置，应保留当前引擎。实际安装的 `elkjs@0.12.0` 声明双许可 `EPL-2.0 OR GPL-3.0-or-later`，发布前还需对依赖许可与 npm 分发方式完成合规核对。本轮不修改正式 Composer，也不增加生产 ELK 依赖。
 
 **2026-10-27 P0 端口容量第一阶段**：沿用现有 Canvas/Composer/Router，针对同一节点同侧的 3–6 条真实入边新增联合端口分配候选，只有物理边界间隔足够、末端仍严格正交时才提出。原有逐条候选继续存在，Composer 仍用完整场景的交叉、独立重叠、穿节点、真实共享主干、分区侵入、路长和字号决定是否采纳；没有引入新布局器或修改 Canvas 文件格式。路由诊断增加 `ingressPortConflicts`，只统计不同真实关系在同一节点同侧的不足 14px 端口间隔，排除已验证同一共享主干；该指标**只提供证据，不单独进入候选收益函数**，防止压过真实结构质量。基准 HTML 与 JSON 保留该数字。

@@ -3,9 +3,12 @@ import path from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { architecturePartitionFlow } from '../src/architecturePartitionFlow.js'
-import { canvasSceneToSvg, serializeCanvasScene } from '../src/canvas.js'
+import { assessArchitectureRouteDiagnostics } from '../src/architectureRouteDiagnostics.js'
+import { canvasBundleTrunks, canvasSceneToSvg, serializeCanvasScene } from '../src/canvas.js'
 import { architectureBenchmarkCases } from './architecture-benchmark-cases.js'
 import { projectArchitectureCase, projectArchitectureCases } from './architecture-project-cases.js'
+import { proposePartitionEnvelopeLayout } from './partition-envelope-candidate.js'
+import { compareEditableArchitectureSemantics, judgeExternalLayout, measureEditableArchitecture } from './architecture-layout-gate.js'
 
 const outputFlag = process.argv.indexOf('--out')
 if (outputFlag >= 0 && !process.argv[outputFlag + 1]) throw new Error('--out expects a destination directory')
@@ -14,6 +17,7 @@ const suiteName = suiteFlag?.slice('--suite='.length) ?? 'core'
 if (!['core', 'extended', 'stress', 'project', 'project-multi'].includes(suiteName)) throw new Error('Unknown benchmark suite')
 const suite = suiteName as 'core' | 'extended' | 'stress' | 'project' | 'project-multi'
 const requireReviewReady = process.argv.includes('--require-review-ready')
+const partitionEnvelopeExperiment = process.argv.includes('--partition-envelopes')
 const output = path.resolve(outputFlag < 0
   ? `test-results/architecture-benchmark${suite === 'core' ? '' : '-' + suite}`
   : process.argv[outputFlag + 1])
@@ -24,6 +28,12 @@ const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => (
 ))
 
 const results = []
+const partitionCandidates: Array<{
+  id: string; axis: 'horizontal' | 'vertical' | 'least-growth'; eligible: boolean;
+  reasons: string[]; originalFrameArea: number; candidateFrameArea: number;
+  originalRouteLength: number; candidateRouteLength: number;
+  originalCanvas: [number, number]; candidateCanvas: [number, number];
+}> = []
 const examples = suite === 'project' ? [await projectArchitectureCase()]
   : suite === 'project-multi' ? await projectArchitectureCases() : architectureBenchmarkCases(suite)
 for (const example of examples) {
@@ -31,6 +41,36 @@ for (const example of examples) {
   const composed = composeArchitectureGraph(example.intent)
   const partitionFlow = architecturePartitionFlow(composed.scene)
   const routeDiagnostics = composed.routeDiagnostics
+  if (partitionEnvelopeExperiment && routeDiagnostics.frameOverlapArea > 0) {
+    const baseline = measureEditableArchitecture(composed.scene)
+    for (const axis of ['horizontal', 'vertical', 'least-growth'] as const) {
+      const candidate = proposePartitionEnvelopeLayout(composed.scene, axis)
+      if (!candidate) continue
+      const measured = measureEditableArchitecture(candidate)
+      const verdict = judgeExternalLayout(baseline, measured)
+      const fidelity = compareEditableArchitectureSemantics(composed.scene, candidate)
+      const exactCanvas = candidate.width === composed.scene.width && candidate.height === composed.scene.height
+      const candidateRoutes = assessArchitectureRouteDiagnostics(candidate)
+      const reasons = [...verdict.reasons, ...fidelity.reasons,
+        ...(!exactCanvas ? ['原始 Canvas 尺寸改变'] : []),
+        ...(candidateRoutes.ingressPortConflicts > routeDiagnostics.ingressPortConflicts
+          || candidateRoutes.sidePortCapacityDeficits.length > routeDiagnostics.sidePortCapacityDeficits.length
+          ? ['端口容量或冲突退化'] : []),
+        ...(canvasBundleTrunks(candidate).length < canvasBundleTrunks(composed.scene).length
+          ? ['真实共享主干减少'] : [])]
+      const eligible = reasons.length === 0
+      partitionCandidates.push({ id: example.id, axis, eligible, reasons,
+        originalFrameArea: baseline.frameOverlapArea, candidateFrameArea: measured.frameOverlapArea,
+        originalRouteLength: baseline.routeLength, candidateRouteLength: measured.routeLength,
+        originalCanvas: [composed.scene.width, composed.scene.height],
+        candidateCanvas: [candidate.width, candidate.height],
+      })
+      if (eligible) {
+        await writeFile(path.join(output, `${example.id}--partition-${axis}.diagram.json`), serializeCanvasScene(candidate))
+        await writeFile(path.join(output, `${example.id}--partition-${axis}.svg`), canvasSceneToSvg(candidate))
+      }
+    }
+  }
   const elapsedMs = Math.round(performance.now() - started)
   const svg = canvasSceneToSvg(composed.scene)
   await writeFile(path.join(output, `${example.id}.diagram.json`), serializeCanvasScene(composed.scene))
@@ -64,6 +104,16 @@ for (const example of examples) {
 }
 
 const blockedReviewCases = results.filter((result) => !result.visualPlan.review.readyForVisualReview)
+if (partitionEnvelopeExperiment) {
+  await writeFile(path.join(output, 'partition-envelopes.json'), JSON.stringify({
+    version: 1, suite, kind: 'isolated-generated-architecture-geometry-experiment',
+    note: 'Unapproved generated-layout proposals. Requires full geometry, exact original Canvas, editable semantics and independent human visual review before adoption. Never modifies Composer output or saved documents.',
+    candidateCount: partitionCandidates.length,
+    eligibleCount: partitionCandidates.filter((candidate) => candidate.eligible).length,
+    results: partitionCandidates,
+  }, null, 2) + '\n')
+  console.log(`Isolated partition-envelope proposals: ${partitionCandidates.filter((candidate) => candidate.eligible).length}/${partitionCandidates.length}; no production adoption`)
+}
 await writeFile(path.join(output, 'report.json'), JSON.stringify({
   version: 2,
   suite,
