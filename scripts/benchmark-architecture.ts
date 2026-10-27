@@ -8,6 +8,7 @@ import { canvasBundleTrunks, canvasSceneToSvg, serializeCanvasScene } from '../s
 import { architectureBenchmarkCases } from './architecture-benchmark-cases.js'
 import { projectArchitectureCase, projectArchitectureCases } from './architecture-project-cases.js'
 import { externalArchitectureSourceCases, parseExternalRepoArgs } from './architecture-external-source-cases.js'
+import { loadArchitectureReviewedTasks } from './architecture-reviewed-tasks.js'
 import { proposePartitionEnvelopeLayout } from './partition-envelope-candidate.js'
 import { compareEditableArchitectureSemantics, judgeExternalLayout, measureEditableArchitecture } from './architecture-layout-gate.js'
 
@@ -15,11 +16,14 @@ const outputFlag = process.argv.indexOf('--out')
 if (outputFlag >= 0 && !process.argv[outputFlag + 1]) throw new Error('--out expects a destination directory')
 const suiteFlag = process.argv.find((arg) => arg.startsWith('--suite='))
 const suiteName = suiteFlag?.slice('--suite='.length) ?? 'core'
-if (!['core', 'extended', 'stress', 'project', 'project-multi', 'external'].includes(suiteName)) throw new Error('Unknown benchmark suite')
-const suite = suiteName as 'core' | 'extended' | 'stress' | 'project' | 'project-multi' | 'external'
+if (!['core', 'extended', 'stress', 'project', 'project-multi', 'external', 'reviewed'].includes(suiteName)) throw new Error('Unknown benchmark suite')
+const suite = suiteName as 'core' | 'extended' | 'stress' | 'project' | 'project-multi' | 'external' | 'reviewed'
 const repositories = parseExternalRepoArgs(process.argv.slice(2))
-if ((suite === 'external') !== (repositories.length > 0)) {
-  throw new Error('--suite=external requires explicitly provided --repo=label:/absolute/path entries')
+const taskFile = process.argv.find((arg) => arg.startsWith('--tasks='))?.slice('--tasks='.length)
+const reviewFile = process.argv.find((arg) => arg.startsWith('--review-ledger='))?.slice('--review-ledger='.length)
+if (((suite === 'external' || suite === 'reviewed') !== (repositories.length > 0))
+  || (suite === 'reviewed') !== !!taskFile || (reviewFile && suite !== 'reviewed')) {
+  throw new Error('External/reviewed suites require explicit --repo=label:/absolute/path; reviewed also requires --tasks=/absolute/path')
 }
 const requireReviewReady = process.argv.includes('--require-review-ready')
 const partitionEnvelopeExperiment = process.argv.includes('--partition-envelopes')
@@ -43,9 +47,16 @@ const examples = suite === 'project' ? [await projectArchitectureCase()]
   : suite === 'project-multi' ? await projectArchitectureCases()
     : suite === 'external' ? (await Promise.all(repositories.map((repo) =>
       externalArchitectureSourceCases(repo.label, repo.root)))).flat()
+      : suite === 'reviewed' ? (await loadArchitectureReviewedTasks(taskFile!,
+        new Map(repositories.map((repo) => [repo.label, repo.root])), reviewFile)).cases.map((item) => ({
+        id: item.id, source: 'project' as const, description: item.purpose,
+        intent: item.intent,
+        provenance: { repository: item.repository, reviewAttested: item.reviewAttested,
+          readingGoal: item.readingGoal, taskManifestSha256: item.evidenceDigest },
+      }))
       : architectureBenchmarkCases(suite)
-if (suite === 'external' && !examples.length) {
-  throw new Error('No verifiable source-import subgraphs were found in the explicitly supplied repositories')
+if ((suite === 'external' || suite === 'reviewed') && !examples.length) {
+  throw new Error('No verifiable architecture tasks were found in explicitly supplied inputs')
 }
 for (const example of examples) {
   const started = performance.now()
@@ -128,11 +139,14 @@ if (partitionEnvelopeExperiment) {
 await writeFile(path.join(output, 'report.json'), JSON.stringify({
   version: 2,
   suite,
-  ...(suite === 'external' ? { inputProvenance: examples.map((entry) => ({
+  ...(suite === 'external' || suite === 'reviewed' ? { inputProvenance: examples.map((entry) => ({
     id: entry.id, ...('provenance' in entry ? entry.provenance : {}),
-    note: 'Git revision may be dirty; each source digest identifies the actual bytes analyzed. AST static imports do not imply user-validated system architecture.',
+    note: suite === 'reviewed'
+      ? 'A separate review attestation is NOT a rendering or visual approval. Each architectural claim must trace to a source hash and line span.'
+      : 'Git revision may be dirty; each source digest identifies the actual bytes analyzed. AST static imports do not imply user-validated system architecture.',
   })) } : {}),
-  source: suite === 'external' ? 'Explicit external Git-tracked TypeScript static-import subgraphs; source-verified, not service dependencies or user-approved architecture'
+  source: suite === 'reviewed' ? 'Explicit evidence-backed architecture task manifest; review attestation reported separately from visual approval'
+    : suite === 'external' ? 'Explicit external Git-tracked TypeScript static-import subgraphs; source-verified, not service dependencies or user-approved architecture'
     : suite === 'project' || suite === 'project-multi'
     ? 'Diagram Plugin source imports; scoped module subgraph, not fictional and not complete runtime dependencies'
     : 'deterministic fictional reference and synthetic graphs',
@@ -157,7 +171,8 @@ h2{font-size:18px;margin:0 0 4px}small{color:#637181}.stats{display:flex;gap:12p
 img{display:block;width:100%;height:auto;background:#f8fafc;border:1px solid #e4e9ee;border-radius:8px}
 .issues{margin:12px 0 0;color:#765322;font-size:12px}
 </style></head><body><main><h1>系统架构图生成基准</h1>
-<p>${suite === 'external' ? '来源为显式指定的其他本地 Git 仓库所跟踪 TypeScript 文件的静态 import 子图，不代表全工程运行依赖或已确认的业务架构。'
+<p>${suite === 'reviewed' ? '来自显式任务清单，节点、关系、分区和主链路均需要可核对的来源；人工审阅记录与视觉批准是不同的门禁。'
+  : suite === 'external' ? '来源为显式指定的其他本地 Git 仓库所跟踪 TypeScript 文件的静态 import 子图，不代表全工程运行依赖或已确认的业务架构。'
   : suite === 'project' || suite === 'project-multi' ? '来源为 Diagram Plugin 真实 TypeScript 静态导入关系的选定模块子图，不代表全工程运行依赖。'
     : '以下均为虚构参考系统。'} 结构评分上限 90，仅用于对比布局、碰撞和连线；人工视觉质量仍需审查。</p>
 ${results.map((result) => `<section><header><div><h2>${escapeHtml(result.title)}</h2>

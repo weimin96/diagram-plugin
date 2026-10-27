@@ -38,6 +38,23 @@ node --import tsx scripts/benchmark-architecture.ts --suite=external \
 
 本机实测 3 个独立其他仓库增加了 **6 组**有源码指纹的静态导入子图，总计 **4 仓库 / 9 组源码子图**；`ppt-plugin` 工作树有未提交改动，报告已单独标记，不能声称与 Git HEAD 完全相同。新增 16 节点、41–65 条关系的高密度案例揭示显著交叉和重叠退化，详情保存在忽略的 `test-results/architecture-corpus/`。这些**只证明真实静态源码依赖**，绝不是 9 个经用户认可的业务架构设计任务，也没有可证明的功能分区或主阅读路径。严格 `corpus:gate` 仍要求另外取得 20 个**来源和语义均可核对的实际架构任务**，不允许用代码 import 子图凑数。下一阶段应补充用户提供/授权的微服务、数据流水线、Agent/MCP、部署、业务链路任务描述，独立记录关系、分区与阅读意图；绝不生成虚假“真实样本”。
 
+**业务架构任务单独验收（R1 已实现入口，尚无真实任务通过）**：`scripts/architecture-reviewed-tasks.ts` 从用户显式指定的 JSON 清单读取任务；每条包括 `id / repository / purpose / readingGoal / intent / evidence`。`intent.nodes[]` 必须有真实 `partition` 与 `evidenceIds[]`；`intent.relations[]` 必须声明 `from/to/evidenceIds[]`；`intent.primaryPath[]` 必须是这些真实边组成的有向路径。每条 `evidence` 使用仓库根目录下的 `relativePath`、**完整文件 SHA-256**、`startLine/endLine` 作为来源。解析器拒绝相对路径越界、重复 ID、未知证据、来源内容过期、行号无效和不连通主阅读路径。**文件哈希只证明字节，不证明代码支持这条业务语义；必须由审核人独立阅读后另行签署。** 审核记录是分开的 `version=1 / manifestSha256 / reviews[{taskId,reviewer,reviewedAt,decision}]` JSON 文件；变更任务原文后旧签署即过期，不自动生成、签名不可冒充身份验证或视觉批准。
+
+```sh
+# 所有路径均为显式给出的绝对路径，仓库标签对应 --repo
+pnpm benchmark:architecture:corpus \
+  --repo=myapp:/absolute/project-root --tasks=/absolute/tasks.json \
+  --review-ledger=/absolute/reviews.json
+pnpm benchmark:architecture:corpus:gate \
+  --repo=myapp:/absolute/project-root --tasks=/absolute/tasks.json \
+  --review-ledger=/absolute/reviews.json
+node --import tsx scripts/benchmark-architecture.ts --suite=reviewed \
+  --repo=myapp:/absolute/project-root --tasks=/absolute/tasks.json \
+  --out test-results/architecture-corpus/reviewed
+```
+
+清单**即使源码验证通过，只要没有分离的批准审阅记录，就仍是 `pendingTaskReview`**；真实任务门禁需要至少 20 条审阅过且可复核来源的任务，且来自 3 个不同项目（源码 import 子图绝不计数）。审阅记录只用于业务语义核验，机器生成的 Canvas 仍需单独的 Chrome 像素质量和人工视觉签署。隔离测试已用非真实合成任务跑通审计与成图，输出在忽略目录 `test-results/architecture-corpus/pending-*`，没有误计入真实任务。
+
 **R1 退出条件**：三个入口约束的正常/拒绝/锁定节点场景均验证；固定跨项目评测来源和用例清单、保留原有真实项目基准作为防退化；引入 20+ 经验证任务和至少 3 个独立来源之前，不能声称具有跨项目布局泛化证据。
 
 ## R2 · 以完整 A/B 取代局部补丁堆叠

@@ -4,6 +4,8 @@
 
 R1 新增显式仓库采样器 `scripts/architecture-external-source-cases.ts`，跨项目来源审计与标准 Composer 基准分别通过 `pnpm benchmark:architecture:corpus --repo=...` 和 `node --import tsx scripts/benchmark-architecture.ts --suite=external --repo=...` 运行。采样的是 Git 跟踪文件的真实 TypeScript import，不包含用户验证的分区或业务关系；审计会独立汇报 `verifiedSourceSubgraphs` 和 `verifiedRealTasks`，后者**当前为 0**，不能据前者宣称 R1 完成。实测源码密集样本 16 节点/65、63、49、43、41、15 关系，交叉分别 109、137、24、5、3、0；独立重叠 312、399、176、159、128、2，全部数据由当前 Composer 输出，无生产修复或质量阈值更改。首五个密集样本均阻断视觉审查，低密度 16/15 样本仅等待人工审查。该结果指向层级、节点尺寸、端口容量及阅读视图的先行规划，而非添加针对特定节点的线路特例。
 
+R1 后续新增 `scripts/architecture-reviewed-tasks.ts`：与自动 AST 子图分离的业务架构任务合同，具有逐节点、逐关系和功能分区的可核对源文件 SHA-256/行号及有向主路径，必须经**独立手动审阅记录**确认才能进入严格真实任务计数。支持 `--tasks=... --review-ledger=...` 的 corpus 审计与 `--suite=reviewed` 标准 Composer 基准。隔离合成未批准案例完成审计、Canvas、SVG 与质量测试（3 节点/2 关系，零交叉/零重叠），仍计 **0** 条经审阅真实业务任务。来源证据校验和业务真实语义分别审查，审阅记录不代替人工视觉批准；详情与命令见 [roadmap.md](./roadmap.md)。
+
 本文件记录当前可执行的开发流程。长期不变量和最终架构见 [AGENTS.md](../AGENTS.md)；历史实验的具体取舍可从 Git 提交查看，不再在本文逐轮堆积算法补丁说明。
 
 ## 架构与输出

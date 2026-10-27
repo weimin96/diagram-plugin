@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { readFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 import { projectArchitectureCase, projectArchitectureCases, coreArchitectureModules,
   qualityPipelineModules, canvasEditingModules } from '../scripts/architecture-project-cases.js'
 import { externalArchitectureSourceCases, parseExternalRepoArgs } from '../scripts/architecture-external-source-cases.js'
+import { loadArchitectureReviewedTasks } from '../scripts/architecture-reviewed-tasks.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { canvasBundleTrunks, parseCanvasScene, serializeCanvasScene } from '../src/canvas.js'
 
@@ -72,6 +74,70 @@ test('真实架构基准的每条关系必须来自仓库源码的实际 TS impo
   assert.throws(() => parseExternalRepoArgs(['--repo=one:/tmp/a','--repo=one:/tmp/b']),
     /Duplicate source repository label/)
   await assert.rejects(externalArchitectureSourceCases('unsafe', '../other-repo'), /absolute path/)
+  // Synthetic, deliberately unreviewed contract fixture; NEVER treated as a
+  // real user-approved system topology by the corpus audit.
+  const folder = await mkdtemp(path.join(os.tmpdir(), 'diagram-reviewed-tasks-'))
+  try {
+    const sourcePaths = ['src/architectureComposer.ts', 'src/architectureRouting.ts',
+      'src/architecturePortPlanning.ts']
+    const evidence = await Promise.all(sourcePaths.map(async (relativePath, index) => ({
+      id: `proof${index + 1}`, relativePath,
+      fileSha256: createHash('sha256').update(await readFile(path.join(sourceRoot, relativePath))).digest('hex'),
+      startLine: 1, endLine: 1,
+    })))
+    const task = { id: 'contract-fixture', repository: 'fixture-code',
+      purpose: 'Test traceable nonvisual system layout intent contract',
+      readingGoal: 'Read from composer through router to planning',
+      intent: { title: 'Synthetic contract fixture',
+        nodes: [
+          { id: 'composer', text: 'Composer', partition: 'application', evidenceIds: ['proof1'] },
+          { id: 'router', text: 'Router', partition: 'processing', evidenceIds: ['proof2'] },
+          { id: 'port', text: 'Planner', partition: 'data', evidenceIds: ['proof3'] },
+        ],
+        relations: [{ from: 'composer', to: 'router', evidenceIds: ['proof1'] },
+          { from: 'router', to: 'port', evidenceIds: ['proof2'] }],
+        primaryPath: ['composer', 'router', 'port'],
+      }, evidence,
+    }
+    const file = path.join(folder, 'tasks.json')
+    await writeFile(file, JSON.stringify({ version: 1, tasks: [task] }))
+    const mapping = new Map([['fixture-code', sourceRoot]])
+    const pending = await loadArchitectureReviewedTasks(file, mapping)
+    assert.equal(pending.cases.length, 1)
+    assert.equal(pending.cases[0].reviewAttested, false)
+    assert.equal(pending.pendingReview, 1)
+    assert.equal(pending.cases[0].intent.relations.length, 2)
+    const ledgerFile = path.join(folder, 'review.json')
+    const reviews = [{ taskId: task.id, reviewer: 'fixture-reviewer',
+      reviewedAt: '2026-01-01T00:00:00Z', decision: 'approved' }]
+    await writeFile(ledgerFile, JSON.stringify({ version: 1,
+      manifestSha256: pending.manifestSha256, reviews }))
+    const attested = await loadArchitectureReviewedTasks(file, mapping, ledgerFile)
+    assert.equal(attested.cases[0].reviewAttested, true)
+    await writeFile(ledgerFile, JSON.stringify({ version: 1, manifestSha256: pending.manifestSha256,
+      reviews: [{ ...reviews[0], decision: 'rejected' }] }))
+    assert.equal((await loadArchitectureReviewedTasks(file, mapping, ledgerFile)).cases[0].reviewAttested, false,
+      'a separate explicit rejection must never count as a reviewed real task')
+    const tampered = structuredClone(task)
+    tampered.evidence[0].fileSha256 = '0'.repeat(64)
+    await writeFile(file, JSON.stringify({ version: 1, tasks: [tampered] }))
+    await assert.rejects(loadArchitectureReviewedTasks(file, mapping), /Stale source evidence/)
+    await writeFile(file, JSON.stringify({ version: 1, tasks: [task] }))
+    const brokenPath = structuredClone(task)
+    brokenPath.intent.primaryPath = ['composer', 'port', 'router']
+    await writeFile(file, JSON.stringify({ version: 1, tasks: [brokenPath] }))
+    await assert.rejects(loadArchitectureReviewedTasks(file, mapping), /not a verified directed chain/)
+    await writeFile(file, JSON.stringify({ version: 1, tasks: [task, task] }))
+    await assert.rejects(loadArchitectureReviewedTasks(file, mapping), /Duplicate architecture task ID/)
+    await writeFile(file, JSON.stringify({ version: 1, tasks: [task, { ...task, id: 'new-draft' }] }))
+    await assert.rejects(loadArchitectureReviewedTasks(file, mapping, ledgerFile), /stale task manifest/)
+    const traversal = structuredClone(task)
+    traversal.evidence[0].relativePath = '../outside.ts'
+    await writeFile(file, JSON.stringify({ version: 1, tasks: [traversal] }))
+    await assert.rejects(loadArchitectureReviewedTasks(file, mapping), /Unsafe evidence path/)
+  } finally {
+    await rm(folder, { recursive: true, force: true })
+  }
 })
 
 test('真实依赖密集图不能因不穿节点就获得错误的自动审查资格', async () => {
