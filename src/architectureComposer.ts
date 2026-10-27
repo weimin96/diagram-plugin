@@ -122,6 +122,20 @@ function assessCompleteArchitectureScene(
   return { quality, evaluation, routeDiagnostics, presentation, visualPlan }
 }
 
+/** Shared correctness floor for all dense-graph negotiation phases.
+ * Crossing/overlap trade-offs stay phase-specific; node and label damage
+ * must never be purchased by any route or slot candidate. */
+function preservesArchitectureHardGeometry(
+  before: CanvasVisualQualityAssessment['metrics'],
+  after: CanvasVisualQualityAssessment['metrics'],
+): boolean {
+  return after.nodeOverlaps <= before.nodeOverlaps
+    && after.edgeNodeIntersections <= before.edgeNodeIntersections
+    && after.labelNodeIntersections <= before.labelNodeIntersections
+    && after.labelOverlaps <= before.labelOverlaps
+    && after.labelOverflows <= before.labelOverflows
+}
+
 /** Only reroute implicated edges, and accept strictly improving results; never move authored nodes. */
 function refineArchitectureRoutes(
   initialScene: CanvasScene,
@@ -728,10 +742,7 @@ function optimizeCongestedRoutes(result: ReturnType<typeof composeArchitectureGr
         seen.add(signature)
         const proposed = assessCanvasVisualQuality(candidate)
         const m = proposed.metrics, prev = quality.metrics
-        if (m.nodeOverlaps > prev.nodeOverlaps
-          || m.edgeNodeIntersections > prev.edgeNodeIntersections
-          || m.labelNodeIntersections > prev.labelNodeIntersections
-          || m.labelOverlaps > prev.labelOverlaps || m.labelOverflows > prev.labelOverflows
+        if (!preservesArchitectureHardGeometry(prev, m)
           || m.edgeCrossings > prev.edgeCrossings || m.edgeOverlaps > initial.edgeOverlaps + 2) continue
         const next = evaluateArchitectureLayout(candidate, proposed, evaluation.layout, evaluation.density)
         const previous = best?.evaluation ?? evaluation
@@ -818,10 +829,8 @@ function negotiateFinalCorridors(result: ReturnType<typeof composeArchitectureGr
       seenScenes.add(signature)
       const quality = assessCanvasVisualQuality(scene)
       const before = selected.quality.metrics, after = quality.metrics
-      if (after.nodeOverlaps > before.nodeOverlaps || after.edgeNodeIntersections > before.edgeNodeIntersections
+      if (!preservesArchitectureHardGeometry(before, after)
         || after.edgeCrossings > before.edgeCrossings || after.edgeOverlaps > before.edgeOverlaps
-        || after.labelNodeIntersections > before.labelNodeIntersections
-        || after.labelOverlaps > before.labelOverlaps || after.labelOverflows > before.labelOverflows
         || canvasBundleTrunks(scene).length < requiredTrunks) continue
       const routeDiagnostics = assessArchitectureRouteDiagnostics(scene)
       if (routeDiagnostics.perimeterDetours > selected.routeDiagnostics.perimeterDetours
@@ -859,13 +868,9 @@ function negotiateFinalCorridors(result: ReturnType<typeof composeArchitectureGr
     for (const scene of proposeIngressPortSlots(selected.scene)) {
       const quality = assessCanvasVisualQuality(scene)
       const before = selected.quality.metrics, after = quality.metrics
-      if (after.nodeOverlaps > before.nodeOverlaps
-        || after.edgeNodeIntersections > before.edgeNodeIntersections
+      if (!preservesArchitectureHardGeometry(before, after)
         || after.edgeCrossings > before.edgeCrossings
         || after.edgeOverlaps > before.edgeOverlaps
-        || after.labelNodeIntersections > before.labelNodeIntersections
-        || after.labelOverlaps > before.labelOverlaps
-        || after.labelOverflows > before.labelOverflows
         || canvasBundleTrunks(scene).length < requiredTrunks) continue
       const routeDiagnostics = assessArchitectureRouteDiagnostics(scene)
       if (routeDiagnostics.ingressPortConflicts >= selected.routeDiagnostics.ingressPortConflicts
@@ -924,11 +929,7 @@ function negotiateDenseNodeSlots(result: ReturnType<typeof composeArchitectureGr
       for (const scene of recovered ? [incremental, recovered] : [incremental]) {
         const quality = assessCanvasVisualQuality(scene)
         const metrics = quality.metrics
-        if (metrics.nodeOverlaps > baseline.nodeOverlaps
-          || metrics.edgeNodeIntersections > baseline.edgeNodeIntersections
-          || metrics.labelNodeIntersections > baseline.labelNodeIntersections
-          || metrics.labelOverflows > baseline.labelOverflows
-          || metrics.labelOverlaps > baseline.labelOverlaps
+        if (!preservesArchitectureHardGeometry(baseline, metrics)
           || metrics.edgeCrossings > baseline.edgeCrossings
           || metrics.edgeOverlaps > baseline.edgeOverlaps
           || (metrics.edgeCrossings === baseline.edgeCrossings
@@ -970,9 +971,15 @@ export function composeArchitectureGraph(intent: ArchitectureIntentGraph) {
     // Alternating coordinate descent: negotiate corridors on the complete
     // graph, try node slots without modifying authored semantics, then
     // reconcile all affected corridors once more. No second routing engine.
-    const candidate = negotiateFinalCorridors(optimizeCongestedRoutes(negotiateDenseNodeSlots(optimizeCongestedRoutes(
-      composeArchitectureGraphCandidate(intent, 'semantic', undefined, false, false, false, false, true),
-    )), 8))
+    // These are distinct, evidenced phases: removing any one causes real
+    // crossings/overlaps to regress. Keep their responsibilities explicit
+    // until a complete joint planner replaces the whole sequence.
+    const initial = composeArchitectureGraphCandidate(intent, 'semantic', undefined,
+      false, false, false, false, true)
+    const initiallyRouted = optimizeCongestedRoutes(initial)
+    const nodeSlots = negotiateDenseNodeSlots(initiallyRouted)
+    const rerouted = optimizeCongestedRoutes(nodeSlots, 8)
+    const candidate = negotiateFinalCorridors(rerouted)
     const next = candidate.quality.metrics
     if (next.nodeOverlaps <= originalMetrics.nodeOverlaps
       && next.edgeNodeIntersections <= originalMetrics.edgeNodeIntersections
