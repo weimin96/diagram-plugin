@@ -11,6 +11,7 @@ import type { OpenAIUiToolMetadata } from '@openai/mcp-extensions/server'
 import { z } from 'zod/v4'
 import { beautifyArchitectureScene, inferArchitectureComposition, routeArchitectureEdges } from './architectureDesign.js'
 import { composeArchitectureGraph } from './architectureComposer.js'
+import { architectureLayoutContract, assertArchitectureLayoutTransition } from './architectureLayoutContract.js'
 import { assessArchitecturePresentation } from './architecturePresentationQuality.js'
 import { assessArchitectureRouteDiagnostics } from './architectureRouteDiagnostics.js'
 import { planArchitectureVisual } from './architectureVisualPlan.js'
@@ -906,6 +907,7 @@ server.registerTool('diagram.composeArchitecture', {
   annotations: write,
 }, async ({ workspacePath, title, theme, density, visualScenario, primaryPath, style, nodes, relations }, extra) => {
   const composed = composeArchitectureGraph({ title, theme, density, visualScenario, primaryPath, style: style as typeof diagramVisualStyles[number]['id'] | undefined, nodes, relations })
+  assertArchitectureLayoutTransition(undefined, composed.scene, architectureLayoutContract('generate'))
   const store = await resolveStore(workspacePath, toolThreadId(extra._meta))
   const diagram = await store.createComposedArchitecture(title, serializeCanvasScene(composed.scene))
   markThreadDiagram(extra._meta, diagram.path, undefined, undefined, 'create', diagram.modifiedAt)
@@ -986,7 +988,9 @@ server.registerTool('diagram.beautifyArchitecture', {
   if (!targetPath) throw new Error('当前聊天没有活动架构图，请先指定 Canvas 图表路径。')
   const current = await store.get(targetPath)
   if (current.type !== 'canvas') throw new Error('架构美化仅支持 Canvas 图；Mermaid 图请先转换或新建架构 Canvas。')
-  const result = beautifyArchitectureScene(parseCanvasScene(current.source), { theme, view, density, repartition, relayout, reroute })
+  const original = parseCanvasScene(current.source)
+  const result = beautifyArchitectureScene(original, { theme, view, density, repartition, relayout, reroute })
+  assertArchitectureLayoutTransition(original, result.scene, architectureLayoutContract(relayout ? 'reflow' : 'edit'))
   const diagram = await store.update(current.path, serializeCanvasScene(result.scene), current.modifiedAt)
   markThreadDiagram(extra._meta, diagram.path, undefined, undefined, 'update', diagram.modifiedAt)
   return {
@@ -1018,7 +1022,9 @@ server.registerTool('diagram.routeArchitectureEdges', {
   if (!targetPath) throw new Error('当前聊天没有活动架构图，请先指定 Canvas 图表路径。')
   const current = await store.get(targetPath)
   if (current.type !== 'canvas') throw new Error('架构连线整理仅支持 Canvas 图。')
-  const scene = routeArchitectureEdges(parseCanvasScene(current.source))
+  const original = parseCanvasScene(current.source)
+  const scene = routeArchitectureEdges(original)
+  assertArchitectureLayoutTransition(original, scene, architectureLayoutContract('edit'))
   const diagram = await store.update(current.path, serializeCanvasScene(scene), current.modifiedAt)
   const routedEdges = scene.elements.filter((item) => item.type === 'arrow').length
   markThreadDiagram(extra._meta, diagram.path, undefined, undefined, 'update', diagram.modifiedAt)

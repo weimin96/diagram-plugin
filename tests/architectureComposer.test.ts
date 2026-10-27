@@ -6,6 +6,7 @@ import test from 'node:test'
 import { architecturePresentationSelectionPenalty, composeArchitectureGraph, type ArchitectureIntentGraph } from '../src/architectureComposer.js'
 import { parseCanvasScene, serializeCanvasScene, type CanvasArrow } from '../src/canvas.js'
 import { DiagramStore } from '../src/store.js'
+import { architectureLayoutContract, assertArchitectureLayoutTransition } from '../src/architectureLayoutContract.js'
 import { proposePartitionEnvelopeLayout } from '../scripts/partition-envelope-candidate.js'
 import { architectureBenchmarkCases } from '../scripts/architecture-benchmark-cases.js'
 import { compareEditableArchitectureSemantics, judgeExternalLayout, measureEditableArchitecture } from '../scripts/architecture-layout-gate.js'
@@ -45,6 +46,33 @@ test('one call composes semantic architecture with coordinates, boundaries and q
   assert.ok(result.candidates.every((candidate) => candidate.structuralScore <= 90))
   assert.equal(result.evaluation.layout, result.summary.composition)
   assert.deepEqual(composeArchitectureGraph(input).scene, result.scene)
+  const creation = architectureLayoutContract('generate')
+  assert.equal(creation.allowNodeResize, true, 'initial generation does not inherit old Canvas sizes')
+  assertArchitectureLayoutTransition(undefined, result.scene, creation)
+  assert.throws(() => assertArchitectureLayoutTransition(result.scene, result.scene, creation),
+    /requires a new scene/, 'old Canvas cannot be silently treated as newly generated')
+  const reflow = architectureLayoutContract('reflow')
+  const edit = architectureLayoutContract('edit')
+  const movable = result.scene.elements.find((element) => element.type === 'node')!
+  const moved = { ...result.scene, elements: result.scene.elements.map((item) =>
+    item.id === movable.id && item.type === 'node' ? { ...item, x: item.x + 20, width: item.width + 14 } : item) }
+  assertArchitectureLayoutTransition(result.scene, moved, reflow)
+  assert.throws(() => assertArchitectureLayoutTransition(result.scene, moved, edit),
+    /cannot move or resize existing node/)
+  assertArchitectureLayoutTransition(result.scene, result.scene, edit)
+  const locked = { ...result.scene, elements: result.scene.elements.map((item) =>
+    item.id === movable.id && item.type === 'node' ? { ...item, locked: true } : item) }
+  const movedLocked = { ...moved, elements: moved.elements.map((item) =>
+    item.id === movable.id && item.type === 'node' ? { ...item, locked: true } : item) }
+  assert.throws(() => assertArchitectureLayoutTransition(locked, movedLocked, reflow),
+    /cannot move or resize locked node/)
+  assert.throws(() => assertArchitectureLayoutTransition(locked, result.scene, reflow),
+    /cannot clear the existing node lock/)
+  assert.throws(() => assertArchitectureLayoutTransition(result.scene,
+    { ...result.scene, width: result.scene.width + 1 }, edit), /cannot resize the existing canvas/)
+  assert.throws(() => assertArchitectureLayoutTransition(result.scene,
+    { ...result.scene, elements: result.scene.elements.filter((item) => item.type !== 'arrow') }, reflow),
+  /cannot add, remove or redefine real relationships/)
 })
 
 test('fixed density limits candidates and keeps deterministic layout', () => {

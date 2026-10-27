@@ -22,6 +22,8 @@
     "benchmark:architecture:project": "node --import tsx scripts/benchmark-architecture.ts --suite=project",
     "benchmark:architecture:project:multi": "node --import tsx scripts/benchmark-architecture.ts --suite=project-multi",
     "benchmark:architecture:acceptance": "node --import tsx scripts/benchmark-architecture.ts --suite=project --require-review-ready",
+    "benchmark:architecture:corpus": "node --import tsx scripts/audit-architecture-corpus.ts",
+    "benchmark:architecture:corpus:gate": "node --import tsx scripts/audit-architecture-corpus.ts --require-diverse-real",
     "benchmark:architecture:project:visual": "node --import tsx scripts/benchmark-architecture-design.ts --project --screenshots",
     "benchmark:architecture:design": "node --import tsx scripts/benchmark-architecture-design.ts",
     "benchmark:architecture:visual:score": "node --import tsx scripts/architecture-visual-score.ts",
