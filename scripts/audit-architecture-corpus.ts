@@ -5,6 +5,7 @@ import { architectureBenchmarkCases } from './architecture-benchmark-cases.js'
 import { projectArchitectureCases } from './architecture-project-cases.js'
 import { externalArchitectureSourceCases, parseExternalRepoArgs } from './architecture-external-source-cases.js'
 import { loadArchitectureReviewedTasks } from './architecture-reviewed-tasks.js'
+import { measureArchitectureLayoutDemand } from './architecture-layout-demand.js'
 import type { ArchitectureIntentGraph } from '../src/architectureComposer.js'
 
 const args = process.argv.slice(2)
@@ -73,6 +74,7 @@ const cases = [
     provenance: 'selected src/*.ts static TypeScript imports; not runtime calls',
     sourcePaths: item.intent.nodes.flatMap((node) => node.sourcePaths ?? []),
     ...topology(item.intent),
+    prelayoutDemand: measureArchitectureLayoutDemand(item.intent, 80),
   })),
   ...external.flat().map((item) => ({
     id: item.id, origin: 'verified-source-imports' as const, repository: item.provenance.repository,
@@ -82,6 +84,7 @@ const cases = [
     sourcePaths: item.intent.nodes.flatMap((node) => node.sourcePaths ?? []),
     evidence: item.provenance.imports,
     ...topology(item.intent),
+    prelayoutDemand: measureArchitectureLayoutDemand(item.intent, 80),
   })),
   ...(reviewed?.cases ?? []).map((item) => ({
     id: item.id, origin: 'evidence-backed-task' as const,
@@ -90,11 +93,13 @@ const cases = [
     reviewAttested: item.reviewAttested,
     readingGoal: item.readingGoal,
     ...topology(item.intent),
+    prelayoutDemand: measureArchitectureLayoutDemand(item.intent, 80),
   })),
   ...reference.map((item) => ({
     id: item.id, origin: item.source === 'reference' ? 'fictional-reference' as const : 'synthetic-perturbation' as const,
     repository: null, provenance: 'reference fixture or deterministic synthetic mutation; NOT real-world evidence',
     sourcePaths: [], ...topology(item.intent),
+    prelayoutDemand: measureArchitectureLayoutDemand(item.intent, 80),
   })),
 ]
 const verified = cases.filter((item) => item.origin === 'verified-source-imports')
@@ -110,10 +115,14 @@ const reviewedRepositories = new Set(reviewedTasks.map((item) => item.repository
 const ready = reviewedRepositories >= minimum.independentRepositories
   && verifiedRealTasks >= minimum.verifiedRealTasks
 const report = {
-  version: 2, kind: 'architecture-evaluation-corpus-audit',
+  version: 3, kind: 'architecture-evaluation-corpus-audit',
   policy: 'Only fully source-checked, separately review-attested architecture tasks count toward the task acceptance threshold. Import-only samples, synthetic graphs and unreviewed task manifests never count. Review identity is an attestation, not cryptographically authenticated.',
   readiness: ready ? 'ready-for-cross-project-evaluation' : 'insufficient-independent-real-evidence',
   minimum,
+  prelayoutReference: {
+    assumedSideSpanPx: 80,
+    note: 'Scenario only. Incoming edges on left and outgoing on right, no shared ports. A deficit is neither a proven obstruction nor a post-route quality gate.',
+  },
   summary: {
     total: cases.length, verifiedSourceSubgraphs: verified.length, verifiedRealTasks,
     independentRepositories: projectCount,
@@ -126,6 +135,9 @@ const report = {
     distinctExactTopologies: distinctTopologies,
     withCycle: cases.filter((item) => item.cycle).length,
     withExplicitPartitions: cases.filter((item) => item.explicitPartitions > 0).length,
+    singleSideOverCapacityCases: cases.filter((item) => item.prelayoutDemand.overCapacityNodes.length > 0).length,
+    verifiedSourceOverCapacityCases: cases.filter((item) => item.origin === 'verified-source-imports'
+      && item.prelayoutDemand.overCapacityNodes.length > 0).length,
   },
   cases,
 }

@@ -6,6 +6,8 @@ R1 新增显式仓库采样器 `scripts/architecture-external-source-cases.ts`�
 
 R1 后续新增 `scripts/architecture-reviewed-tasks.ts`：与自动 AST 子图分离的业务架构任务合同，具有逐节点、逐关系和功能分区的可核对源文件 SHA-256/行号及有向主路径，必须经**独立手动审阅记录**确认才能进入严格真实任务计数。支持 `--tasks=... --review-ledger=...` 的 corpus 审计与 `--suite=reviewed` 标准 Composer 基准。隔离合成未批准案例完成审计、Canvas、SVG 与质量测试（3 节点/2 关系，零交叉/零重叠），仍计 **0** 条经审阅真实业务任务。来源证据校验和业务真实语义分别审查，审阅记录不代替人工视觉批准；详情与命令见 [roadmap.md](./roadmap.md)。
 
+R2 约束事实前置：新增开发期 `scripts/architecture-layout-demand.ts` 作为 **只读 demand 计算器**，从真实 `ArchitectureIntentGraph` 统计度数、SCC 环、声明的跨区接口、未知分区和明确的主阅读路径是否存在。审计和基准都并列输出固定假设下的端口单侧跨度需求与最终真实路由缺陷，拒绝把未验证的分区、端口分配或单侧超额当成硬门禁。详见 [roadmap.md](./roadmap.md)。
+
 本文件记录当前可执行的开发流程。长期不变量和最终架构见 [AGENTS.md](../AGENTS.md)；历史实验的具体取舍可从 Git 提交查看，不再在本文逐轮堆积算法补丁说明。
 
 ## 架构与输出

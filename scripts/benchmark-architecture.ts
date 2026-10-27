@@ -11,6 +11,7 @@ import { externalArchitectureSourceCases, parseExternalRepoArgs } from './archit
 import { loadArchitectureReviewedTasks } from './architecture-reviewed-tasks.js'
 import { proposePartitionEnvelopeLayout } from './partition-envelope-candidate.js'
 import { compareEditableArchitectureSemantics, judgeExternalLayout, measureEditableArchitecture } from './architecture-layout-gate.js'
+import { measureArchitectureLayoutDemand } from './architecture-layout-demand.js'
 
 const outputFlag = process.argv.indexOf('--out')
 if (outputFlag >= 0 && !process.argv[outputFlag + 1]) throw new Error('--out expects a destination directory')
@@ -27,6 +28,12 @@ if (((suite === 'external' || suite === 'reviewed') !== (repositories.length > 0
 }
 const requireReviewReady = process.argv.includes('--require-review-ready')
 const partitionEnvelopeExperiment = process.argv.includes('--partition-envelopes')
+const referenceSideSpanArg = process.argv.find((arg) => arg.startsWith('--reference-side-span='))?.slice('--reference-side-span='.length)
+// An explicit what-if reference only: no node sizes have been assigned yet.
+const referenceSideSpanPx = referenceSideSpanArg === undefined ? 80 : Number(referenceSideSpanArg)
+if (!Number.isFinite(referenceSideSpanPx) || referenceSideSpanPx <= 0 || referenceSideSpanPx > 1000) {
+  throw new Error('--reference-side-span must be a positive number <= 1000')
+}
 const output = path.resolve(outputFlag < 0
   ? `test-results/architecture-benchmark${suite === 'core' ? '' : '-' + suite}`
   : process.argv[outputFlag + 1])
@@ -59,6 +66,7 @@ if ((suite === 'external' || suite === 'reviewed') && !examples.length) {
   throw new Error('No verifiable architecture tasks were found in explicitly supplied inputs')
 }
 for (const example of examples) {
+  const demand = measureArchitectureLayoutDemand(example.intent, referenceSideSpanPx)
   const started = performance.now()
   const composed = composeArchitectureGraph(example.intent)
   const partitionFlow = architecturePartitionFlow(composed.scene)
@@ -104,6 +112,12 @@ for (const example of examples) {
     source: example.source,
     nodes: example.intent.nodes.length,
     relations: example.intent.relations.length,
+    prelayoutDemand: {
+      ...demand,
+      /** Deficit is a what-if one-side fan-in/fan-out demand; it is NOT the
+       * actual post-layout allocated ports or geometry collision count. */
+      scenario: 'incoming-on-left/outgoing-on-right; hypothetical per-side span, no bundling',
+    },
     composition: composed.summary.composition,
     density: composed.evaluation.density,
     structuralScore: composed.evaluation.structuralScore,
@@ -139,6 +153,10 @@ if (partitionEnvelopeExperiment) {
 await writeFile(path.join(output, 'report.json'), JSON.stringify({
   version: 2,
   suite,
+  prelayoutDemandReference: {
+    assumedSideSpanPx: referenceSideSpanPx,
+    note: 'Demand is computed from REAL declared relationships before layout. The 80px default is a hypothetical reference, not an actual assigned node height; no routing side, node resizing, or visual approval is inferred.',
+  },
   ...(suite === 'external' || suite === 'reviewed' ? { inputProvenance: examples.map((entry) => ({
     id: entry.id, ...('provenance' in entry ? entry.provenance : {}),
     note: suite === 'reviewed'
@@ -182,6 +200,7 @@ ${results.map((result) => `<section><header><div><h2>${escapeHtml(result.title)}
 <span>布局排序：${result.layoutOrderingStrategy}</span>
 <span>${escapeHtml(result.visualPlan.reference.label)} · ${result.visualPlan.recommendedView === 'overview' ? '先看总览' : '直接查看详情'}</span>
 <span>${result.nodes} 节点 / ${result.relations} 关系</span>
+<span>布局前单侧端口容量假设 ${result.prelayoutDemand.assumedSingleSidePortCapacity} · 超容量节点 ${result.prelayoutDemand.overCapacityNodes.length} · 未知分区节点 ${result.prelayoutDemand.nodesWithoutVerifiedPartition}</span>
 <span>${result.structuralScore} / 90</span>
 <span>${result.visualPlan.review.readyForVisualReview ? '待人工视觉审查' : '阻断视觉审查'}</span>
 <span>适配字号约 ${result.presentation.estimatedTitlePxAtFit}px</span>

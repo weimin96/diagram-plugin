@@ -10,6 +10,7 @@ import { projectArchitectureCase, projectArchitectureCases, coreArchitectureModu
   qualityPipelineModules, canvasEditingModules } from '../scripts/architecture-project-cases.js'
 import { externalArchitectureSourceCases, parseExternalRepoArgs } from '../scripts/architecture-external-source-cases.js'
 import { loadArchitectureReviewedTasks } from '../scripts/architecture-reviewed-tasks.js'
+import { measureArchitectureLayoutDemand } from '../scripts/architecture-layout-demand.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { canvasBundleTrunks, parseCanvasScene, serializeCanvasScene } from '../src/canvas.js'
 
@@ -43,6 +44,39 @@ test('真实架构基准的每条关系必须来自仓库源码的实际 TS impo
     assert.deepEqual(sample.intent.relations.map((edge) => `${edge.from}\u0000${edge.to}`).sort(),
       [...observed].sort(), 'never add an inferred dependency or omit an actual selected-module import')
   }
+  const demand = measureArchitectureLayoutDemand(samples[0].intent, 80)
+  assert.equal(demand.relationCount, samples[0].intent.relations.length)
+  assert.equal(demand.maxFanIn, 11)
+  assert.equal(demand.assumedSingleSidePortCapacity, 4,
+    'reference span is a what-if capacity, not an actual assigned port side')
+  assert.ok(demand.overCapacityNodes.some((node) => node.incoming === 11
+    && node.requiredSingleSideSpanPx === 168))
+  assert.equal(demand.nodesWithoutVerifiedPartition, samples[0].intent.nodes.length,
+    'source imports have no independently verified semantic partitions')
+  const typed = {
+    title: 'Synthetic scenario only',
+    nodes: [
+      { id: 'a', text: 'A', partition: 'application' as const },
+      { id: 'b', text: 'B', partition: 'data' as const },
+      { id: 'c', text: 'C', partition: 'processing' as const },
+      { id: 'd', text: 'D' },
+    ],
+    relations: [{ from: 'a', to: 'b' }, { from: 'b', to: 'c' },
+      { from: 'c', to: 'a' }, { from: 'c', to: 'd' }],
+    primaryPath: ['a', 'b', 'c'],
+  }
+  const topology = measureArchitectureLayoutDemand(typed, 80)
+  assert.deepEqual(topology.cycleComponents, [['a', 'b', 'c']])
+  assert.equal(topology.confirmedCrossPartitionRelations, 3)
+  assert.equal(topology.unknownPartitionRelations, 1)
+  assert.equal(topology.nodesWithoutVerifiedPartition, 1)
+  assert.equal(topology.primaryPathIsReal, true)
+  assert.equal(measureArchitectureLayoutDemand({ ...typed, primaryPath: ['a', 'c'] }, 80).primaryPathIsReal, false)
+  assert.equal(measureArchitectureLayoutDemand({ ...typed, relations: [...typed.relations].reverse() }, 80)
+    .confirmedCrossPartitionRelations, topology.confirmedCrossPartitionRelations)
+  assert.throws(() => measureArchitectureLayoutDemand({ ...typed,
+    relations: [...typed.relations, { from: 'a', to: 'missing' }] }, 80), /Unknown architecture relation endpoint/)
+  assert.throws(() => measureArchitectureLayoutDemand(typed, 0), /finite positive/)
   const sourceRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)))
   const imported = await externalArchitectureSourceCases('diagram-source', sourceRoot, 1)
   assert.equal(imported.length, 1, 'the generic collector must support a real, Git-tracked repository')
