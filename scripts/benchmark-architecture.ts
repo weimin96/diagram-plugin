@@ -104,6 +104,7 @@ ${results.map((result) => `<section><header><div><h2>${escapeHtml(result.title)}
 <span>交叉 ${result.metrics.edgeCrossings} · 重叠 ${result.metrics.edgeOverlaps} · 穿节点 ${result.metrics.edgeNodeIntersections}</span>
 <span>独立入边端口拥塞 ${result.routeDiagnostics.ingressPortConflicts}</span>
 <span>端口法向缺陷 ${result.routeDiagnostics.terminalNormalViolations}</span>
+<span>正交转折 ${result.routeDiagnostics.totalRouteBends}</span>
 <span>外围绕行 ${result.routeDiagnostics.perimeterDetours} · 总线长 ${result.routeDiagnostics.totalRouteLength}px</span>
 <span>跨分区 ${result.partitionFlow.crossPartitionRelations}</span>
 <span>跨区线长 ${result.routeDiagnostics.crossPartitionRouteLength}px · 逆向 ${result.routeDiagnostics.backwardCrossPartitionRelations} · 分区冲突 ${result.routeDiagnostics.frameOverlaps}</span>
@@ -115,6 +116,7 @@ console.table(results.map(({ id, nodes, relations, structuralScore, metrics, rou
   id, nodes, relations, score: structuralScore, crossings: metrics.edgeCrossings,
   overlaps: metrics.edgeOverlaps, ingressPorts: routeDiagnostics.ingressPortConflicts,
   portNormals: routeDiagnostics.terminalNormalViolations,
+  bends: routeDiagnostics.totalRouteBends,
   throughNodes: metrics.edgeNodeIntersections,
   reroutes: reroutedEdges, elapsedMs,
 })))

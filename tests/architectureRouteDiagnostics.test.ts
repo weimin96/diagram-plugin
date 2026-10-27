@@ -132,6 +132,8 @@ test('同分区线路在节点包围范围外明显折返时提示具体关系�
   const serialized = JSON.stringify(scene)
   const detoured = assessArchitectureRouteDiagnostics(scene)
   assert.equal(detoured.perimeterDetours, 1)
+  assert.equal(detoured.totalRouteBends, 4)
+  assert.deepEqual(detoured.worstRouteBends, [{ edgeId: 'detour', bends: 4 }])
   assert.deepEqual(detoured.worstPerimeterDetours, [
     { edgeId: 'detour', routeLength: 840, excessLength: 580, outsideDistance: 130 },
   ])
@@ -141,6 +143,8 @@ test('同分区线路在节点包围范围外明显折返时提示具体关系�
       ? { ...item, points: undefined } : item),
   })
   assert.equal(straight.perimeterDetours, 0)
+  assert.equal(straight.totalRouteBends, 0)
+  assert.deepEqual(straight.worstRouteBends, [])
   assert.deepEqual(straight.worstPerimeterDetours, [])
   assert.equal(JSON.stringify(scene), serialized, 'diagnostics must not modify the editable Canvas document')
 })

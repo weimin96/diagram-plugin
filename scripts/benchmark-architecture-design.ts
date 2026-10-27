@@ -67,6 +67,8 @@ for (const id of ids) {
     concerns: result.visualPlan.review.concerns,
     terminalNormalViolations: result.routeDiagnostics.terminalNormalViolations,
     worstTerminalNormalViolations: result.routeDiagnostics.worstTerminalNormalViolations,
+    totalRouteBends: result.routeDiagnostics.totalRouteBends,
+    worstRouteBends: result.routeDiagnostics.worstRouteBends,
     repairTargets: result.visualPlan.review.repairTargets,
     readyForVisualReview: result.visualPlan.review.readyForVisualReview,
     reviewBlockers: result.visualPlan.review.blockers,

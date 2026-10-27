@@ -20,6 +20,7 @@ export function measureEditableArchitecture(scene: CanvasScene) {
     }, 0)
   return {
     quality, nonOrthogonalSegments,
+    routeBends: region.totalRouteBends,
     portNormals: region.terminalNormalViolations,
     fitPx: presentation.estimatedTitlePxAtFit,
     frames: region.frameOverlaps,
@@ -78,6 +79,13 @@ export function judgeExternalLayout(
   }
   if (candidate.portNormals > baseline.portNormals) {
     reasons.push(`声明端口法向缺陷增加 ${baseline.portNormals}→${candidate.portNormals}`)
+  }
+  // Purely cosmetic or terminal-only improvements must not buy extra bends.
+  // A genuine reduction in independent crossings/overlaps may still justify
+  // a more complex route and will be assessed with all the other constraints.
+  if (candidate.routeBends > baseline.routeBends
+    && b.edgeCrossings >= a.edgeCrossings && b.edgeOverlaps >= a.edgeOverlaps) {
+    reasons.push(`关系线转折增加 ${baseline.routeBends}→${candidate.routeBends}，未减少交叉或独立重叠`)
   }
   if (b.edgeOverlaps > a.edgeOverlaps) reasons.push(`重叠增加 ${a.edgeOverlaps}→${b.edgeOverlaps}`)
   if (candidate.frames > baseline.frames) reasons.push('分区边界交叠增加')

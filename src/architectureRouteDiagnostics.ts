@@ -3,6 +3,10 @@ import { CANVAS_PORT_MIN_SEPARATION_PX, canvasArrowBoxRoute, canvasGroupFrames, 
 /** Geometry diagnostics only. They must not silently alter a saved CanvasScene. */
 export interface ArchitectureRouteDiagnostics {
   totalRouteLength: number
+  /** Real right-angle turns, excluding duplicate waypoints and diagonal
+   * geometry (reported separately by Canvas quality). A reading-cost signal. */
+  totalRouteBends: number
+  worstRouteBends: Array<{ edgeId: string; bends: number }>
   /** Declared side ports whose first/last orthogonal leg is not actually
    * perpendicular to the box boundary. Geometry evidence, not a layout score. */
   terminalNormalViolations: number
@@ -107,6 +111,8 @@ export function assessArchitectureRouteDiagnostics(scene: CanvasScene): Architec
     }
   }
   let totalRouteLength = 0
+  let totalRouteBends = 0
+  const routeBends: ArchitectureRouteDiagnostics['worstRouteBends'] = []
   const ingressBySide = new Map<string, Array<{ position: number; bundleKey?: string }>>()
   let crossPartitionRouteLength = 0
   let crossPartitionDirectDistance = 0
@@ -129,6 +135,18 @@ export function assessArchitectureRouteDiagnostics(scene: CanvasScene): Architec
       }])
     }
     const points = canvasArrowBoxRoute(source, target, arrow)
+    if (arrow.routing === 'orthogonal' && points.length >= 3) {
+      const corners = points.filter((point, index) =>
+        index === 0 || point.x !== points[index - 1].x || point.y !== points[index - 1].y)
+      let bends = 0
+      for (let index = 1; index + 1 < corners.length; index++) {
+        const before = corners[index - 1], current = corners[index], after = corners[index + 1]
+        if ((before.x === current.x && current.y === after.y)
+          || (before.y === current.y && current.x === after.x)) bends++
+      }
+      totalRouteBends += bends
+      if (bends) routeBends.push({ edgeId: arrow.id, bends })
+    }
     if (arrow.routing === 'orthogonal' && !source.rotation && !target.rotation && points.length >= 2) {
       for (const endpoint of ['from', 'to'] as const) {
         const side = endpoint === 'from' ? arrow.fromAnchor : arrow.toAnchor
@@ -197,6 +215,9 @@ export function assessArchitectureRouteDiagnostics(scene: CanvasScene): Architec
   }
   return {
     totalRouteLength: Math.round(totalRouteLength),
+    totalRouteBends,
+    worstRouteBends: routeBends.sort((a, b) => b.bends - a.bends
+      || a.edgeId.localeCompare(b.edgeId, 'en')).slice(0, 5),
     terminalNormalViolations: portNormalViolations.length,
     worstTerminalNormalViolations: portNormalViolations.slice(0, 12),
     ingressPortConflicts,
