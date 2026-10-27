@@ -53,7 +53,7 @@ test('fixed density limits candidates and keeps deterministic layout', () => {
 test('layout candidate selection penalizes small fit text and unrelated region intrusions independently', () => {
   const presentation = { referenceWidth: 1200, estimatedTitlePxAtFit: 12, nodeBoundsCoverage: .75, nodeAreaCoverage: .2, warnings: [] }
   const route = {
-    totalRouteLength: 1000, crossPartitionRouteLength: 500, crossPartitionDirectDistance: 400,
+    totalRouteLength: 1000, ingressPortConflicts: 0, crossPartitionRouteLength: 500, crossPartitionDirectDistance: 400,
     crossPartitionRelations: 2, backwardCrossPartitionRelations: 0, frameOverlaps: 0,
     frameOverlapArea: 0, worstFrameOverlaps: [], unrelatedFrameIntrusionLength: 0, worstFrameIntrusions: [],
     perimeterDetours: 0, worstPerimeterDetours: [],

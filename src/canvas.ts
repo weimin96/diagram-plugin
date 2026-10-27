@@ -28,6 +28,8 @@ export type CanvasImageFit = 'contain' | 'cover'
 export type CanvasEmphasis = 'primary' | 'secondary' | 'muted'
 export type CanvasRouting = 'straight' | 'orthogonal'
 export type CanvasAnchor = 'auto' | 'top' | 'right' | 'bottom' | 'left'
+/** Minimum readable separation for two independent routes on a fixed node side. */
+export const CANVAS_PORT_MIN_SEPARATION_PX = 14
 export type CanvasArchitectureTheme = 'enterprise' | 'technical' | 'presentation' | 'cloud' | 'editorial' | 'sketch'
 export type CanvasArchitectureView = 'overview' | 'detail'
 export type CanvasArchitectureDensity = 'auto' | 'comfortable' | 'compact' | 'dense'

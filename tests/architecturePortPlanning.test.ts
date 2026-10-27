@@ -41,6 +41,7 @@ test('congested ingress proposals keep exact graph semantics, orthogonal termina
   const target: CanvasNode = { ...node, id: 'sink', x: 420, y: 250, width: 180, height: 80, text: 'Sink' }
   const upper: CanvasNode = { ...node, id: 'upper', x: 90, y: 20 }
   const lower: CanvasNode = { ...node, id: 'lower', x: 90, y: 350 }
+  const middle: CanvasNode = { ...node, id: 'middle', x: 90, y: 170 }
   const arrows: CanvasArrow[] = [
     { id: 'left-a', type: 'arrow', from: 'upper', to: 'sink', routing: 'orthogonal',
       fromAnchor: 'bottom', toAnchor: 'left',
@@ -48,17 +49,26 @@ test('congested ingress proposals keep exact graph semantics, orthogonal termina
     { id: 'left-b', type: 'arrow', from: 'lower', to: 'sink', routing: 'orthogonal',
       fromAnchor: 'top', toAnchor: 'left',
       points: [{ x: 180, y: 290 }] },
+    { id: 'left-c', type: 'arrow', from: 'middle', to: 'sink', routing: 'orthogonal',
+      fromAnchor: 'bottom', toAnchor: 'left',
+      points: [{ x: 180, y: 290 }] },
   ]
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas', version: 1, title: 'Real ports',
     width: 700, height: 540, architecture: { theme: 'technical' },
-    elements: [upper, target, lower, ...arrows],
+    elements: [upper, target, lower, middle, ...arrows],
   }
   const original = JSON.stringify(scene)
   const candidates = proposeIngressPortSlots(scene)
   assert.ok(candidates.length > 0)
+  const joint = candidates.find((candidate) => candidate.elements.filter((item) =>
+    item.type === 'arrow' && item.toPortRatio !== undefined && item.toPortRatio !== 0.5).length >= 2)
+  assert.ok(joint, 'one side must be able to exchange occupied ports in a joint proposal')
+  const jointRatios = joint.elements.filter((item): item is CanvasArrow =>
+    item.type === 'arrow').map((item) => item.toPortRatio ?? 0.5)
+  assert.equal(new Set(jointRatios).size, arrows.length, 'joint allocation must have distinct real ports')
   for (const candidate of candidates) {
-    assert.deepEqual(candidate.elements.filter((item) => item.type === 'node'), [upper, target, lower])
+    assert.deepEqual(candidate.elements.filter((item) => item.type === 'node'), [upper, target, lower, middle])
     assert.deepEqual(candidate.elements.filter((item) => item.type === 'arrow')
       .map((item) => [item.id, item.from, item.to]),
     arrows.map((item) => [item.id, item.from, item.to]))

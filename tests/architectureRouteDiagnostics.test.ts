@@ -72,6 +72,29 @@ test('路由长度及逆向依赖的分区诊断与路径一致', () => {
   assert.deepEqual(result.worstFrameIntrusions, [])
 })
 
+test('独立入边的实际端口容量可计量，共享主干不误报', () => {
+  const scene: CanvasScene = {
+    type: 'diagram-plugin-canvas', version: 1, title: '端口容量', width: 900, height: 600,
+    elements: [
+      { id: 'source-a', type: 'node', text: 'A', x: 60, y: 80, width: 120, height: 80 },
+      { id: 'source-b', type: 'node', text: 'B', x: 60, y: 220, width: 120, height: 80 },
+      { id: 'source-c', type: 'node', text: 'C', x: 60, y: 360, width: 120, height: 80 },
+      { id: 'target', type: 'node', text: 'Sink', x: 480, y: 220, width: 200, height: 80 },
+      { id: 'a', type: 'arrow', from: 'source-a', to: 'target', toAnchor: 'left', toPortRatio: 0.5 },
+      { id: 'b', type: 'arrow', from: 'source-b', to: 'target', toAnchor: 'left', toPortRatio: 0.55 },
+      { id: 'c', type: 'arrow', from: 'source-c', to: 'target', toAnchor: 'left', toPortRatio: 0.85 },
+    ],
+  }
+  assert.equal(assessArchitectureRouteDiagnostics(scene).ingressPortConflicts, 1)
+  const moved: CanvasScene = { ...scene, elements: scene.elements.map((item) =>
+    item.id === 'b' && item.type === 'arrow' ? { ...item, toPortRatio: 0.15 } : item) }
+  assert.equal(assessArchitectureRouteDiagnostics(moved).ingressPortConflicts, 0)
+  const shared: CanvasScene = { ...scene, elements: scene.elements.map((item) =>
+    (item.id === 'a' || item.id === 'b') && item.type === 'arrow'
+      ? { ...item, bundleKey: 'verified-source-trunk' } : item) }
+  assert.equal(assessArchitectureRouteDiagnostics(shared).ingressPortConflicts, 0)
+})
+
 test('同分区线路在节点包围范围外明显折返时提示具体关系，不把普通直连当成绕行', () => {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas', version: 1, title: '外侧走廊', width: 800, height: 480,

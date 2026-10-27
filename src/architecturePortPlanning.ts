@@ -1,13 +1,12 @@
-/** Local boundary-port reservation and free-slot planning.
+/** Local boundary-port reservation and coordinated ingress planning.
  * Reads existing Canvas port geometry without mutating the document or
- * inventing node positions. Called only from bounded single-edge repair.
+ * inventing node positions. All proposals require complete-scene approval.
  */
-import { canvasArrowBoxRoute, type CanvasArrow, type CanvasNode, type CanvasNote, type CanvasScene } from './canvas.js'
+import { CANVAS_PORT_MIN_SEPARATION_PX, canvasArrowBoxRoute, type CanvasArrow, type CanvasNode, type CanvasNote, type CanvasScene } from './canvas.js'
 
 export type FixedSide = 'top' | 'right' | 'bottom' | 'left'
 export type PortReservations = ReadonlyMap<string, readonly number[]>
 const PORT_EDGE_CLEARANCE_PX = 12
-const PORT_MIN_SEPARATION_PX = 14
 const PORT_CONGESTION_COST_PER_PX = 24
 const MAX_FREE_PORT_CHOICES = 2
 
@@ -67,7 +66,7 @@ export function portSpacingPenalty(
   if (!occupied?.length) return 0
   const span = side === 'left' || side === 'right' ? box.height : box.width
   const separation = Math.min(...occupied.map((other) => Math.abs(other - ratio) * span))
-  return Math.max(0, PORT_MIN_SEPARATION_PX - separation) * PORT_CONGESTION_COST_PER_PX
+  return Math.max(0, CANVAS_PORT_MIN_SEPARATION_PX - separation) * PORT_CONGESTION_COST_PER_PX
 }
 
 /** Offer ingress slots for an already-routed node without replacing the
@@ -94,22 +93,69 @@ export function proposeIngressPortSlots(scene: CanvasScene): CanvasScene[] {
     const inset = Math.max(0.15, Math.min(0.3, 12 / span))
     const slots = Array.from({ length: arrivals.length }, (_, index) =>
       Math.round((inset + (1 - 2 * inset) * index / (arrivals.length - 1)) * 1000) / 1000)
-    for (const arrow of arrivals) {
+    const replaceTerminal = (arrow: CanvasArrow, ratio: number, gap: number): CanvasArrow | undefined => {
       const source = nodes.get(arrow.from)
-      if (!source || source.rotation) continue
+      if (!source || source.rotation) return undefined
       const route = canvasArrowBoxRoute(source, target, arrow)
-      if (route.length < 3) continue
+      if (route.length < 3) return undefined
       const last = route.at(-1)!, previous = route.at(-2)!, preceding = route.at(-3)!
-      // Only preserve actual orthogonal geometry. An ingress from the wrong
-      // normal requires an exterior elbow so that ports remain readable and
-      // the path never cuts diagonally into the target box.
       const flat = previous.y === last.y && previous.x !== last.x
         && previous.x === preceding.x
       const stub = previous.x === last.x && previous.y !== last.y
         && (horizontalSide
           ? preceding.y === previous.y && route.length >= 4 && route.at(-4)!.x === preceding.x
           : preceding.x === previous.x)
-      if (!flat && !stub) continue
+      if (!flat && !stub) return undefined
+      const routePoints = route.slice(0, -1).map((point) => ({ ...point }))
+      if (horizontalSide) {
+        const y = target.y + ratio * span
+        if (flat) routePoints[routePoints.length - 1].y = y
+        else {
+          routePoints.pop()
+          routePoints[routePoints.length - 1].y = y
+        }
+      } else {
+        const x = target.x + ratio * span
+        const approachY = last.y + (side === 'top' ? -gap : gap)
+        routePoints.pop()
+        const pivot = routePoints.at(-1)!
+        if (pivot.x !== previous.x) return undefined
+        routePoints.push({ x: previous.x, y: approachY }, { x, y: approachY })
+      }
+      const proposed = { ...arrow, toPortRatio: ratio, points: routePoints.slice(1) }
+      const path = canvasArrowBoxRoute(source, target, proposed)
+      if (path.slice(1).some((point, index) =>
+        point.x !== path[index].x && point.y !== path[index].y)) return undefined
+      return proposed
+    }
+    // The existing single-edge search cannot exchange two occupied endpoints.
+    // Allocate an entire physical side together, preserving approach order,
+    // then let the Composer validate every resulting route on the full scene.
+    if (arrivals.length >= 3 && arrivals.length <= 6
+      && span * (1 - 2 * inset) / (arrivals.length - 1) >= CANVAS_PORT_MIN_SEPARATION_PX) {
+      const ordered = arrivals.map((arrow) => {
+        const source = nodes.get(arrow.from)
+        const route = source && canvasArrowBoxRoute(source, target, arrow)
+        const approach = route?.at(-2)
+        return { arrow, coordinate: horizontalSide ? approach?.y : approach?.x }
+      }).sort((a, b) => (a.coordinate ?? 0) - (b.coordinate ?? 0)
+        || a.arrow.id.localeCompare(b.arrow.id, 'en'))
+      const replacements = new Map<string, CanvasArrow>()
+      for (const [index, { arrow }] of ordered.entries()) {
+        const ratio = slots[index]
+        if (Math.abs(ratio - (arrow.toPortRatio ?? 0.5)) * span < 8) continue
+        const proposed = replaceTerminal(arrow, ratio, horizontalSide ? 0 : 16)
+        if (!proposed) {
+          replacements.clear()
+          break
+        }
+        replacements.set(arrow.id, proposed)
+      }
+      if (replacements.size > 1) proposals.push({
+        ...scene, elements: scene.elements.map((item) => replacements.get(item.id) ?? item),
+      })
+    }
+    for (const arrow of arrivals) {
       for (const ratio of slots) {
         if (Math.abs(ratio - (arrow.toPortRatio ?? 0.5)) * span < 8) continue
         // A new endpoint requires an actually free physical port; do not
@@ -117,28 +163,8 @@ export function proposeIngressPortSlots(scene: CanvasScene): CanvasScene[] {
         if (arrivals.some((other) => other.id !== arrow.id
           && Math.abs((other.toPortRatio ?? 0.5) - ratio) * span < 12)) continue
         for (const gap of horizontalSide ? [0] : [16, 30]) {
-          const routePoints = route.slice(0, -1).map((point) => ({ ...point }))
-          if (horizontalSide) {
-            const y = target.y + ratio * span
-            if (flat) routePoints[routePoints.length - 1].y = y
-            else {
-              routePoints.pop()
-              routePoints[routePoints.length - 1].y = y
-            }
-          } else {
-            const x = target.x + ratio * span
-            const approachY = last.y + (side === 'top' ? -gap : gap)
-            // The incoming line must approach the box orthogonally, not
-            // collide with other horizontal lines along its boundary.
-            routePoints.pop()
-            const pivot = routePoints.at(-1)!
-            if (pivot.x !== previous.x) continue
-            routePoints.push({ x: previous.x, y: approachY }, { x, y: approachY })
-          }
-          const proposed: CanvasArrow = { ...arrow, toPortRatio: ratio, points: routePoints.slice(1) }
-          const path = canvasArrowBoxRoute(source, target, proposed)
-          if (path.slice(1).some((point, index) =>
-            point.x !== path[index].x && point.y !== path[index].y)) continue
+          const proposed = replaceTerminal(arrow, ratio, gap)
+          if (!proposed) continue
           proposals.push({ ...scene, elements: scene.elements.map((item) =>
             item.id === arrow.id ? proposed : item) })
         }

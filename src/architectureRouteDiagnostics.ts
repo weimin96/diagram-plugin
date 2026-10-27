@@ -1,8 +1,11 @@
-import { canvasArrowBoxRoute, canvasGroupFrames, type CanvasNode, type CanvasPoint, type CanvasScene } from './canvas.js'
+import { CANVAS_PORT_MIN_SEPARATION_PX, canvasArrowBoxRoute, canvasGroupFrames, type CanvasNode, type CanvasPoint, type CanvasScene } from './canvas.js'
 
 /** Geometry diagnostics only. They must not silently alter a saved CanvasScene. */
 export interface ArchitectureRouteDiagnostics {
   totalRouteLength: number
+  /** Pairs of independent incoming arrows competing for the same physical
+   * node-side port capacity; not a substitute for full-route collision checks. */
+  ingressPortConflicts: number
   crossPartitionRouteLength: number
   crossPartitionDirectDistance: number
   crossPartitionRelations: number
@@ -84,6 +87,7 @@ export function assessArchitectureRouteDiagnostics(scene: CanvasScene): Architec
     }
   }
   let totalRouteLength = 0
+  const ingressBySide = new Map<string, Array<{ position: number; bundleKey?: string }>>()
   let crossPartitionRouteLength = 0
   let crossPartitionDirectDistance = 0
   let crossPartitionRelations = 0
@@ -96,6 +100,13 @@ export function assessArchitectureRouteDiagnostics(scene: CanvasScene): Architec
     if (arrow.type !== 'arrow') continue
     const source = nodes.get(arrow.from), target = nodes.get(arrow.to)
     if (!source || !target) continue
+    if (arrow.toAnchor && arrow.toAnchor !== 'auto' && !target.rotation) {
+      const span = arrow.toAnchor === 'left' || arrow.toAnchor === 'right' ? target.height : target.width
+      const key = `${target.id}\u0000${arrow.toAnchor}`
+      ingressBySide.set(key, [...(ingressBySide.get(key) ?? []), {
+        position: (arrow.toPortRatio ?? 0.5) * span, bundleKey: arrow.bundleKey,
+      }])
+    }
     const points = canvasArrowBoxRoute(source, target, arrow)
     const length = points.slice(1).reduce((sum, point, index) =>
       sum + Math.abs(point.x - points[index].x) + Math.abs(point.y - points[index].y), 0)
@@ -142,8 +153,19 @@ export function assessArchitectureRouteDiagnostics(scene: CanvasScene): Architec
       unrelatedFrameIntrusionLength += frameIntrusion
     }
   }
+  let ingressPortConflicts = 0
+  for (const ports of ingressBySide.values()) {
+    ports.sort((a, b) => a.position - b.position)
+    for (let index = 1; index < ports.length; index++) {
+      if (ports[index].position - ports[index - 1].position < CANVAS_PORT_MIN_SEPARATION_PX
+        && !(ports[index].bundleKey && ports[index].bundleKey === ports[index - 1].bundleKey)) {
+        ingressPortConflicts++
+      }
+    }
+  }
   return {
     totalRouteLength: Math.round(totalRouteLength),
+    ingressPortConflicts,
     crossPartitionRouteLength: Math.round(crossPartitionRouteLength),
     crossPartitionDirectDistance: Math.round(crossPartitionDirectDistance),
     crossPartitionRelations,

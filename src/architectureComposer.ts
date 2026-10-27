@@ -789,6 +789,7 @@ function negotiateFinalCorridors(result: ReturnType<typeof composeArchitectureGr
     let best: typeof result | undefined
     let bestGain = 0
     const proposals = proposeIngressPortSlots(selected.scene).map((scene) => ({ scene, routeChanged: false }))
+    const seenScenes = new Set<string>([JSON.stringify(selected.scene.elements)])
     const prioritized = new Set([...selected.quality.issues
       .filter((issue) => ['edge-crossing', 'edge-overlap', 'edge-through-node'].includes(issue.code))
       .flatMap((issue) => issue.elementIds),
@@ -812,6 +813,9 @@ function negotiateFinalCorridors(result: ReturnType<typeof composeArchitectureGr
     }
     for (const proposal of proposals) {
       const scene = proposal.routeChanged ? annotateSourceFanoutTrunks(proposal.scene) : proposal.scene
+      const signature = JSON.stringify(scene.elements)
+      if (seenScenes.has(signature)) continue
+      seenScenes.add(signature)
       const quality = assessCanvasVisualQuality(scene)
       const before = selected.quality.metrics, after = quality.metrics
       if (after.nodeOverlaps > before.nodeOverlaps || after.edgeNodeIntersections > before.edgeNodeIntersections

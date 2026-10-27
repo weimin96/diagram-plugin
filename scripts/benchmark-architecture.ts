@@ -102,6 +102,7 @@ ${results.map((result) => `<section><header><div><h2>${escapeHtml(result.title)}
 <span>${result.visualPlan.review.readyForVisualReview ? '待人工视觉审查' : '阻断视觉审查'}</span>
 <span>适配字号约 ${result.presentation.estimatedTitlePxAtFit}px</span>
 <span>交叉 ${result.metrics.edgeCrossings} · 重叠 ${result.metrics.edgeOverlaps} · 穿节点 ${result.metrics.edgeNodeIntersections}</span>
+<span>独立入边端口拥塞 ${result.routeDiagnostics.ingressPortConflicts}</span>
 <span>外围绕行 ${result.routeDiagnostics.perimeterDetours} · 总线长 ${result.routeDiagnostics.totalRouteLength}px</span>
 <span>跨分区 ${result.partitionFlow.crossPartitionRelations}</span>
 <span>跨区线长 ${result.routeDiagnostics.crossPartitionRouteLength}px · 逆向 ${result.routeDiagnostics.backwardCrossPartitionRelations} · 分区冲突 ${result.routeDiagnostics.frameOverlaps}</span>
@@ -109,9 +110,10 @@ ${results.map((result) => `<section><header><div><h2>${escapeHtml(result.title)}
 ${result.issues.length || result.presentation.warnings.length ? `<p class="issues">${[...result.issues.map(({ code }) => code), ...result.presentation.warnings].map(escapeHtml).join(' · ')}</p>` : ''}</section>`).join('\n')}
 </main></body></html>`)
 
-console.table(results.map(({ id, nodes, relations, structuralScore, metrics, reroutedEdges, elapsedMs }) => ({
+console.table(results.map(({ id, nodes, relations, structuralScore, metrics, routeDiagnostics, reroutedEdges, elapsedMs }) => ({
   id, nodes, relations, score: structuralScore, crossings: metrics.edgeCrossings,
-  overlaps: metrics.edgeOverlaps, throughNodes: metrics.edgeNodeIntersections,
+  overlaps: metrics.edgeOverlaps, ingressPorts: routeDiagnostics.ingressPortConflicts,
+  throughNodes: metrics.edgeNodeIntersections,
   reroutes: reroutedEdges, elapsedMs,
 })))
 console.log(`Visual benchmark: ${path.join(output, 'index.html')}`)
