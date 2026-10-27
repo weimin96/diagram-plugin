@@ -65,6 +65,8 @@ for (const id of ids) {
     recommendedView: result.visualPlan.recommendedView,
     primaryNodeIds: result.visualPlan.primaryNodeIds,
     concerns: result.visualPlan.review.concerns,
+    terminalNormalViolations: result.routeDiagnostics.terminalNormalViolations,
+    worstTerminalNormalViolations: result.routeDiagnostics.worstTerminalNormalViolations,
     repairTargets: result.visualPlan.review.repairTargets,
     readyForVisualReview: result.visualPlan.review.readyForVisualReview,
     reviewBlockers: result.visualPlan.review.blockers,

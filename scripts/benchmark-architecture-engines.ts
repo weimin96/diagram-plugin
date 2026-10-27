@@ -39,7 +39,7 @@ type Result = { case: string; engine: string; ms: number; nodes: number; edges: 
   crossPartitionRouteLength: number; unrelatedFrameIntrusionLength: number
   fitFont: number; warnings: string[]; eligible?: boolean; rejectionReasons?: string[];
   nonOrthogonalSegments?: number; frameOverlapArea?: number; error?: string;
-  faithful?: boolean; semanticViolations?: string[]; perimeterDetours?: number }
+  faithful?: boolean; semanticViolations?: string[]; perimeterDetours?: number; portNormals?: number }
 const results: Result[] = []
 function additionalGeometry(scene: CanvasScene) {
   const measured = assessArchitectureRouteDiagnostics(scene)
@@ -95,7 +95,7 @@ for (const entry of entries) {
       eligible: verdict ? verdict.eligible && fidelity.faithful : undefined,
       rejectionReasons: [...(verdict?.reasons ?? []), ...fidelity.reasons],
       nonOrthogonalSegments: measured.nonOrthogonalSegments, frameOverlapArea: measured.frameOverlapArea,
-      perimeterDetours: measured.perimeterDetours,
+      perimeterDetours: measured.perimeterDetours, portNormals: measured.portNormals,
     })
     await writeFile(path.join(output, `${entry.id}--${item.engine}.diagram.json`), serializeCanvasScene(item.scene))
     await writeFile(path.join(output, `${entry.id}--${item.engine}.svg`), canvasSceneToSvg(item.scene))

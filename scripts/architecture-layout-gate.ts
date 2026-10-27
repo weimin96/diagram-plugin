@@ -20,6 +20,7 @@ export function measureEditableArchitecture(scene: CanvasScene) {
     }, 0)
   return {
     quality, nonOrthogonalSegments,
+    portNormals: region.terminalNormalViolations,
     fitPx: presentation.estimatedTitlePxAtFit,
     frames: region.frameOverlaps,
     frameOverlapArea: region.frameOverlapArea,
@@ -75,6 +76,9 @@ export function judgeExternalLayout(
   if (candidate.nonOrthogonalSegments > baseline.nonOrthogonalSegments) {
     reasons.push(`非正交线段增加 ${baseline.nonOrthogonalSegments}→${candidate.nonOrthogonalSegments}`)
   }
+  if (candidate.portNormals > baseline.portNormals) {
+    reasons.push(`声明端口法向缺陷增加 ${baseline.portNormals}→${candidate.portNormals}`)
+  }
   if (b.edgeOverlaps > a.edgeOverlaps) reasons.push(`重叠增加 ${a.edgeOverlaps}→${b.edgeOverlaps}`)
   if (candidate.frames > baseline.frames) reasons.push('分区边界交叠增加')
   if (candidate.frameOverlapArea > baseline.frameOverlapArea) {
@@ -89,6 +93,7 @@ export function judgeExternalLayout(
     reasons.push(`外围绕行增加 ${baseline.perimeterDetours}→${candidate.perimeterDetours}`)
   }
   if (b.edgeCrossings === a.edgeCrossings && b.edgeOverlaps === a.edgeOverlaps
+    && candidate.portNormals >= baseline.portNormals
     && candidate.fitPx < baseline.fitPx + 1 && candidate.frames >= baseline.frames) {
     reasons.push('没有明确的结构或可读性收益')
   }

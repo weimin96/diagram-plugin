@@ -95,6 +95,26 @@ test('独立入边的实际端口容量可计量，共享主干不误报', () =>
   assert.equal(assessArchitectureRouteDiagnostics(shared).ingressPortConflicts, 0)
 })
 
+test('真实端点法向诊断区分错误切向连接与合法的正交出入边，不更改画布', () => {
+  const scene: CanvasScene = {
+    type: 'diagram-plugin-canvas', version: 1, title: '端口法向', width: 900, height: 550,
+    elements: [
+      { id: 'left', type: 'node', x: 100, y: 100, width: 160, height: 80, text: 'Source' },
+      { id: 'right', type: 'node', x: 500, y: 100, width: 160, height: 80, text: 'Sink' },
+      { id: 'bad', type: 'arrow', from: 'left', to: 'right', routing: 'orthogonal',
+        fromAnchor: 'right', toAnchor: 'top', points: [{ x: 260, y: 20 }, { x: 580, y: 20 }] },
+      { id: 'ok', type: 'arrow', from: 'left', to: 'right', routing: 'orthogonal',
+        fromAnchor: 'right', toAnchor: 'left' },
+    ],
+  }
+  const original = JSON.stringify(scene)
+  const measured = assessArchitectureRouteDiagnostics(scene)
+  assert.equal(measured.terminalNormalViolations, 1)
+  assert.deepEqual(measured.worstTerminalNormalViolations,
+    [{ edgeId: 'bad', endpoint: 'from', side: 'right' }])
+  assert.equal(JSON.stringify(scene), original)
+})
+
 test('同分区线路在节点包围范围外明显折返时提示具体关系，不把普通直连当成绕行', () => {
   const scene: CanvasScene = {
     type: 'diagram-plugin-canvas', version: 1, title: '外侧走廊', width: 800, height: 480,

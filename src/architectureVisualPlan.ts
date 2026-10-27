@@ -62,6 +62,7 @@ export type ArchitectureVisualConcernCode =
   | 'weak-main-path' | 'dense-detail' | 'tiny-overview-text'
   | 'wide-canvas' | 'cross-boundary-intrusion' | 'frame-overlap'
   | 'overlapping-relationships' | 'crossing-relationships' | 'perimeter-detour'
+  | 'invalid-terminal-normal'
 
 export interface ArchitectureVisualRepairTarget {
   concern: ArchitectureVisualConcernCode
@@ -187,6 +188,7 @@ export function planArchitectureVisual(
   if (quality.metrics.edgeOverlaps >= 2) concerns.push('overlapping-relationships')
   if (quality.metrics.edgeCrossings > 0) concerns.push('crossing-relationships')
   if (geometry.perimeterDetours > 0) concerns.push('perimeter-detour')
+  if (geometry.terminalNormalViolations > 0) concerns.push('invalid-terminal-normal')
   const repairTargets: ArchitectureVisualRepairTarget[] = []
   const existingArrows = new Set(relations.map((edge) => edge.id))
   const existingGroups = new Set((scene.groups ?? []).map((group) => group.id))
@@ -212,6 +214,15 @@ export function planArchitectureVisual(
     repairTargets.push({
       concern: 'perimeter-detour', elementIds: [detour.edgeId],
       action: `${detour.edgeId} 在同分区节点外侧绕行 ${detour.outsideDistance}px，额外线路长度 ${detour.excessLength}px；应联合检查核心节点位置、端口与共享通道，不能只缩短单根线`,
+    })
+  }
+  const badTerminals = geometry.worstTerminalNormalViolations
+    .filter((item) => existingArrows.has(item.edgeId))
+  if (badTerminals.length) {
+    repairTargets.push({
+      concern: 'invalid-terminal-normal',
+      elementIds: [...new Set(badTerminals.map((item) => item.edgeId))].slice(0, 3),
+      action: `检测到 ${geometry.terminalNormalViolations} 处声明端口与实际首末线段法向不一致；需联合规划节点位置、端口和走廊，并在完整画布上复核交叉、重叠与可读性`,
     })
   }
   // Expose actual conflicting arrows for a bounded, source-preserving review.
@@ -258,6 +269,7 @@ export function planArchitectureVisual(
     'wide-canvas': 1,
     'weak-main-path': 2,
     'cross-boundary-intrusion': 3,
+    'invalid-terminal-normal': 3,
     'overlapping-relationships': 4,
     'perimeter-detour': 4,
     'frame-overlap': 3,

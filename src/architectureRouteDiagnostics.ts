@@ -3,6 +3,12 @@ import { CANVAS_PORT_MIN_SEPARATION_PX, canvasArrowBoxRoute, canvasGroupFrames, 
 /** Geometry diagnostics only. They must not silently alter a saved CanvasScene. */
 export interface ArchitectureRouteDiagnostics {
   totalRouteLength: number
+  /** Declared side ports whose first/last orthogonal leg is not actually
+   * perpendicular to the box boundary. Geometry evidence, not a layout score. */
+  terminalNormalViolations: number
+  worstTerminalNormalViolations: Array<{
+    edgeId: string; endpoint: 'from' | 'to'; side: 'top' | 'right' | 'bottom' | 'left'
+  }>
   /** Pairs of independent incoming arrows competing for the same physical
    * node-side port capacity; not a substitute for full-route collision checks. */
   ingressPortConflicts: number
@@ -44,6 +50,20 @@ function segmentWithinRect(a: CanvasPoint, b: CanvasPoint, frame: {
       - Math.max(Math.min(a.y, b.y), frame.y))
   }
   return 0
+}
+
+/** Read the outward tangent from a real endpoint. At the target the outward
+ * direction points backwards from the end of the route to its prior waypoint. */
+function hasOutwardPortNormal(
+  endpoint: CanvasPoint, neighbor: CanvasPoint,
+  side: 'top' | 'right' | 'bottom' | 'left',
+): boolean {
+  switch (side) {
+    case 'top': return neighbor.x === endpoint.x && neighbor.y < endpoint.y
+    case 'right': return neighbor.y === endpoint.y && neighbor.x > endpoint.x
+    case 'bottom': return neighbor.x === endpoint.x && neighbor.y > endpoint.y
+    case 'left': return neighbor.y === endpoint.y && neighbor.x < endpoint.x
+  }
 }
 
 export function assessArchitectureRouteDiagnostics(scene: CanvasScene): ArchitectureRouteDiagnostics {
@@ -95,6 +115,7 @@ export function assessArchitectureRouteDiagnostics(scene: CanvasScene): Architec
   let unrelatedFrameIntrusionLength = 0
   const intrusions: ArchitectureRouteDiagnostics['worstFrameIntrusions'] = []
   const perimeter: ArchitectureRouteDiagnostics['worstPerimeterDetours'] = []
+  const portNormalViolations: ArchitectureRouteDiagnostics['worstTerminalNormalViolations'] = []
   const frameById = new Map(frames.map((frame) => [frame.id, frame]))
   for (const arrow of scene.elements) {
     if (arrow.type !== 'arrow') continue
@@ -108,6 +129,17 @@ export function assessArchitectureRouteDiagnostics(scene: CanvasScene): Architec
       }])
     }
     const points = canvasArrowBoxRoute(source, target, arrow)
+    if (arrow.routing === 'orthogonal' && !source.rotation && !target.rotation && points.length >= 2) {
+      for (const endpoint of ['from', 'to'] as const) {
+        const side = endpoint === 'from' ? arrow.fromAnchor : arrow.toAnchor
+        if (!side || side === 'auto') continue
+        const start = endpoint === 'from' ? points[0] : points.at(-1)!
+        const next = endpoint === 'from' ? points[1] : points.at(-2)!
+        if (!hasOutwardPortNormal(start, next, side)) {
+          portNormalViolations.push({ edgeId: arrow.id, endpoint, side })
+        }
+      }
+    }
     const length = points.slice(1).reduce((sum, point, index) =>
       sum + Math.abs(point.x - points[index].x) + Math.abs(point.y - points[index].y), 0)
     totalRouteLength += length
@@ -165,6 +197,8 @@ export function assessArchitectureRouteDiagnostics(scene: CanvasScene): Architec
   }
   return {
     totalRouteLength: Math.round(totalRouteLength),
+    terminalNormalViolations: portNormalViolations.length,
+    worstTerminalNormalViolations: portNormalViolations.slice(0, 12),
     ingressPortConflicts,
     crossPartitionRouteLength: Math.round(crossPartitionRouteLength),
     crossPartitionDirectDistance: Math.round(crossPartitionDirectDistance),

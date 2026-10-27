@@ -35,6 +35,24 @@ test('严重真实线路交叉阻断视觉审查，少量交叉仍保留具体�
   assert.ok(oneCrossing.review.concerns.includes('crossing-relationships'))
 })
 
+test('错误端口法向的建议仅引用真实关系，不伪称已完成几何修复', () => {
+  const composed = composeArchitectureGraph(architectureCases[0].intent)
+  const relation = composed.scene.elements.find((item) => item.type === 'arrow')!
+  const geometry = {
+    ...composed.routeDiagnostics, terminalNormalViolations: 1,
+    worstTerminalNormalViolations: [{ edgeId: relation.id, endpoint: 'to' as const, side: 'left' as const }],
+  }
+  const planned = planArchitectureVisual(composed.scene, composed.semanticComposition,
+    composed.quality, composed.presentation, geometry)
+  assert.ok(planned.review.concerns.includes('invalid-terminal-normal'))
+  assert.ok(planned.review.repairTargets.some((item) =>
+    item.concern === 'invalid-terminal-normal'
+    && item.elementIds.includes(relation.id) && item.action.includes('联合规划')))
+  assert.ok(planned.review.repairTargets.every((item) =>
+    item.elementIds.every((id) => composed.scene.elements.some((element) => element.id === id)
+      || composed.scene.groups?.some((group) => group.id === id))))
+})
+
 test('独立关系线密集共道会阻断审查，不由节点无遮挡或交叉数掩盖', () => {
   const composed = composeArchitectureGraph(architectureCases[0].intent)
   const count = composed.quality.metrics.arrows
