@@ -4,7 +4,8 @@ import { architectureCases } from './fixtures/architecture/cases.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { canvasArrowBoxRoute, canvasGroupFrames, parseCanvasScene, serializeCanvasScene, type CanvasNode } from '../src/canvas.js'
 import { assessCanvasVisualQuality } from '../src/canvasQuality.js'
-import { compactElkSceneBounds, layoutWithElk, placeElkWithinOriginalCanvas } from '../scripts/elk-architecture-candidate.js'
+import { compactElkSceneBounds, fitElkCorridorsWithinOriginalCanvas, layoutWithElk, placeElkWithinOriginalCanvas } from '../scripts/elk-architecture-candidate.js'
+import { projectArchitectureCases } from '../scripts/architecture-project-cases.js'
 import { architectureBenchmarkCases } from '../scripts/architecture-benchmark-cases.js'
 import { compareEditableArchitectureSemantics, measureEditableArchitecture } from '../scripts/architecture-layout-gate.js'
 
@@ -147,4 +148,36 @@ test('ELK 原生候选遇到锁定节点时显式拒绝而非错位布线', asyn
     'two incompatible pins must fail, not silently move one of them')
   await assert.rejects(layoutWithElk(pinnedInput, 'flat', { rigidLockedPlacement: true }),
     /requires native ELK edge geometry/, 'partial rerouting must never be mistaken for rigid native geometry')
+})
+
+test('ELK 隔离联合布局只能压缩空走廊来适配真实 Canvas，保留节点、端口和全部关系', async () => {
+  const entry = (await projectArchitectureCases()).find((item) => item.id === 'diagram-plugin-canvas-imports')!
+  const original = composeArchitectureGraph(entry.intent).scene
+  const snapshot = serializeCanvasScene(original)
+  const candidate = await layoutWithElk(original, 'native', {
+    nodeSpacing: 8, layerSpacing: 8, wrapping: 'MULTI_EDGE', aspectRatio: 0.8, compactBounds: true,
+  })
+  assert.equal(placeElkWithinOriginalCanvas(original, candidate), null,
+    'the native candidate does not fit by translation alone')
+  const fitted = fitElkCorridorsWithinOriginalCanvas(original, candidate)
+  assert.ok(fitted, 'only empty horizontal corridors should be reduced to preserve all node dimensions')
+  assert.deepEqual([fitted.width, fitted.height], [original.width, original.height])
+  assert.deepEqual(fitted.elements.filter((item) => item.type === 'node').map(({ id, width, height }) => ({ id, width, height })),
+    original.elements.filter((item) => item.type === 'node').map(({ id, width, height }) => ({ id, width, height })))
+  assert.deepEqual(fitted.elements.filter((item) => item.type === 'arrow').map(({ id, from, to }) => ({ id, from, to })),
+    original.elements.filter((item) => item.type === 'arrow').map(({ id, from, to }) => ({ id, from, to })))
+  assert.equal(compareEditableArchitectureSemantics(original, fitted).faithful, true)
+  const quality = measureEditableArchitecture(fitted)
+  assert.equal(quality.quality.edgeCrossings, 0)
+  assert.equal(quality.quality.edgeOverlaps, 0)
+  assert.equal(quality.nonOrthogonalSegments, 0)
+  assert.equal(quality.frameOverflowPx, 0)
+  assert.equal(quality.fitPx, measureEditableArchitecture(original).fitPx)
+  assert.equal(parseCanvasScene(serializeCanvasScene(fitted)).elements.length, original.elements.length)
+  assert.equal(serializeCanvasScene(original), snapshot)
+
+  const locked = { ...original, elements: original.elements.map((item) =>
+    item.type === 'node' ? { ...item, locked: true } : item) }
+  assert.equal(fitElkCorridorsWithinOriginalCanvas(locked, candidate), null,
+    'independent manually locked nodes cannot be shifted by an unapproved free-space transform')
 })

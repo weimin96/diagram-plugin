@@ -9,7 +9,7 @@ import { assessArchitectureRouteDiagnostics } from '../src/architectureRouteDiag
 import type { CanvasScene } from '../src/canvas.js'
 import { architectureBenchmarkCases } from './architecture-benchmark-cases.js'
 import { projectArchitectureCase, projectArchitectureCases } from './architecture-project-cases.js'
-import { layoutWithElk, placeElkWithinOriginalCanvas, type ElkBenchmarkVariant } from './elk-architecture-candidate.js'
+import { fitElkCorridorsWithinOriginalCanvas, layoutWithElk, placeElkWithinOriginalCanvas, type ElkBenchmarkVariant } from './elk-architecture-candidate.js'
 import { compareEditableArchitectureSemantics, judgeExternalLayout, measureEditableArchitecture } from './architecture-layout-gate.js'
 
 const args = process.argv.slice(2)
@@ -33,6 +33,8 @@ if (spacing !== undefined && (!Number.isInteger(spacing) || spacing < 8 || spaci
 const requireEligible = args.includes('--require-eligible')
 const compactBounds = args.includes('--compact-bounds')
 const sameCanvas = args.includes('--same-canvas')
+const fitCorridors = args.includes('--fit-corridors')
+if (fitCorridors && !sameCanvas) throw new Error('--fit-corridors requires --same-canvas')
 const wrappingArg = args.find((arg) => arg.startsWith('--wrapping='))?.slice(11)
 if (wrappingArg !== undefined && !['OFF', 'SINGLE_EDGE', 'MULTI_EDGE'].includes(wrappingArg)) {
   throw new Error('Use --wrapping=OFF|SINGLE_EDGE|MULTI_EDGE')
@@ -84,7 +86,9 @@ for (const entry of entries) {
         compactBounds,
         wrapping, aspectRatio,
       })
-      const matched = sameCanvas ? placeElkWithinOriginalCanvas(original.scene, scene) : undefined
+      const matched = sameCanvas
+        ? (fitCorridors ? fitElkCorridorsWithinOriginalCanvas(original.scene, scene)
+          : placeElkWithinOriginalCanvas(original.scene, scene)) : undefined
       measures.push({
         engine: `elk-${variant}`,
         scene: matched ?? scene, ms: Math.round(performance.now() - start),
@@ -132,14 +136,14 @@ for (const entry of entries) {
 
 const eligible = results.filter((item) => item.engine !== 'current' && item.eligible)
 await writeFile(path.join(output, 'report.json'), JSON.stringify({
-  version: 3, suite, caseCount: entries.length, direction, spacing: spacing ?? null, compactBounds, sameCanvas,
+  version: 3, suite, caseCount: entries.length, direction, spacing: spacing ?? null, compactBounds, sameCanvas, fitCorridors,
   wrapping: wrapping ?? null, aspectRatio: aspectRatio ?? null,
   source: suite === 'project' || suite === 'project-multi'
     ? 'Real scoped TypeScript import graph including type-only relations' : 'Reference/synthetic',
   candidateCount: results.filter((item) => item.engine !== 'current').length,
   eligibleCount: eligible.length,
   recommendation: eligible.length ? 'Inspect eligible candidates visually; not approved' : 'Keep current production layout engine',
-  note: 'Timing scopes differ: current.ms includes the entire composer with multi-candidate refinement; elk-*.ms includes only experimental relayout on an already composed scene. ELK native imports section geometry; native-compound transforms edge.container-local sections into world coordinates and connects noncentral ports to Canvas side-center anchors via orthogonal bridges. Eligibility requires semantic fidelity, editable Canvas geometry and readable font, not human approval. This is NOT an end-to-end speed comparison. Reference/synthetic cases are not production data.',
+  note: 'Timing scopes differ: current.ms includes the entire composer with multi-candidate refinement; elk-*.ms includes only experimental relayout on an already composed scene. ELK native imports section geometry; native-compound transforms edge.container-local sections into world coordinates and connects noncentral ports to Canvas side-center anchors via orthogonal bridges. The optional fit-corridors experiment compresses node-free X gutters without shrinking nodes or fonts; every candidate still requires full editable-geometry and semantic gates. Eligibility is not human approval. This is NOT an end-to-end speed comparison. Reference/synthetic cases are not production data.',
   results,
 }, null, 2) + '\n')
 const groups = entries.map((entry) => ({

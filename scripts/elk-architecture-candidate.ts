@@ -1,6 +1,6 @@
 import ELK from 'elkjs/lib/elk.bundled.js'
 import type { ElkExtendedEdge, ElkNode } from 'elkjs/lib/elk-api.js'
-import { canvasArrowBoxRoute, canvasGroupFrames, type CanvasArrow, type CanvasNode, type CanvasPoint, type CanvasScene } from '../src/canvas.js'
+import { CANVAS_PORT_MIN_SEPARATION_PX, canvasArrowBoxRoute, canvasGroupFrames, type CanvasArrow, type CanvasNode, type CanvasPoint, type CanvasScene } from '../src/canvas.js'
 import { routeArchitectureEdges } from '../src/architectureDesign.js'
 import { canvasNativeOrthogonalRoute } from './canvas-native-route.js'
 
@@ -133,6 +133,64 @@ export function placeElkWithinOriginalCanvas(
     })) return null
   return { ...translateElkGeometry(packed, dx, dy),
     width: original.width, height: original.height }
+}
+
+/** Experimental non-scaling fit: redistribute only empty horizontal gutters
+ * between complete node-width intervals. Each node retains its exact size;
+ * every routed polyline receives the same monotone X transform, so a route
+ * cannot be detached from its own port. Full-scene gates still decide adoption.
+ * Locked/manual geometry is never subjected to this free-space compression. */
+export function fitElkCorridorsWithinOriginalCanvas(original: CanvasScene, candidate: CanvasScene): CanvasScene | null {
+  const packed = compactElkSceneBounds(candidate)
+  const direct = placeElkWithinOriginalCanvas(original, packed)
+  if (direct) return direct
+  if (packed.height > original.height || packed.width <= original.width
+    || packed.elements.some((item) => item.type !== 'arrow' && item.locked)) return null
+
+  const intervals = packed.elements.filter((item): item is CanvasNode => item.type === 'node')
+    .map(({ x, width }) => ({ from: x, to: x + width }))
+    .sort((a, b) => a.from - b.from || a.to - b.to)
+  const occupied: typeof intervals = []
+  for (const interval of intervals) {
+    const last = occupied.at(-1)
+    if (last && last.to >= interval.from) last.to = Math.max(last.to, interval.to)
+    else occupied.push({ ...interval })
+  }
+  const gaps = occupied.slice(1).map((interval, index) => ({
+    from: occupied[index].to, to: interval.from,
+    free: Math.max(0, interval.from - occupied[index].to - CANVAS_PORT_MIN_SEPARATION_PX),
+  }))
+  const required = packed.width - original.width
+  const capacity = gaps.reduce((sum, gap) => sum + gap.free, 0)
+  if (!capacity || capacity < required) return null
+
+  let outstanding = required
+  const cuts = gaps.map((gap) => {
+    const allocated = Math.min(outstanding, gap.free, Math.floor(required * gap.free / capacity))
+    outstanding -= allocated
+    return allocated
+  })
+  for (let index = 0; index < gaps.length && outstanding > 0; index++) {
+    const extra = Math.min(outstanding, gaps[index].free - cuts[index])
+    cuts[index] += extra
+    outstanding -= extra
+  }
+  if (outstanding) return null
+
+  const compressedX = (x: number) => Math.round(x - gaps.reduce((sum, gap, index) => sum
+    + (x >= gap.to ? cuts[index]
+      : x > gap.from ? cuts[index] * (x - gap.from) / (gap.to - gap.from) : 0), 0))
+  const moved: CanvasScene = {
+    ...packed,
+    elements: packed.elements.map((item) => item.type === 'arrow' ? {
+      ...item,
+      points: item.points?.map((point) => ({ ...point, x: compressedX(point.x) })),
+      start: item.start && { ...item.start, x: compressedX(item.start.x) },
+      end: item.end && { ...item.end, x: compressedX(item.end.x) },
+      labelPosition: item.labelPosition && { ...item.labelPosition, x: compressedX(item.labelPosition.x) },
+    } : { ...item, x: compressedX(item.x) }),
+  }
+  return placeElkWithinOriginalCanvas(original, moved)
 }
 
 /** Prototype adapter: geometry only. Existing CanvasScene is never changed in place. */
