@@ -183,7 +183,7 @@ test('ELK 隔离联合布局只能压缩空走廊来适配真实 Canvas，保留
     'independent manually locked nodes cannot be shifted by an unapproved free-space transform')
 
   const second = await layoutWithElk(candidate, 'native', {
-    nodeSpacing: 8, layerSpacing: 8, wrapping: 'MULTI_EDGE', aspectRatio: 0.8,
+    nodeSpacing: 8, layerSpacing: 8, wrapping: 'OFF', aspectRatio: 0.8,
     compactBounds: true, portSideMode: 'relative',
   })
   const joint = fitElkCorridorsWithinOriginalCanvas(original, second)
@@ -209,11 +209,14 @@ test('ELK 隔离联合布局只能压缩空走廊来适配真实 Canvas，保留
   'saving and reopening must preserve each real port, route and relation')
   await assert.rejects(layoutWithElk(original, 'flat', { portSideMode: 'relative' }),
     /require native edge geometry/, 'do not apply native port geometry to a non-native route variant')
+  await assert.rejects(layoutWithElk(candidate, 'native', {
+    wrapping: 'MULTI_EDGE', portSideMode: 'relative',
+  }), /cannot use MULTI_EDGE wrapping/, 'reject the unsafe elkjs fixed-port combination explicitly')
 
   // A fresh intent is allowed to EXPERIMENT with sizing. This is not a legal
   // relayout of an existing saved Canvas, so strict fidelity must still fail.
   const grown = await layoutWithElk(candidate, 'native', {
-    nodeSpacing: 8, layerSpacing: 8, wrapping: 'MULTI_EDGE', aspectRatio: 0.8,
+    nodeSpacing: 8, layerSpacing: 8, wrapping: 'OFF', aspectRatio: 0.8,
     compactBounds: true, portSideMode: 'relative', growGeneratedPortHeight: true,
   })
   const capacityFit = fitElkCorridorsWithinOriginalCanvas(original, grown)
@@ -242,4 +245,22 @@ test('ELK 隔离联合布局只能压缩空走廊来适配真实 Canvas，保留
   await assert.rejects(layoutWithElk(lockedCandidate, 'native', {
     portSideMode: 'relative', growGeneratedPortHeight: true,
   }), /cannot change locked author geometry/)
+
+  // Realistic fan-out + FIXED_SIDE ports crashes inside elkjs@0.12.0 when
+  // MULTI_EDGE wrapping is applied again. The second pass is deliberately
+  // unwrapped; the original wrapped pass still establishes node layering.
+  const fanout = composeArchitectureGraph(architectureBenchmarkCases('extended')
+    .find((item) => item.id === 'business-platform-fanout')!.intent).scene
+  const fanoutSnapshot = serializeCanvasScene(fanout)
+  const fanoutFirst = await layoutWithElk(fanout, 'native', {
+    nodeSpacing: 8, layerSpacing: 8, wrapping: 'MULTI_EDGE', aspectRatio: 0.8, compactBounds: true,
+  })
+  const unwrappedPorts = await layoutWithElk(fanoutFirst, 'native', {
+    nodeSpacing: 8, layerSpacing: 8, wrapping: 'OFF', aspectRatio: 0.8,
+    compactBounds: true, portSideMode: 'relative',
+  })
+  assert.equal(compareEditableArchitectureSemantics(fanout, unwrappedPorts).faithful, true)
+  assert.equal(measureEditableArchitecture(unwrappedPorts).nonOrthogonalSegments, 0)
+  assert.equal(serializeCanvasScene(fanout), fanoutSnapshot,
+  'experimental relayout must not modify the original fan-out input')
 })

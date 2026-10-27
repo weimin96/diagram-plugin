@@ -104,8 +104,14 @@ for (const entry of entries) {
         wrapping, aspectRatio,
       }
       const initial = await layoutWithElk(original.scene, variant, config)
+      // Fixed-side port routing and MULTI_EDGE wrapping together trigger an
+      // upstream elkjs@0.12.0 internal exception for some valid fan-out DAGs.
+      // Keep wrapping in the first pass to derive the node-relative port-side
+      // seed; the second pass recalculates layout WITHOUT edge wrapping. This is a
+      // single deterministic recipe, not a hidden exception retry/fallback.
       const scene = joint ? await layoutWithElk(initial, variant, {
-        ...config, portSideMode: 'relative', ...(autoHeight ? { growGeneratedPortHeight: true } : {}),
+        ...config, wrapping: 'OFF', portSideMode: 'relative',
+        ...(autoHeight ? { growGeneratedPortHeight: true } : {}),
       }) : initial
       const matched = sameCanvas
         ? (fitCorridors ? fitElkCorridorsWithinOriginalCanvas(original.scene, scene)
@@ -175,7 +181,7 @@ await writeFile(path.join(output, 'report.json'), JSON.stringify({
   candidateCount: results.filter((item) => item.engine !== 'current').length,
   eligibleCount: eligible.length,
   recommendation: eligible.length ? 'Inspect eligible candidates visually; not approved' : 'Keep current production layout engine',
-  note: 'Timing scopes differ: current.ms includes entire Composer, ELK time only relayout on a composed scene. Native route positions are editable. The optional auto-size-ports candidate changes previously auto-generated node heights to meet side-port capacity; geometryGatePassed is NOT saved-Canvas fidelity and NEVER makes eligible=true without strict geometry/semantic agreement. A new-intent sizing contract is not yet approved. No layout is imported into production. Candidate acceptance is not human approval or end-to-end speed comparison.',
+  note: 'Timing scopes differ: current.ms includes entire Composer, ELK time only relayout on a composed scene. Joint native-port experiments use OFF wrapping on the second pass to avoid the observed fixed-side + MULTI_EDGE elkjs@0.12.0 exception; this does not relax any geometry/semantics gate. The optional auto-size-ports candidate changes previously auto-generated node heights to meet side-port capacity; geometryGatePassed is NOT saved-Canvas fidelity and NEVER makes eligible=true without strict geometry/semantic agreement. A new-intent sizing contract is not yet approved. No layout is imported into production. Candidate acceptance is not human approval or end-to-end speed comparison.',
   results,
 }, null, 2) + '\n')
 const groups = entries.map((entry) => ({

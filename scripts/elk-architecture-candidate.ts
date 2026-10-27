@@ -208,6 +208,11 @@ export async function layoutWithElk(scene: CanvasScene, variant: ElkBenchmarkVar
   if (config.portSideMode && !nativeRoutes) {
     throw new Error('ELK fixed-side ports require native edge geometry')
   }
+  if (config.portSideMode && config.wrapping === 'MULTI_EDGE') {
+    // elkjs@0.12.0 throws an internal TypeError on valid fan-out graphs with
+    // this combination. Reject the invalid experiment before invoking ELK.
+    throw new Error('ELK fixed-side ports cannot use MULTI_EDGE wrapping in elkjs@0.12.0')
+  }
   if (config.growGeneratedPortHeight && config.portSideMode !== 'relative') {
     throw new Error('ELK generated-node port sizing requires relative fixed-side ports')
   }
