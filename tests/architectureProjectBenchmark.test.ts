@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 import { projectArchitectureCase, projectArchitectureCases, coreArchitectureModules,
   qualityPipelineModules, canvasEditingModules } from '../scripts/architecture-project-cases.js'
+import { externalArchitectureSourceCases, parseExternalRepoArgs } from '../scripts/architecture-external-source-cases.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { canvasBundleTrunks, parseCanvasScene, serializeCanvasScene } from '../src/canvas.js'
 
@@ -37,6 +41,37 @@ test('真实架构基准的每条关系必须来自仓库源码的实际 TS impo
     assert.deepEqual(sample.intent.relations.map((edge) => `${edge.from}\u0000${edge.to}`).sort(),
       [...observed].sort(), 'never add an inferred dependency or omit an actual selected-module import')
   }
+  const sourceRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)))
+  const imported = await externalArchitectureSourceCases('diagram-source', sourceRoot, 1)
+  assert.equal(imported.length, 1, 'the generic collector must support a real, Git-tracked repository')
+  assert.equal(imported[0].provenance.revision.length, 40)
+  assert.equal(imported[0].intent.nodes.length, 16)
+  assert.equal(imported[0].intent.relations.length, imported[0].provenance.imports.length,
+    'every extracted relation must have an exact originating import')
+  const paths = new Map(imported[0].intent.nodes.map((node) => [node.id, node.sourcePaths![0]]))
+  for (const edge of imported[0].intent.relations) {
+    const from = paths.get(edge.from)!, to = paths.get(edge.to)!
+    const evidence = imported[0].provenance.imports.find((item) => item.from === from && item.to === to)
+    assert.ok(evidence, 'never credit relationships without AST import evidence')
+    const text = await readFile(path.join(sourceRoot, from), 'utf8')
+    assert.equal(evidence.sourceSha256, createHash('sha256').update(text).digest('hex'))
+    const tree = ts.createSourceFile(from, text, ts.ScriptTarget.Latest, true)
+    const node = tree.statements.find((statement) => {
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) return false
+      if (tree.getLineAndCharacterOfPosition(statement.getStart(tree)).line + 1 !== evidence.line) return false
+      const specifier = statement.moduleSpecifier.text
+      if (!specifier.startsWith('.')) return false
+      const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(from), specifier))
+        .replace(/\.(?:jsx?|mjs|cjs|ts|tsx|mts|cts)$/, '')
+      return [to.replace(/\.(?:ts|tsx|mts|cts)$/, ''), to.replace(/\/index\.(?:ts|tsx)$/, '')].includes(resolved)
+    })
+    assert.ok(node, 'importer, target, line and source digest must match a real tracked file')
+  }
+  assert.deepEqual(parseExternalRepoArgs(['--repo=one:/tmp/one','--repo=two:/tmp/two']).map((item) => item.label),
+    ['one', 'two'])
+  assert.throws(() => parseExternalRepoArgs(['--repo=one:/tmp/a','--repo=one:/tmp/b']),
+    /Duplicate source repository label/)
+  await assert.rejects(externalArchitectureSourceCases('unsafe', '../other-repo'), /absolute path/)
 })
 
 test('真实依赖密集图不能因不穿节点就获得错误的自动审查资格', async () => {

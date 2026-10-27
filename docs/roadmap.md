@@ -22,7 +22,21 @@ pnpm benchmark:architecture:corpus
 pnpm benchmark:architecture:corpus:gate
 ```
 
-`test-results/architecture-corpus/audit.json` 明确记录输入来源、图指纹、圈/汇聚结构与独立仓库数量。当前 23 组：**同一真实仓库的 3 组 AST 静态 import 子图、5 个虚构参考、15 个合成变化**；独立真实项目只有 **1 个**，显式标注分区的输入 **0 个**。后两类只作为防退化，不能增加真实样本数量。`corpus:gate` 当前失败是预期、诚实的阻断，不代表已有测试失败。下一步补充**用户提供或真正可核对的**微服务、数据流水线、Agent/MCP、部署、业务链路等多个仓库/公开代码示例，并记录授权/来源、节点关系证据、真实需求和优先阅读路径；绝不生成虚假“真实样本”。
+`test-results/architecture-corpus/audit.json` 明确记录输入来源、图指纹、圈/汇聚结构与独立仓库数量。默认 23 组：**同一真实仓库的 3 组 AST 静态 import 子图、5 个虚构参考、15 个合成变化**；默认独立仓库只有 1 个，显式标注分区的输入 0 个。后两类只作为防退化。`corpus:gate` 当前失败是预期、诚实的阻断，不代表已有测试失败。
+
+跨项目代码依赖子图通过**显式指定本机已存在的 Git 仓库**获取，工具只读取 Git 跟踪的 TS/TSX，核对真实相对 import、源码路径/行号、当前文件 SHA-256、Git HEAD 与脏工作树状态；不收集源码全文、不开启全盘自动扫描、不根据命名推测关系。例如：
+
+```sh
+pnpm benchmark:architecture:corpus \
+  --repo=ppt-plugin:/absolute/path/ppt-plugin \
+  --repo=ai-drama-studio:/absolute/path/ai-drama-studio \
+  --repo=template-market:/absolute/path/template-market
+node --import tsx scripts/benchmark-architecture.ts --suite=external \
+  --repo=ppt-plugin:/absolute/path/ppt-plugin \
+  --out test-results/architecture-corpus/external-benchmark
+```
+
+本机实测 3 个独立其他仓库增加了 **6 组**有源码指纹的静态导入子图，总计 **4 仓库 / 9 组源码子图**；`ppt-plugin` 工作树有未提交改动，报告已单独标记，不能声称与 Git HEAD 完全相同。新增 16 节点、41–65 条关系的高密度案例揭示显著交叉和重叠退化，详情保存在忽略的 `test-results/architecture-corpus/`。这些**只证明真实静态源码依赖**，绝不是 9 个经用户认可的业务架构设计任务，也没有可证明的功能分区或主阅读路径。严格 `corpus:gate` 仍要求另外取得 20 个**来源和语义均可核对的实际架构任务**，不允许用代码 import 子图凑数。下一阶段应补充用户提供/授权的微服务、数据流水线、Agent/MCP、部署、业务链路任务描述，独立记录关系、分区与阅读意图；绝不生成虚假“真实样本”。
 
 **R1 退出条件**：三个入口约束的正常/拒绝/锁定节点场景均验证；固定跨项目评测来源和用例清单、保留原有真实项目基准作为防退化；引入 20+ 经验证任务和至少 3 个独立来源之前，不能声称具有跨项目布局泛化证据。
 

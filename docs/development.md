@@ -2,6 +2,8 @@
 
 > 当前 R1—R4 开发优先级和模式合同请先阅读 [roadmap.md](./roadmap.md)。本页保留具体技术证据、历史试验与现行验收命令；隔离实验不能自动进入正式 Composer。
 
+R1 新增显式仓库采样器 `scripts/architecture-external-source-cases.ts`，跨项目来源审计与标准 Composer 基准分别通过 `pnpm benchmark:architecture:corpus --repo=...` 和 `node --import tsx scripts/benchmark-architecture.ts --suite=external --repo=...` 运行。采样的是 Git 跟踪文件的真实 TypeScript import，不包含用户验证的分区或业务关系；审计会独立汇报 `verifiedSourceSubgraphs` 和 `verifiedRealTasks`，后者**当前为 0**，不能据前者宣称 R1 完成。实测源码密集样本 16 节点/65、63、49、43、41、15 关系，交叉分别 109、137、24、5、3、0；独立重叠 312、399、176、159、128、2，全部数据由当前 Composer 输出，无生产修复或质量阈值更改。首五个密集样本均阻断视觉审查，低密度 16/15 样本仅等待人工审查。该结果指向层级、节点尺寸、端口容量及阅读视图的先行规划，而非添加针对特定节点的线路特例。
+
 本文件记录当前可执行的开发流程。长期不变量和最终架构见 [AGENTS.md](../AGENTS.md)；历史实验的具体取舍可从 Git 提交查看，不再在本文逐轮堆积算法补丁说明。
 
 ## 架构与输出

@@ -7,6 +7,7 @@ import { assessArchitectureRouteDiagnostics } from '../src/architectureRouteDiag
 import { canvasBundleTrunks, canvasSceneToSvg, serializeCanvasScene } from '../src/canvas.js'
 import { architectureBenchmarkCases } from './architecture-benchmark-cases.js'
 import { projectArchitectureCase, projectArchitectureCases } from './architecture-project-cases.js'
+import { externalArchitectureSourceCases, parseExternalRepoArgs } from './architecture-external-source-cases.js'
 import { proposePartitionEnvelopeLayout } from './partition-envelope-candidate.js'
 import { compareEditableArchitectureSemantics, judgeExternalLayout, measureEditableArchitecture } from './architecture-layout-gate.js'
 
@@ -14,8 +15,12 @@ const outputFlag = process.argv.indexOf('--out')
 if (outputFlag >= 0 && !process.argv[outputFlag + 1]) throw new Error('--out expects a destination directory')
 const suiteFlag = process.argv.find((arg) => arg.startsWith('--suite='))
 const suiteName = suiteFlag?.slice('--suite='.length) ?? 'core'
-if (!['core', 'extended', 'stress', 'project', 'project-multi'].includes(suiteName)) throw new Error('Unknown benchmark suite')
-const suite = suiteName as 'core' | 'extended' | 'stress' | 'project' | 'project-multi'
+if (!['core', 'extended', 'stress', 'project', 'project-multi', 'external'].includes(suiteName)) throw new Error('Unknown benchmark suite')
+const suite = suiteName as 'core' | 'extended' | 'stress' | 'project' | 'project-multi' | 'external'
+const repositories = parseExternalRepoArgs(process.argv.slice(2))
+if ((suite === 'external') !== (repositories.length > 0)) {
+  throw new Error('--suite=external requires explicitly provided --repo=label:/absolute/path entries')
+}
 const requireReviewReady = process.argv.includes('--require-review-ready')
 const partitionEnvelopeExperiment = process.argv.includes('--partition-envelopes')
 const output = path.resolve(outputFlag < 0
@@ -35,7 +40,13 @@ const partitionCandidates: Array<{
   originalCanvas: [number, number]; candidateCanvas: [number, number];
 }> = []
 const examples = suite === 'project' ? [await projectArchitectureCase()]
-  : suite === 'project-multi' ? await projectArchitectureCases() : architectureBenchmarkCases(suite)
+  : suite === 'project-multi' ? await projectArchitectureCases()
+    : suite === 'external' ? (await Promise.all(repositories.map((repo) =>
+      externalArchitectureSourceCases(repo.label, repo.root)))).flat()
+      : architectureBenchmarkCases(suite)
+if (suite === 'external' && !examples.length) {
+  throw new Error('No verifiable source-import subgraphs were found in the explicitly supplied repositories')
+}
 for (const example of examples) {
   const started = performance.now()
   const composed = composeArchitectureGraph(example.intent)
@@ -117,7 +128,12 @@ if (partitionEnvelopeExperiment) {
 await writeFile(path.join(output, 'report.json'), JSON.stringify({
   version: 2,
   suite,
-  source: suite === 'project' || suite === 'project-multi'
+  ...(suite === 'external' ? { inputProvenance: examples.map((entry) => ({
+    id: entry.id, ...('provenance' in entry ? entry.provenance : {}),
+    note: 'Git revision may be dirty; each source digest identifies the actual bytes analyzed. AST static imports do not imply user-validated system architecture.',
+  })) } : {}),
+  source: suite === 'external' ? 'Explicit external Git-tracked TypeScript static-import subgraphs; source-verified, not service dependencies or user-approved architecture'
+    : suite === 'project' || suite === 'project-multi'
     ? 'Diagram Plugin source imports; scoped module subgraph, not fictional and not complete runtime dependencies'
     : 'deterministic fictional reference and synthetic graphs',
   reviewReadiness: {
@@ -141,7 +157,9 @@ h2{font-size:18px;margin:0 0 4px}small{color:#637181}.stats{display:flex;gap:12p
 img{display:block;width:100%;height:auto;background:#f8fafc;border:1px solid #e4e9ee;border-radius:8px}
 .issues{margin:12px 0 0;color:#765322;font-size:12px}
 </style></head><body><main><h1>系统架构图生成基准</h1>
-<p>${suite === 'project' || suite === 'project-multi' ? '来源为 Diagram Plugin 真实 TypeScript 静态导入关系的选定模块子图，不代表全工程运行依赖。' : '以下均为虚构参考系统。'} 结构评分上限 90，仅用于对比布局、碰撞和连线；人工视觉质量仍需审查。</p>
+<p>${suite === 'external' ? '来源为显式指定的其他本地 Git 仓库所跟踪 TypeScript 文件的静态 import 子图，不代表全工程运行依赖或已确认的业务架构。'
+  : suite === 'project' || suite === 'project-multi' ? '来源为 Diagram Plugin 真实 TypeScript 静态导入关系的选定模块子图，不代表全工程运行依赖。'
+    : '以下均为虚构参考系统。'} 结构评分上限 90，仅用于对比布局、碰撞和连线；人工视觉质量仍需审查。</p>
 ${results.map((result) => `<section><header><div><h2>${escapeHtml(result.title)}</h2>
 <small>${escapeHtml(result.description)}</small></div><div class="stats">
 <span>${result.composition}</span><span>${result.density}</span>
