@@ -41,24 +41,74 @@ test('planning and positioning diagrams share tokens but retain specialized geom
   assert.equal(quadrant.themeVariables?.quadrantPointFill, palette.accent)
 })
 
-test('visual density compacts large sequence and ER diagrams without changing source', () => {
-  const sequence = ['sequenceDiagram', ...Array.from({ length: 10 }, (_, index) => `participant P${index}`), ...Array.from({ length: 32 }, (_, index) => `P${index % 10}->>P${(index + 1) % 10}: call`)].join('\n')
-  assert.equal(resolveMermaidVisualDensity('sequence', sequence), 'dense')
-  assert.equal(mermaidVisualConfig('sequence', palette, sequence).sequence?.actorMargin, 34)
-
-  const boundedDenseSequence = ['sequenceDiagram', ...Array.from({ length: 9 }, (_, index) => `participant P${index}`), ...Array.from({ length: 22 }, (_, index) => `P${index % 9}->>P${(index + 1) % 9}: call`), 'alt retry', 'P1->>P2: retry', 'end'].join('\n')
-  assert.equal(resolveMermaidVisualDensity('sequence', boundedDenseSequence), 'dense')
-
-  const er = ['erDiagram', ...Array.from({ length: 12 }, (_, index) => `E${index} {\n string id PK\n}`)].join('\n')
-  assert.equal(resolveMermaidVisualDensity('er', er), 'compact')
-  assert.equal(mermaidVisualConfig('er', palette, er).er?.entityPadding, 10)
-
-  const inlineEr = ['erDiagram', ...Array.from({ length: 15 }, (_, index) => `E${index} { string id PK }`)].join('\n')
-  assert.equal(resolveMermaidVisualDensity('er', inlineEr), 'compact')
-  assert.equal(mermaidVisualConfig('er', palette, inlineEr).er?.entityPadding, 10)
+test('visual density compacts every diagram family without changing authored source', () => {
+  const densityCases: { type: string; source: string; density: 'compact' | 'dense'; assert: (config: ReturnType<typeof mermaidVisualConfig>) => void }[] = [
+    {
+      type: 'sequence',
+      source: ['sequenceDiagram', ...Array.from({ length: 10 }, (_, index) => `participant P${index}`), ...Array.from({ length: 32 }, (_, index) => `P${index % 10}->>P${(index + 1) % 10}: call`)].join('\n'),
+      density: 'dense',
+      assert: (config) => assert.equal(config.sequence?.actorMargin, 34),
+    },
+    {
+      type: 'sequence',
+      source: ['sequenceDiagram', ...Array.from({ length: 9 }, (_, index) => `participant P${index}`), ...Array.from({ length: 22 }, (_, index) => `P${index % 9}->>P${(index + 1) % 9}: call`), 'alt retry', 'P1->>P2: retry', 'end'].join('\n'),
+      density: 'dense',
+      assert: () => {},
+    },
+    {
+      type: 'er',
+      source: ['erDiagram', ...Array.from({ length: 12 }, (_, index) => `E${index} {\n string id PK\n}`)].join('\n'),
+      density: 'compact',
+      assert: (config) => assert.equal(config.er?.entityPadding, 10),
+    },
+    {
+      type: 'er',
+      source: ['erDiagram', ...Array.from({ length: 15 }, (_, index) => `E${index} { string id PK }`)].join('\n'),
+      density: 'compact',
+      assert: (config) => assert.equal(config.er?.entityPadding, 10),
+    },
+    {
+      type: 'treemap',
+      source: ['treemap-beta', '"Root"', ...Array.from({ length: 36 }, (_, index) => `  "Item ${index}": ${index + 1}`)].join('\n'),
+      density: 'dense',
+      assert: (config) => {
+        assert.equal(config.treemap?.showValues, false)
+        assert.equal(config.treemap?.labelFontSize, 12)
+      },
+    },
+    {
+      type: 'sankey',
+      source: ['sankey-beta', '', ...Array.from({ length: 29 }, (_, index) => `A${index},B${index},${index + 1}`)].join('\n'),
+      density: 'dense',
+      assert: (config) => assert.equal(config.sankey?.nodePadding, 8),
+    },
+    {
+      type: 'radar',
+      source: ['radar-beta', 'axis a["A"],b["B"],c["C"]', ...Array.from({ length: 5 }, (_, index) => `curve c${index}["C${index}"]{1,2,3}`)].join('\n'),
+      density: 'dense',
+      assert: (config) => assert.equal(config.radar?.axisScaleFactor, 0.9),
+    },
+    {
+      type: 'kanban',
+      source: ['kanban', 'todo[Todo]', ...Array.from({ length: 18 }, (_, index) => `task${index}[Task ${index}]`)].join('\n'),
+      density: 'compact',
+      assert: (config) => assert.equal(config.kanban?.sectionWidth, 220),
+    },
+    {
+      type: 'flowchart',
+      source: ['flowchart TB', 'subgraph approval[Approval]', 'A --> B{Valid?}', 'B -- yes --> C{Small?}', 'C -- no --> D{Approved?}', 'D -- yes --> E{Success?}', 'E -- no --> F{Retry limit?}', 'F -- no --> E', 'end'].join('\n'),
+      density: 'dense',
+      assert: (config) => assert.equal(config.flowchart?.rankSpacing, 32),
+    },
+  ]
+  assert.equal(densityCases.length, 9)
+  for (const item of densityCases) {
+    assert.equal(resolveMermaidVisualDensity(item.type, item.source), item.density, `${item.type} density`)
+    item.assert(mermaidVisualConfig(item.type, palette, item.source))
+  }
 })
 
-test('data visualizations use dedicated chart grammar instead of generic Mermaid defaults', () => {
+test('data and analysis diagrams use dedicated chart grammar instead of generic defaults', () => {
   const sankey = mermaidVisualConfig('sankey', palette)
   assert.equal(sankey.sankey?.linkColor, 'gradient')
   assert.equal(sankey.sankey?.showValues, true)
@@ -72,9 +122,7 @@ test('data visualizations use dedicated chart grammar instead of generic Mermaid
   assert.equal(radar.radar?.width, 620)
   assert.equal(radar.themeVariables?.radar?.curveStrokeWidth, 2)
   assert.equal(mermaidVisualProfile('radar'), 'multi-axis')
-})
 
-test('analysis diagrams receive specialized readable geometry', () => {
   const requirement = mermaidVisualConfig('requirement', palette)
   assert.equal(requirement.requirement?.rect_fill, palette.raised)
   assert.equal(requirement.themeVariables?.requirementBorderColor, palette.strongBorder)
@@ -85,45 +133,6 @@ test('analysis diagrams receive specialized readable geometry', () => {
   const ishikawa = mermaidVisualConfig('ishikawa', palette)
   assert.equal(ishikawa.ishikawa?.useMaxWidth, true)
   assert.equal(mermaidVisualProfile('ishikawa'), 'root-cause')
-})
-
-test('dense treemaps preserve source values while hiding cramped numeric labels', () => {
-  const source = ['treemap-beta', '"Root"', ...Array.from({ length: 36 }, (_, index) => `  "Item ${index}": ${index + 1}`)].join('\n')
-  assert.equal(resolveMermaidVisualDensity('treemap', source), 'dense')
-  assert.equal(mermaidVisualConfig('treemap', palette, source).treemap?.showValues, false)
-  assert.equal(mermaidVisualConfig('treemap', palette, source).treemap?.labelFontSize, 12)
-})
-
-test('large Sankey and Radar diagrams compact independently', () => {
-  const sankey = ['sankey-beta', '', ...Array.from({ length: 29 }, (_, index) => `A${index},B${index},${index + 1}`)].join('\n')
-  assert.equal(resolveMermaidVisualDensity('sankey', sankey), 'dense')
-  assert.equal(mermaidVisualConfig('sankey', palette, sankey).sankey?.nodePadding, 8)
-
-  const radar = ['radar-beta', 'axis a["A"],b["B"],c["C"]', ...Array.from({ length: 5 }, (_, index) => `curve c${index}["C${index}"]{1,2,3}`)].join('\n')
-  assert.equal(resolveMermaidVisualDensity('radar', radar), 'dense')
-  assert.equal(mermaidVisualConfig('radar', palette, radar).radar?.axisScaleFactor, 0.9)
-})
-
-test('large Kanban boards reduce column width without touching source', () => {
-  const kanban = ['kanban', 'todo[Todo]', ...Array.from({ length: 18 }, (_, index) => `task${index}[Task ${index}]`)].join('\n')
-  assert.equal(resolveMermaidVisualDensity('kanban', kanban), 'compact')
-  assert.equal(mermaidVisualConfig('kanban', palette, kanban).kanban?.sectionWidth, 220)
-})
-
-test('branch-heavy flowcharts compact before they become oversized', () => {
-  const source = [
-    'flowchart TB',
-    'subgraph approval[Approval]',
-    'A --> B{Valid?}',
-    'B -- yes --> C{Small?}',
-    'C -- no --> D{Approved?}',
-    'D -- yes --> E{Success?}',
-    'E -- no --> F{Retry limit?}',
-    'F -- no --> E',
-    'end',
-  ].join('\n')
-  assert.equal(resolveMermaidVisualDensity('flowchart', source), 'dense')
-  assert.equal(mermaidVisualConfig('flowchart', palette, source).flowchart?.rankSpacing, 32)
 })
 
 test('flowchart render normalization removes HTML line breaks without rewriting authored source', () => {
@@ -168,15 +177,13 @@ test('共享样式覆盖全部 Mermaid 图种，并保留各自的图形语法',
   }
 })
 
-test('切换 Mermaid 样式只替换样式声明，保留 YAML、换行和业务内容', () => {
+test('style directives are rewritten in place and legacy prefixes migrate', () => {
   const source = '---\r\ntitle: 审批\r\n---\r\n%% diagram-plugin:style=warm\r\nsequenceDiagram\r\nA->>B: 请求\r\n'
   const changed = setMermaidVisualStyle(source, 'forest')
   assert.equal(changed, source.replace('style=warm', 'style=forest'))
   assert.equal(setMermaidVisualStyle(changed, 'forest'), changed)
   assert.equal(resolveMermaidVisualStyle('%% diagram-plugin:style=unknown\nflowchart LR'), 'technical')
-})
 
-test('改名前的样式指令仍能被识别，切换时迁移为新前缀', () => {
   const legacy = '%% codex-diagram:style=warm\nflowchart LR\n  A --> B'
   assert.equal(resolveMermaidVisualStyle(legacy), 'warm')
   const migrated = setMermaidVisualStyle(legacy, 'forest')
