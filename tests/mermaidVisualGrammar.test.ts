@@ -1,6 +1,6 @@
 import { diagramVisualStyles } from '../src/diagramVisualStyles.js'
 import { setMermaidVisualStyle } from '../src/mermaidVisualGrammar.js'
-import { mermaidDiagramTypes } from '../src/types.js'
+import { mermaidDiagramTypes, type MermaidDiagramType } from '../src/types.js'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { mermaidVisualConfig, mermaidVisualProfile, normalizeMermaidSourceForRender, resolveMermaidVisualDensity, resolveMermaidVisualStyle } from '../src/mermaidVisualGrammar.js'
@@ -42,7 +42,7 @@ test('planning and positioning diagrams share tokens but retain specialized geom
 })
 
 test('visual density compacts every diagram family without changing authored source', () => {
-  const densityCases: { type: string; source: string; density: 'compact' | 'dense'; assert: (config: ReturnType<typeof mermaidVisualConfig>) => void }[] = [
+  const densityCases: { type: MermaidDiagramType; source: string; density: 'compact' | 'dense'; assert: (config: ReturnType<typeof mermaidVisualConfig>) => void }[] = [
     {
       type: 'sequence',
       source: ['sequenceDiagram', ...Array.from({ length: 10 }, (_, index) => `participant P${index}`), ...Array.from({ length: 32 }, (_, index) => `P${index % 10}->>P${(index + 1) % 10}: call`)].join('\n'),
