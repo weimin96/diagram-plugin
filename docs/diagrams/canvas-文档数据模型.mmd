@@ -1,0 +1,46 @@
+%% diagram-plugin:style=forest
+erDiagram
+  DIAGRAM ||--o{ ELEMENT : contains
+  DIAGRAM ||--o{ RELATION : contains
+  DIAGRAM ||--|{ REVISION : snapshots
+  DIAGRAM ||--o{ ASSET : exports
+  ELEMENT ||--o{ PORT : exposes
+  RELATION }o--|| ELEMENT : "from"
+  RELATION }o--|| ELEMENT : "to"
+  REVISION ||--o{ PATCH : records
+
+  DIAGRAM {
+    string id PK
+    string type
+    string title
+    int revision
+  }
+  ELEMENT {
+    string id PK
+    string kind
+    string text
+    bool locked
+  }
+  RELATION {
+    string id PK
+    string from FK
+    string to FK
+    string routing
+  }
+  PORT {
+    string id PK
+    string side
+    float ratio
+  }
+  REVISION {
+    int rev PK
+    string sha256
+  }
+  PATCH {
+    string id PK
+    string op
+  }
+  ASSET {
+    string path PK
+    string format
+  }

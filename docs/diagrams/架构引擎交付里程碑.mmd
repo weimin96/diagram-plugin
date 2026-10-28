@@ -1,0 +1,16 @@
+%% diagram-plugin:style=graphite
+gantt
+  title Diagram Plugin 交付里程碑 - 真实提交日期
+  dateFormat YYYY-MM-DD
+  axisFormat %m-%d
+  section 已完成
+  质量门禁与浏览器 A/B :done, m1, 2026-10-26, 1d
+  走廊包络与端口容量 :done, m2, 2026-10-27, 1d
+  ELK 隔离 A/B :done, m3, 2026-10-27, 1d
+  布局操作合同与语料审计 :done, m4, 2026-10-28, 1d
+  section 进行中
+  DSH Web 安装与验证 :active, m5, 2026-10-28, 1d
+  真实图可读性整改 :active, m6, 2026-10-28, 3d
+  section 待门禁
+  人工视觉批准 :crit, m7, 2026-10-31, 2d
+  npm 包发布 :m8, after m7, 1d

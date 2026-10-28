@@ -1,0 +1,24 @@
+%% diagram-plugin:style=blueprint
+sequenceDiagram
+  autonumber
+  actor U as 用户
+  participant M as 模型
+  participant H as diagram 宿主插件
+  participant S as MCP server
+  participant C as 语义合成器
+  participant Q as 质量门禁
+  participant F as 工作区文件
+  participant P as 右侧面板
+  U->>M: 画一张插件架构图
+  M->>H: tools/call diagram.composeArchitecture
+  H->>S: stdio JSON-RPC
+  S->>C: nodes · relations · primaryPath
+  C->>C: 分区 → 端口容量 → 正交走廊
+  C->>Q: 整图候选评估
+  Q-->>C: 交叉 / 重叠 / 穿节点 / 字号
+  C-->>S: 可编辑 Canvas + visualPlan
+  S->>F: 原子写入 .diagram.json
+  S-->>H: elementIds · review.ready
+  H-->>M: 结构化工具结果
+  M->>P: diagram.thread 跟随
+  P->>F: 读取文档渲染

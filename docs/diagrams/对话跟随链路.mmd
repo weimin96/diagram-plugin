@@ -1,0 +1,17 @@
+%% diagram-plugin:style=blueprint
+flowchart TD
+  T["面板 tick<br/>每 1.3s，回到前台立即补一次"] --> V{"面板可见且已挂载"}
+  V -- 否 --> V0["本轮跳过，不消费任何状态"]
+  V -- 是 --> Q["diagram.threadState<br/>读取 activeDiagramPath / updatedAt"]
+  Q --> U{"updatedAt 变化<br/>或候选 revision 变化"}
+  U -- 否 --> U0["ignore"]
+  U -- 是 --> D["decideThreadFollow<br/>纯函数，七种结果"]
+  D -- skip --> S1["消费 updatedAt<br/>恢复会话时的一次性跳过"]
+  D -- user-paused --> S2["消费 updatedAt<br/>用户主动暂停跟随"]
+  D -- dirty-paused --> S3["不消费 updatedAt<br/>提示：有未保存修改，已暂停跟随"]
+  D -- no-active --> S4["刷新 diagram.list<br/>消费 updatedAt"]
+  D -- focus --> S5["只刷新焦点<br/>消费 updatedAt"]
+  D -- switch --> S6["selectDiagram 切换到对话指向的图"]
+  S6 --> S7["切换成功后<br/>才消费 updatedAt"]
+  S3 -.保存或撤销.-> S6
+  S2 -.重新开启跟随.-> S6

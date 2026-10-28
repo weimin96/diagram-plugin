@@ -1,0 +1,68 @@
+%% diagram-plugin:style=forest
+requirementDiagram
+
+  requirement semantic_input {
+    id: R1
+    text: "架构图以 ArchitectureIntentGraph 为唯一语义输入，不生成节点坐标与虚构依赖"
+    risk: high
+    verifymethod: test
+  }
+
+  requirement geometry_fidelity {
+    id: R2
+    text: "人工锁定几何、原始 ID、方向与数量不得被自动优化破坏"
+    risk: high
+    verifymethod: test
+  }
+
+  requirement quality_three_states {
+    id: R3
+    text: "基础几何、可进入视觉审查、可交付三态不得混淆"
+    risk: medium
+    verifymethod: analysis
+  }
+
+  requirement test_budget {
+    id: R4
+    text: "测试方法总数不超过 300 条"
+    risk: low
+    verifymethod: test
+  }
+
+  element composer {
+    type: module
+    docref: src/architectureComposer.ts
+  }
+
+  element contract {
+    type: module
+    docref: src/architectureLayoutContract.ts
+  }
+
+  element quality {
+    type: module
+    docref: src/diagramQuality.ts
+  }
+
+  element budget {
+    type: script
+    docref: "scripts/check-test-budget.mjs"
+  }
+
+  element bench {
+    type: benchmark
+    docref: "pnpm benchmark:architecture:acceptance"
+  }
+
+  element pixel {
+    type: gate
+    docref: "pnpm benchmark:architecture:visual:score"
+  }
+
+  composer - satisfies -> semantic_input
+  contract - satisfies -> geometry_fidelity
+  quality - satisfies -> quality_three_states
+  budget - satisfies -> test_budget
+  bench - verifies -> semantic_input
+  bench - verifies -> geometry_fidelity
+  pixel - verifies -> quality_three_states

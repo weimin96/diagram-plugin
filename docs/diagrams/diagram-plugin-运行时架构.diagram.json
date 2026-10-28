@@ -1,0 +1,839 @@
+{
+  "type": "diagram-plugin-canvas",
+  "version": 1,
+  "title": "Diagram Plugin 运行时架构",
+  "width": 1734,
+  "height": 1244,
+  "elements": [
+    {
+      "id": "u_client",
+      "type": "node",
+      "x": 510,
+      "y": 114,
+      "width": 188,
+      "height": 80,
+      "text": "对话客户端",
+      "tone": "muted",
+      "shape": "rounded",
+      "groupId": "arch-external",
+      "icon": "user",
+      "subtitle": "DSH Web · Codex",
+      "description": "用户在与模型对话中请求图表，插件以工具形式被调用。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "m_llm",
+      "type": "node",
+      "x": 510,
+      "y": 224,
+      "width": 188,
+      "height": 80,
+      "text": "模型",
+      "tone": "muted",
+      "shape": "rounded",
+      "groupId": "arch-external",
+      "icon": "ai",
+      "subtitle": "工具调用",
+      "description": "模型选择 diagram_* 工具并发起调用，插件不生成节点坐标。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "h_dsh",
+      "type": "node",
+      "x": 90,
+      "y": 454,
+      "width": 188,
+      "height": 80,
+      "text": "DSH 宿主适配",
+      "tone": "success",
+      "shape": "rounded",
+      "groupId": "arch-application",
+      "sourcePaths": [
+        "integrations/deepseek/host.mjs",
+        "src/hosts/deepseek.ts"
+      ],
+      "icon": "api",
+      "stencil": "mcp",
+      "subtitle": "stdio · MCP",
+      "emphasis": "primary"
+    },
+    {
+      "id": "h_codex",
+      "type": "node",
+      "x": 510,
+      "y": 454,
+      "width": 188,
+      "height": 80,
+      "text": "Codex 宿主适配",
+      "tone": "success",
+      "shape": "rounded",
+      "groupId": "arch-application",
+      "sourcePaths": [
+        "src/hosts/codex.ts"
+      ],
+      "icon": "api",
+      "subtitle": "同一服务与编辑器",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "s_mcp",
+      "type": "node",
+      "x": 300,
+      "y": 558,
+      "width": 188,
+      "height": 80,
+      "text": "MCP 工具服务",
+      "tone": "success",
+      "shape": "rounded",
+      "groupId": "arch-application",
+      "sourcePaths": [
+        "src/server.ts"
+      ],
+      "icon": "service",
+      "stencil": "mcp",
+      "subtitle": "47 个 diagram_* 工具",
+      "emphasis": "primary"
+    },
+    {
+      "id": "c_composer",
+      "type": "node",
+      "x": 90,
+      "y": 794,
+      "width": 188,
+      "height": 80,
+      "text": "架构语义合成",
+      "tone": "warning",
+      "shape": "rounded",
+      "groupId": "arch-processing",
+      "sourcePaths": [
+        "src/architectureComposer.ts"
+      ],
+      "icon": "worker",
+      "subtitle": "候选预算与整图采纳",
+      "emphasis": "primary"
+    },
+    {
+      "id": "c_design",
+      "type": "node",
+      "x": 300,
+      "y": 898,
+      "width": 188,
+      "height": 80,
+      "text": "节点与分区规划",
+      "tone": "warning",
+      "shape": "rounded",
+      "groupId": "arch-processing",
+      "sourcePaths": [
+        "src/architectureDesign.ts"
+      ],
+      "icon": "worker",
+      "subtitle": "场景 · 尺寸 · 分区",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "c_route",
+      "type": "node",
+      "x": 510,
+      "y": 794,
+      "width": 188,
+      "height": 80,
+      "text": "端口与正交路由",
+      "tone": "warning",
+      "shape": "rounded",
+      "groupId": "arch-processing",
+      "sourcePaths": [
+        "src/architectureRouting.ts",
+        "src/architecturePortPlanning.ts",
+        "src/architectureOrthogonalSolver.ts"
+      ],
+      "icon": "worker",
+      "subtitle": "走廊 · 端口容量",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "c_repair",
+      "type": "node",
+      "x": 300,
+      "y": 1002,
+      "width": 188,
+      "height": 80,
+      "text": "局部路线修复",
+      "tone": "warning",
+      "shape": "rounded",
+      "groupId": "arch-processing",
+      "sourcePaths": [
+        "src/architectureRouteRepair.ts"
+      ],
+      "icon": "worker",
+      "subtitle": "有界候选，不采纳",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "q_gate",
+      "type": "node",
+      "x": 300,
+      "y": 684,
+      "width": 188,
+      "height": 80,
+      "text": "质量门禁与诊断",
+      "tone": "warning",
+      "shape": "rounded",
+      "groupId": "arch-processing",
+      "sourcePaths": [
+        "src/diagramQuality.ts",
+        "src/canvasQuality.ts",
+        "src/architectureRouteDiagnostics.ts",
+        "src/architectureVisualPlan.ts"
+      ],
+      "icon": "service",
+      "subtitle": "交叉 · 重叠 · 主次",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "q_ab",
+      "type": "node",
+      "x": 90,
+      "y": 1106,
+      "width": 188,
+      "height": 80,
+      "text": "浏览器 A/B 度量",
+      "tone": "warning",
+      "shape": "rounded",
+      "groupId": "arch-processing",
+      "sourcePaths": [
+        "src/diagramPresentationAB.ts",
+        "src/diagramBrowserGeometry.ts"
+      ],
+      "icon": "web",
+      "subtitle": "真实 Chrome 像素",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "k_skills",
+      "type": "node",
+      "x": 510,
+      "y": 1106,
+      "width": 188,
+      "height": 80,
+      "text": "Mermaid 技能库",
+      "tone": "warning",
+      "shape": "rounded",
+      "groupId": "arch-processing",
+      "sourcePaths": [
+        "src/diagramSkills/registry.ts"
+      ],
+      "icon": "service",
+      "subtitle": "19 种语法与密度规则",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "d_doc",
+      "type": "node",
+      "x": 1036,
+      "y": 454,
+      "width": 188,
+      "height": 80,
+      "text": "Canvas 文档合同",
+      "tone": "accent",
+      "shape": "rounded",
+      "groupId": "arch-data",
+      "sourcePaths": [
+        "src/canvas.ts",
+        "src/canvasPatch.ts"
+      ],
+      "icon": "file",
+      "subtitle": ".diagram.json",
+      "emphasis": "primary"
+    },
+    {
+      "id": "d_hist",
+      "type": "node",
+      "x": 1246,
+      "y": 558,
+      "width": 188,
+      "height": 80,
+      "text": "历史与补丁图",
+      "tone": "accent",
+      "shape": "rounded",
+      "groupId": "arch-data",
+      "sourcePaths": [
+        "src/canvasHistory.ts",
+        "src/patchGraph.ts"
+      ],
+      "icon": "file",
+      "subtitle": "revision · undo",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "d_store",
+      "type": "node",
+      "x": 826,
+      "y": 558,
+      "width": 188,
+      "height": 80,
+      "text": "工作区文档存储",
+      "tone": "accent",
+      "shape": "rounded",
+      "groupId": "arch-data",
+      "sourcePaths": [
+        "src/store.ts"
+      ],
+      "icon": "database",
+      "subtitle": "原子保存",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "x_export",
+      "type": "node",
+      "x": 1456,
+      "y": 454,
+      "width": 188,
+      "height": 80,
+      "text": "SVG / PNG 导出",
+      "tone": "accent",
+      "shape": "rounded",
+      "groupId": "arch-data",
+      "sourcePaths": [
+        "src/canvas.ts"
+      ],
+      "icon": "file",
+      "subtitle": "与编辑器同几何",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "e_canvas",
+      "type": "node",
+      "x": 826,
+      "y": 114,
+      "width": 188,
+      "height": 80,
+      "text": "Canvas 编辑器",
+      "tone": "accent",
+      "shape": "rounded",
+      "groupId": "arch-experience",
+      "sourcePaths": [
+        "src/CanvasEditor.tsx"
+      ],
+      "icon": "web",
+      "stencil": "react",
+      "subtitle": "React · 可编辑",
+      "emphasis": "primary"
+    },
+    {
+      "id": "e_mermaid",
+      "type": "node",
+      "x": 1036,
+      "y": 218,
+      "width": 188,
+      "height": 80,
+      "text": "Mermaid 编辑器",
+      "tone": "accent",
+      "shape": "rounded",
+      "groupId": "arch-experience",
+      "sourcePaths": [
+        "src/MermaidEditor.tsx",
+        "src/mermaidSvg.ts"
+      ],
+      "icon": "web",
+      "subtitle": "源码 + 渲染",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "e_panel",
+      "type": "node",
+      "x": 931,
+      "y": 322,
+      "width": 188,
+      "height": 80,
+      "text": "评审与提案面板",
+      "tone": "accent",
+      "shape": "rounded",
+      "groupId": "arch-experience",
+      "sourcePaths": [
+        "src/ReviewPanels.tsx",
+        "src/app.tsx"
+      ],
+      "icon": "web",
+      "subtitle": "Proposal Diff",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "__relation-1",
+      "type": "arrow",
+      "from": "u_client",
+      "to": "m_llm",
+      "label": "对话",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "emphasis": "primary"
+    },
+    {
+      "id": "__relation-2",
+      "type": "arrow",
+      "from": "m_llm",
+      "to": "h_dsh",
+      "label": "工具调用",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "left",
+      "toAnchor": "right",
+      "points": [
+        {
+          "x": 278,
+          "y": 264
+        }
+      ],
+      "emphasis": "primary"
+    },
+    {
+      "id": "__relation-3",
+      "type": "arrow",
+      "from": "m_llm",
+      "to": "h_codex",
+      "label": "工具调用",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "__relation-4",
+      "type": "arrow",
+      "from": "h_dsh",
+      "to": "s_mcp",
+      "label": "stdio JSON-RPC",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "left",
+      "points": [
+        {
+          "x": 300,
+          "y": 494
+        }
+      ],
+      "emphasis": "primary"
+    },
+    {
+      "id": "__relation-5",
+      "type": "arrow",
+      "from": "h_codex",
+      "to": "s_mcp",
+      "label": "stdio JSON-RPC",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "points": [
+        {
+          "x": 394,
+          "y": 534
+        }
+      ],
+      "emphasis": "secondary"
+    },
+    {
+      "id": "__relation-6",
+      "type": "arrow",
+      "from": "s_mcp",
+      "to": "c_composer",
+      "label": "composeArchitecture",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "points": [
+        {
+          "x": 184,
+          "y": 638
+        }
+      ],
+      "emphasis": "primary"
+    },
+    {
+      "id": "__relation-7",
+      "type": "arrow",
+      "from": "s_mcp",
+      "to": "d_doc",
+      "label": "读写文档",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "left",
+      "points": [
+        {
+          "x": 762,
+          "y": 598
+        },
+        {
+          "x": 762,
+          "y": 516
+        },
+        {
+          "x": 1036,
+          "y": 516
+        }
+      ],
+      "emphasis": "secondary"
+    },
+    {
+      "id": "__relation-8",
+      "type": "arrow",
+      "from": "s_mcp",
+      "to": "q_gate",
+      "label": "inspectQuality",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "__relation-9",
+      "type": "arrow",
+      "from": "s_mcp",
+      "to": "k_skills",
+      "label": "designGuide",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "points": [
+        {
+          "x": 740,
+          "y": 638
+        },
+        {
+          "x": 740,
+          "y": 1106
+        }
+      ],
+      "emphasis": "secondary"
+    },
+    {
+      "id": "__relation-10",
+      "type": "arrow",
+      "from": "c_composer",
+      "to": "c_design",
+      "label": "布局规划",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "left",
+      "points": [
+        {
+          "x": 300,
+          "y": 834
+        }
+      ],
+      "emphasis": "secondary"
+    },
+    {
+      "id": "__relation-11",
+      "type": "arrow",
+      "from": "c_composer",
+      "to": "c_route",
+      "label": "关系路由",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "left",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "__relation-12",
+      "type": "arrow",
+      "from": "c_composer",
+      "to": "c_repair",
+      "label": "候选修复",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "left",
+      "points": [
+        {
+          "x": 278,
+          "y": 1042
+        }
+      ],
+      "emphasis": "secondary"
+    },
+    {
+      "id": "__relation-13",
+      "type": "arrow",
+      "from": "c_design",
+      "to": "c_route",
+      "label": "布局后几何",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "left",
+      "points": [
+        {
+          "x": 510,
+          "y": 938
+        }
+      ],
+      "emphasis": "muted"
+    },
+    {
+      "id": "__relation-14",
+      "type": "arrow",
+      "from": "c_repair",
+      "to": "c_composer",
+      "label": "候选回交",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "points": [
+        {
+          "x": 258,
+          "y": 1082
+        },
+        {
+          "x": 258,
+          "y": 794
+        }
+      ],
+      "emphasis": "secondary"
+    },
+    {
+      "id": "__relation-15",
+      "type": "arrow",
+      "from": "c_composer",
+      "to": "q_gate",
+      "label": "整图评估",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "left",
+      "points": [
+        {
+          "x": 278,
+          "y": 724
+        }
+      ],
+      "emphasis": "secondary"
+    },
+    {
+      "id": "__relation-16",
+      "type": "arrow",
+      "from": "q_ab",
+      "to": "q_gate",
+      "label": "度量回填",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "left",
+      "points": [
+        {
+          "x": 48,
+          "y": 1186
+        },
+        {
+          "x": 48,
+          "y": 856
+        },
+        {
+          "x": 32,
+          "y": 856
+        },
+        {
+          "x": 32,
+          "y": 724
+        }
+      ],
+      "emphasis": "muted"
+    },
+    {
+      "id": "__relation-17",
+      "type": "arrow",
+      "from": "c_composer",
+      "to": "d_doc",
+      "label": "写入可编辑 Canvas",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "top",
+      "toAnchor": "bottom",
+      "points": [
+        {
+          "x": 32,
+          "y": 794
+        },
+        {
+          "x": 32,
+          "y": 1228
+        },
+        {
+          "x": 1130,
+          "y": 1228
+        }
+      ],
+      "emphasis": "primary"
+    },
+    {
+      "id": "__relation-18",
+      "type": "arrow",
+      "from": "d_doc",
+      "to": "d_hist",
+      "label": "revision",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "left",
+      "points": [
+        {
+          "x": 1246,
+          "y": 494
+        }
+      ],
+      "emphasis": "secondary"
+    },
+    {
+      "id": "__relation-19",
+      "type": "arrow",
+      "from": "d_doc",
+      "to": "d_store",
+      "label": "原子保存",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "points": [
+        {
+          "x": 920,
+          "y": 534
+        }
+      ],
+      "emphasis": "secondary"
+    },
+    {
+      "id": "__relation-20",
+      "type": "arrow",
+      "from": "d_doc",
+      "to": "x_export",
+      "label": "复用几何",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "left",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "__relation-21",
+      "type": "arrow",
+      "from": "d_doc",
+      "to": "e_canvas",
+      "label": "同一合同",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "left",
+      "toAnchor": "bottom",
+      "points": [
+        {
+          "x": 889,
+          "y": 494
+        },
+        {
+          "x": 889,
+          "y": 194
+        }
+      ],
+      "emphasis": "primary"
+    },
+    {
+      "id": "__relation-22",
+      "type": "arrow",
+      "from": "e_panel",
+      "to": "e_canvas",
+      "label": "提案审查",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "points": [
+        {
+          "x": 973,
+          "y": 402
+        },
+        {
+          "x": 973,
+          "y": 114
+        }
+      ],
+      "emphasis": "secondary"
+    },
+    {
+      "id": "__relation-23",
+      "type": "arrow",
+      "from": "k_skills",
+      "to": "e_mermaid",
+      "label": "语法与密度规则",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "left",
+      "points": [
+        {
+          "x": 784,
+          "y": 1146
+        },
+        {
+          "x": 784,
+          "y": 38
+        },
+        {
+          "x": 1036,
+          "y": 38
+        }
+      ],
+      "emphasis": "muted"
+    }
+  ],
+  "workbench": "architecture",
+  "style": "ocean",
+  "groups": [
+    {
+      "id": "arch-external",
+      "label": "外部与参与方",
+      "tone": "muted",
+      "kind": "boundary"
+    },
+    {
+      "id": "arch-experience",
+      "label": "体验与入口",
+      "tone": "accent",
+      "kind": "boundary"
+    },
+    {
+      "id": "arch-application",
+      "label": "核心应用",
+      "tone": "success",
+      "kind": "boundary"
+    },
+    {
+      "id": "arch-processing",
+      "label": "处理与异步",
+      "tone": "warning",
+      "kind": "boundary"
+    },
+    {
+      "id": "arch-data",
+      "label": "数据与检索",
+      "tone": "accent",
+      "kind": "boundary"
+    }
+  ],
+  "architecture": {
+    "theme": "presentation",
+    "presentation": true,
+    "view": "overview",
+    "density": "comfortable",
+    "titleScale": 1.12,
+    "scenario": "ai-agent"
+  }
+}

@@ -1,0 +1,517 @@
+{
+  "type": "diagram-plugin-canvas",
+  "version": 1,
+  "title": "DSH Web 插件加载链路",
+  "width": 1614,
+  "height": 914,
+  "workbench": "architecture",
+  "style": "blueprint",
+  "elements": [
+    {
+      "id": "u_browser",
+      "text": "浏览器 GUI",
+      "icon": "user",
+      "subtitle": "127.0.0.1:3080",
+      "type": "node",
+      "x": 90,
+      "y": 114,
+      "width": 188,
+      "height": 80,
+      "tone": "muted",
+      "shape": "rounded",
+      "groupId": "arch-external",
+      "emphasis": "primary"
+    },
+    {
+      "id": "host_proc",
+      "text": "dsh web 宿主",
+      "icon": "gateway",
+      "subtitle": "PID 3158 · 端口 3080",
+      "type": "node",
+      "x": 1021,
+      "y": 224,
+      "width": 188,
+      "height": 80,
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "arch-application",
+      "emphasis": "primary"
+    },
+    {
+      "id": "cm_service",
+      "text": "client-modules",
+      "icon": "service",
+      "subtitle": "组合模块图 · 下发 bundle",
+      "type": "node",
+      "x": 916,
+      "y": 114,
+      "width": 188,
+      "height": 80,
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "arch-application",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "hmr_service",
+      "text": "client-hmr",
+      "icon": "service",
+      "subtitle": "SSE /plugins/events",
+      "type": "node",
+      "x": 1126,
+      "y": 432,
+      "width": 188,
+      "height": 80,
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "arch-application",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "manifest",
+      "text": "profile 清单",
+      "icon": "file",
+      "subtitle": "dsh.profile.bundles",
+      "sourcePaths": [
+        "package/package.json"
+      ],
+      "type": "node",
+      "x": 1021,
+      "y": 672,
+      "width": 188,
+      "height": 80,
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "arch-data",
+      "emphasis": "muted"
+    },
+    {
+      "id": "host_plugin",
+      "text": "diagram 宿主插件",
+      "icon": "api",
+      "stencil": "mcp",
+      "subtitle": "deepseek-host.mjs",
+      "sourcePaths": [
+        "integrations/deepseek/host.mjs"
+      ],
+      "type": "node",
+      "x": 1231,
+      "y": 328,
+      "width": 188,
+      "height": 80,
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "arch-application",
+      "emphasis": "primary"
+    },
+    {
+      "id": "mcp_proc",
+      "text": "MCP 子进程",
+      "icon": "worker",
+      "subtitle": "PID 34159 · server.mjs",
+      "sourcePaths": [
+        "package/dist/server.mjs"
+      ],
+      "type": "node",
+      "x": 1126,
+      "y": 536,
+      "width": 188,
+      "height": 80,
+      "stencil": "mcp",
+      "tone": "muted",
+      "shape": "rounded",
+      "groupId": "arch-processing",
+      "emphasis": "primary"
+    },
+    {
+      "id": "tool_api",
+      "text": "diagram_* 工具面",
+      "icon": "api",
+      "subtitle": "47 个工具",
+      "sourcePaths": [
+        "src/server.ts"
+      ],
+      "type": "node",
+      "x": 1336,
+      "y": 114,
+      "width": 188,
+      "height": 80,
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "arch-application",
+      "emphasis": "primary"
+    },
+    {
+      "id": "client_bundle",
+      "text": "客户端模块",
+      "icon": "web",
+      "subtitle": "11,218 B · rev 39421d",
+      "sourcePaths": [
+        "package/dist/deepseek-client.js"
+      ],
+      "type": "node",
+      "x": 608,
+      "y": 218,
+      "width": 188,
+      "height": 80,
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "arch-experience",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "panel",
+      "text": "右侧 Diagram 面板",
+      "icon": "web",
+      "subtitle": "图表工作台",
+      "type": "node",
+      "x": 398,
+      "y": 114,
+      "width": 188,
+      "height": 80,
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "arch-experience",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "ws_files",
+      "text": "工作区图表文件",
+      "icon": "file",
+      "subtitle": "docs/diagrams",
+      "type": "node",
+      "x": 1231,
+      "y": 776,
+      "width": 188,
+      "height": 80,
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "arch-data",
+      "emphasis": "primary"
+    },
+    {
+      "id": "__relation-1",
+      "type": "arrow",
+      "from": "u_browser",
+      "to": "host_proc",
+      "label": "HTTP",
+      "emphasis": "primary",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "left",
+      "lineStyle": "solid",
+      "points": [
+        {
+          "x": 278,
+          "y": 340
+        },
+        {
+          "x": 1021,
+          "y": 340
+        }
+      ]
+    },
+    {
+      "id": "__relation-2",
+      "type": "arrow",
+      "from": "host_proc",
+      "to": "cm_service",
+      "label": "加载插件",
+      "emphasis": "secondary",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "lineStyle": "solid",
+      "points": [
+        {
+          "x": 1063,
+          "y": 304
+        },
+        {
+          "x": 1063,
+          "y": 114
+        }
+      ]
+    },
+    {
+      "id": "__relation-3",
+      "type": "arrow",
+      "from": "cm_service",
+      "to": "manifest",
+      "label": "读取 dsh 字段",
+      "emphasis": "muted",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "left",
+      "lineStyle": "solid",
+      "points": [
+        {
+          "x": 979,
+          "y": 194
+        },
+        {
+          "x": 979,
+          "y": 340
+        },
+        {
+          "x": 965,
+          "y": 340
+        },
+        {
+          "x": 965,
+          "y": 712
+        }
+      ]
+    },
+    {
+      "id": "__relation-4",
+      "type": "arrow",
+      "from": "cm_service",
+      "to": "client_bundle",
+      "label": "/plugins 下发",
+      "emphasis": "muted",
+      "routing": "orthogonal",
+      "fromAnchor": "left",
+      "toAnchor": "right",
+      "lineStyle": "solid",
+      "points": [
+        {
+          "x": 916,
+          "y": 258
+        }
+      ]
+    },
+    {
+      "id": "__relation-5",
+      "type": "arrow",
+      "from": "host_proc",
+      "to": "hmr_service",
+      "label": "热加载通道",
+      "emphasis": "secondary",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "top",
+      "lineStyle": "solid",
+      "points": [
+        {
+          "x": 1209,
+          "y": 432
+        }
+      ]
+    },
+    {
+      "id": "__relation-6",
+      "type": "arrow",
+      "from": "hmr_service",
+      "to": "u_browser",
+      "label": "graph / rebuilt",
+      "lineStyle": "dashed",
+      "emphasis": "secondary",
+      "routing": "orthogonal",
+      "fromAnchor": "left",
+      "toAnchor": "bottom",
+      "points": [
+        {
+          "x": 184,
+          "y": 472
+        }
+      ]
+    },
+    {
+      "id": "__relation-7",
+      "type": "arrow",
+      "from": "host_proc",
+      "to": "host_plugin",
+      "label": "profile bundle",
+      "emphasis": "primary",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "left",
+      "lineStyle": "solid",
+      "points": [
+        {
+          "x": 1231,
+          "y": 264
+        }
+      ]
+    },
+    {
+      "id": "__relation-8",
+      "type": "arrow",
+      "from": "host_plugin",
+      "to": "mcp_proc",
+      "label": "stdio 拉起",
+      "emphasis": "primary",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "lineStyle": "solid",
+      "points": [
+        {
+          "x": 1356,
+          "y": 408
+        },
+        {
+          "x": 1356,
+          "y": 536
+        }
+      ]
+    },
+    {
+      "id": "__relation-9",
+      "type": "arrow",
+      "from": "mcp_proc",
+      "to": "tool_api",
+      "label": "注册工具",
+      "emphasis": "primary",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "bottom",
+      "lineStyle": "solid",
+      "points": [
+        {
+          "x": 1461,
+          "y": 576
+        },
+        {
+          "x": 1461,
+          "y": 194
+        }
+      ]
+    },
+    {
+      "id": "__relation-10",
+      "type": "arrow",
+      "from": "tool_api",
+      "to": "ws_files",
+      "label": "读写文档",
+      "emphasis": "primary",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "top",
+      "lineStyle": "solid",
+      "points": [
+        {
+          "x": 1524,
+          "y": 776
+        }
+      ]
+    },
+    {
+      "id": "__relation-11",
+      "type": "arrow",
+      "from": "client_bundle",
+      "to": "panel",
+      "label": "注册 UI",
+      "emphasis": "muted",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "lineStyle": "solid",
+      "points": [
+        {
+          "x": 548,
+          "y": 298
+        },
+        {
+          "x": 548,
+          "y": 114
+        }
+      ]
+    },
+    {
+      "id": "__relation-12",
+      "type": "arrow",
+      "from": "panel",
+      "to": "ws_files",
+      "label": "读取渲染",
+      "emphasis": "secondary",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "left",
+      "lineStyle": "solid",
+      "points": [
+        {
+          "x": 586,
+          "y": 38
+        },
+        {
+          "x": 1582,
+          "y": 38
+        },
+        {
+          "x": 1582,
+          "y": 794
+        },
+        {
+          "x": 1231,
+          "y": 794
+        }
+      ]
+    },
+    {
+      "id": "__relation-13",
+      "type": "arrow",
+      "from": "tool_api",
+      "to": "panel",
+      "label": "thread 跟随",
+      "lineStyle": "dashed",
+      "emphasis": "secondary",
+      "routing": "orthogonal",
+      "fromAnchor": "left",
+      "toAnchor": "right",
+      "points": [
+        {
+          "x": 1336,
+          "y": 72
+        },
+        {
+          "x": 874,
+          "y": 72
+        },
+        {
+          "x": 874,
+          "y": 154
+        }
+      ]
+    }
+  ],
+  "architecture": {
+    "theme": "technical",
+    "view": "detail",
+    "density": "comfortable",
+    "scenario": "deployment"
+  },
+  "groups": [
+    {
+      "id": "arch-external",
+      "label": "外部与参与方",
+      "kind": "boundary",
+      "tone": "muted"
+    },
+    {
+      "id": "arch-experience",
+      "label": "体验与入口",
+      "kind": "boundary",
+      "tone": "default"
+    },
+    {
+      "id": "arch-application",
+      "label": "核心应用",
+      "kind": "boundary",
+      "tone": "default"
+    },
+    {
+      "id": "arch-processing",
+      "label": "处理与异步",
+      "kind": "boundary",
+      "tone": "muted"
+    },
+    {
+      "id": "arch-data",
+      "label": "数据与检索",
+      "kind": "boundary",
+      "tone": "default"
+    }
+  ]
+}

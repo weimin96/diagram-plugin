@@ -1,0 +1,17 @@
+%% diagram-plugin:style=ink
+flowchart TB
+  entry(["diagram.composeArchitecture"]) --> exists{"目标图已存在?"}
+  exists -- "否" --> generate["generate<br/>规划节点 / 分区 / 画布尺寸"]
+  exists -- "是" --> explicit{"显式声明 reflow?"}
+  explicit -- "否" --> edit["edit<br/>只调整线路折点"]
+  explicit -- "是" --> locked{"存在人工锁定几何?"}
+  locked -- "是" --> preserve["保留锁定节点与画布尺寸<br/>仅重排未锁定部分"]
+  locked -- "否" --> reflow["reflow<br/>整体重排未锁定布局"]
+  generate --> candidate["完整候选评估<br/>交叉 / 重叠 / 穿节点 / 路长"]
+  edit --> candidate
+  reflow --> candidate
+  preserve --> candidate
+  candidate --> gate{"几何门禁通过?"}
+  gate -- "是" --> write[("原子写入 .diagram.json<br/>revision + 1")]
+  gate -- "否" --> repair["有界局部修复"] --> candidate
+  write --> history["历史与提案可回滚"]

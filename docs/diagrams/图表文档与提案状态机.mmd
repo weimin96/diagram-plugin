@@ -1,0 +1,20 @@
+%% diagram-plugin:style=amber
+stateDiagram-v2
+  direction LR
+  state "草稿" as Draft
+  state "编辑中" as Editing
+  state "提案待审" as Proposed
+  state "已采纳" as Applied
+  state "已驳回" as Dismissed
+  state "已归档" as Archived
+  [*] --> Draft
+  Draft --> Editing: create / update
+  Editing --> Proposed: proposeUpdate · proposeSubgraphPatch
+  Proposed --> Applied: applyProposal
+  Proposed --> Dismissed: dismissProposal
+  Proposed --> Proposed: 新基线 rebase
+  Applied --> Editing: revision++
+  Dismissed --> Editing
+  Editing --> Archived: 保存并关闭
+  Archived --> Editing: 重开
+  Archived --> [*]
