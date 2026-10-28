@@ -39,6 +39,21 @@ const cases = [
   { id: 'workspace', surface: 'workspace', width: 1440, height: 900 },
   { id: 'thread-wide', surface: 'thread', width: 1100, height: 900 },
   { id: 'thread-narrow', surface: 'thread', width: 420, height: 900 },
+  // The canvas editor is the largest component in the repo and had no pixel
+  // coverage at all; this pins its panel rendering.
+  {
+    id: 'thread-canvas',
+    surface: 'thread',
+    width: 1100,
+    height: 900,
+    settleMs: 1600,
+    action: {
+      label: '切换到画布文档',
+      click: '.thread-diagram-tab:nth-child(2) .thread-diagram-tab-main',
+      expectPresent: ['.freeform-svg'],
+      expectCalls: ['diagram.get'],
+    },
+  },
   // A fresh AI proposal opens its review surface; this pins that dialog at panel width.
   { id: 'thread-proposal-review', surface: 'thread', width: 420, height: 900, proposal: true, settleMs: 2600 },
   // Interaction cases: a click must reach the host and move the surface. Pixels alone
@@ -181,7 +196,12 @@ try {
       const from = path.join(resultDir, `${testCase.id}.png`)
       await writeFile(path.join(baselineDir, `${testCase.id}.png`), await readFile(from))
     }
-    await writeFile(path.join(baselineDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
+    // --only updates one shape; keep the other stored entries instead of dropping them.
+    let stored = {}
+    try {
+      stored = JSON.parse(await readFile(path.join(baselineDir, 'manifest.json'), 'utf8'))
+    } catch {}
+    await writeFile(path.join(baselineDir, 'manifest.json'), `${JSON.stringify({ ...stored, ...manifest }, null, 2)}\n`)
     console.log(`Panel baselines written: ${cases.length} shape(s) -> ${path.relative(root, baselineDir)}`)
   } else {
     const noisy = Object.entries(manifest)
@@ -250,6 +270,12 @@ async function runAction(client, action) {
   })`))
   if (settled !== 'ok') {
     return { ok: false, reason: `点击「${action.label}」后 5 秒内界面没有离开 ${(action.expectGone ?? []).join(', ')}（实际调用：${state.calls.join(', ') || '无'}）`, calls: state.calls }
+  }
+  for (const selector of action.expectPresent ?? []) {
+    const present = await evaluate(client, `Boolean(document.querySelector(${JSON.stringify(selector)}))`)
+    if (!present) {
+      return { ok: false, reason: `点击「${action.label}」后没有出现 ${selector}（实际调用：${state.calls.join(', ') || '无'}）`, calls: state.calls }
+    }
   }
   for (const name of action.expectCalls ?? []) {
     if (!state.calls.includes(name)) {
@@ -400,7 +426,7 @@ function harnessHtml(surface, testCase = {}) {
 const WORKSPACE = ${JSON.stringify(workspacePath)};
 const DIAGRAMS = ${JSON.stringify(diagrams)};
 const SOURCES = new Map(${JSON.stringify([...sources])});
-const ACTIVE = ${JSON.stringify(mermaidPath)};
+const ACTIVE = ${JSON.stringify(testCase.active === 'canvas' ? canvasPath : mermaidPath)};
 const MODIFIED = ${JSON.stringify(modifiedAt)};
 const MODIFIED_ADVANCED = ${JSON.stringify(new Date(Date.parse(modifiedAt) + 1000).toISOString())};
 let proposalLive = true;

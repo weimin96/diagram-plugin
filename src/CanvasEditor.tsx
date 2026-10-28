@@ -5,7 +5,7 @@ import { canvasNodeRelations, resolveCanvasRelationshipFocus, searchCanvasRelati
 import { canvasKeyDependencyLens, preferKeyDependencyLens } from './canvasDependencyLens.js'
 import { canvasArchitecturePlainTitleLines } from './canvasNodeTitleLayout.js'
 import { CanvasRectIndex } from './canvasRectIndex.js'
-import { canvasArrowCrossesViewport } from './canvasViewport.js'
+import { canvasArrowCrossesViewport, MAX_CANVAS_ZOOM, panCanvasViewport, zoomCanvasViewport } from './canvasViewport.js'
 import { buildCanvasPlaybackPlan } from './canvasPlayback.js'
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Hand, Link2, MousePointer2, Shapes, Type, type IconNode } from 'lucide'
@@ -83,8 +83,6 @@ type FreehandDraft = { points: CanvasPoint[] }
 type CanvasCssVars = CSSProperties & Record<`--${string}`, string | number | undefined>
 
 const GRID = 16
-const MIN_ZOOM = 0.45
-const MAX_ZOOM = 4
 
 const ARCHITECTURE_THEME_OPTIONS: Array<{ value: ArchitectureTheme; label: string; description: string }> = [
   { value: 'enterprise', label: '工程', description: '工程蓝图' },
@@ -2668,18 +2666,15 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
 
   function zoomAt(nextZoom: number, clientX?: number, clientY?: number) {
     const live = currentScene()
-    const svg = svgRef.current
-    const clamped = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM)
-    if (!svg || clientX === undefined || clientY === undefined) {
-      setViewport((current) => ({ ...current, zoom: clamped }))
-      return
-    }
-    const bounds = svg.getBoundingClientRect()
-    const px = clamp((clientX - bounds.left) / Math.max(1, bounds.width), 0, 1)
-    const py = clamp((clientY - bounds.top) / Math.max(1, bounds.height), 0, 1)
-    const worldX = viewport.x + px * (live.width / viewport.zoom)
-    const worldY = viewport.y + py * (live.height / viewport.zoom)
-    setViewport({ x: worldX - px * (live.width / clamped), y: worldY - py * (live.height / clamped), zoom: clamped })
+    const bounds = svgRef.current?.getBoundingClientRect()
+    setViewport(zoomCanvasViewport({
+      viewport,
+      scene: live,
+      nextZoom,
+      ...(bounds ? { container: { width: bounds.width, height: bounds.height, left: bounds.left, top: bounds.top } } : {}),
+      ...(clientX !== undefined ? { clientX } : {}),
+      ...(clientY !== undefined ? { clientY } : {}),
+    }))
   }
 
   function handleWheel(event: React.WheelEvent<SVGSVGElement>) {
@@ -2690,10 +2685,12 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
     }
     const live = currentScene()
     const bounds = event.currentTarget.getBoundingClientRect()
-    setViewport((current) => ({
-      ...current,
-      x: current.x + event.deltaX * ((live.width / current.zoom) / Math.max(1, bounds.width)),
-      y: current.y + event.deltaY * ((live.height / current.zoom) / Math.max(1, bounds.height)),
+    setViewport((current) => panCanvasViewport({
+      viewport: current,
+      scene: live,
+      container: { width: bounds.width, height: bounds.height },
+      deltaX: event.deltaX,
+      deltaY: event.deltaY,
     }))
   }
 
@@ -2714,7 +2711,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
     const bounds = svgRef.current?.getBoundingClientRect()
     if (!live.architecture || !bounds) return
     setViewport(recommendArchitectureReadingViewport(
-      renderScene, bounds.width, bounds.height, viewport.zoom, 11.5, MAX_ZOOM))
+      renderScene, bounds.width, bounds.height, viewport.zoom, 11.5, MAX_CANVAS_ZOOM))
   }
 
   function recenterFromMinimap(event: React.PointerEvent<SVGSVGElement>) {

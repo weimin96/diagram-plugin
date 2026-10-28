@@ -1,4 +1,23 @@
 {
+  "thread-canvas": {
+    "surface": "thread",
+    "width": 1100,
+    "height": 900,
+    "bytes": 166674,
+    "sha256": "629847a69fe705e8e0e50c43edfe0841cbea28c84889f4ddfae151dd0d21894d",
+    "toolCalls": {
+      "total": 7,
+      "byTool": {
+        "diagram.thread": 1,
+        "diagram.get": 2,
+        "diagram.threadState": 4
+      }
+    },
+    "action": {
+      "label": "切换到画布文档",
+      "ok": true
+    }
+  },
   "workspace": {
     "surface": "workspace",
     "width": 1440,
@@ -67,11 +86,11 @@
     "bytes": 94293,
     "sha256": "d3acb9728bd2679f33a5e27b682357440c73e183d306dc74a572e47a5bc1f369",
     "toolCalls": {
-      "total": 12,
+      "total": 13,
       "byTool": {
         "diagram.thread": 1,
         "diagram.get": 2,
-        "diagram.threadState": 5,
+        "diagram.threadState": 6,
         "diagram.proposal": 2,
         "diagram.revision": 1,
         "diagram.dismissProposal": 1

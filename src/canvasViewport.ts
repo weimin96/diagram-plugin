@@ -49,3 +49,73 @@ function segmentCrossesRect(from: CanvasPoint, to: CanvasPoint, view: CanvasRect
   }
   return true
 }
+
+export const MIN_CANVAS_ZOOM = 0.45
+export const MAX_CANVAS_ZOOM = 4
+
+export interface CanvasViewport {
+  x: number
+  y: number
+  zoom: number
+}
+
+export interface CanvasViewportScene {
+  width: number
+  height: number
+}
+
+export interface CanvasViewportContainer {
+  width: number
+  height: number
+  left: number
+  top: number
+}
+
+function clampValue(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
+
+// Zooming keeps the world point under the pointer fixed. Without a pointer the
+// viewport keeps its origin and only the scale changes, so toolbar zoom and
+// keyboard zoom stay predictable.
+export function zoomCanvasViewport(input: {
+  viewport: CanvasViewport
+  scene: CanvasViewportScene
+  nextZoom: number
+  container?: CanvasViewportContainer
+  clientX?: number
+  clientY?: number
+}): CanvasViewport {
+  const clamped = clampValue(input.nextZoom, MIN_CANVAS_ZOOM, MAX_CANVAS_ZOOM)
+  const { container, clientX, clientY } = input
+  if (!container || clientX === undefined || clientY === undefined) {
+    return { ...input.viewport, zoom: clamped }
+  }
+  const px = clampValue((clientX - container.left) / Math.max(1, container.width), 0, 1)
+  const py = clampValue((clientY - container.top) / Math.max(1, container.height), 0, 1)
+  const worldX = input.viewport.x + px * (input.scene.width / input.viewport.zoom)
+  const worldY = input.viewport.y + py * (input.scene.height / input.viewport.zoom)
+  return {
+    x: worldX - px * (input.scene.width / clamped),
+    y: worldY - py * (input.scene.height / clamped),
+    zoom: clamped,
+  }
+}
+
+// Wheel and trackpad panning are expressed in screen pixels, so the conversion
+// has to account for both the current zoom and the rendered container size.
+export function panCanvasViewport(input: {
+  viewport: CanvasViewport
+  scene: CanvasViewportScene
+  container: { width: number; height: number }
+  deltaX: number
+  deltaY: number
+}): CanvasViewport {
+  const scaleX = (input.scene.width / input.viewport.zoom) / Math.max(1, input.container.width)
+  const scaleY = (input.scene.height / input.viewport.zoom) / Math.max(1, input.container.height)
+  return {
+    ...input.viewport,
+    x: input.viewport.x + input.deltaX * scaleX,
+    y: input.viewport.y + input.deltaY * scaleY,
+  }
+}

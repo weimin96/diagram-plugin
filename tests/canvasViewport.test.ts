@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { canvasArrowCrossesViewport } from '../src/canvasViewport.js'
+import { canvasArrowCrossesViewport, MAX_CANVAS_ZOOM, MIN_CANVAS_ZOOM, panCanvasViewport, zoomCanvasViewport } from '../src/canvasViewport.js'
 import type { CanvasArrow, CanvasNode } from '../src/canvas.js'
 
 const boxes = new Map<string, CanvasNode>([
@@ -31,4 +31,60 @@ test('独立起止点连线按实际路径裁剪，边界相切仍可见', () =>
   assert.equal(canvasArrowCrossesViewport(crossing, boxes, view), true)
   assert.equal(canvasArrowCrossesViewport(tangent, boxes, view), true)
   assert.equal(canvasArrowCrossesViewport(outside, boxes, view), false)
+})
+
+// The editor keeps a viewport as (origin, zoom) over a fixed scene box. These are
+// the two gestures users perform constantly, so the arithmetic is pinned here
+// instead of being reachable only through a rendered SVG.
+test('viewport zoom and pan math keeps the pointed world position fixed', () => {
+  const scene = { width: 1200, height: 800 }
+  const container = { width: 600, height: 400, left: 100, top: 50 }
+
+  // Toolbar/keyboard zoom has no pointer: the origin must not drift.
+  assert.deepEqual(
+    zoomCanvasViewport({ viewport: { x: 30, y: 20, zoom: 1 }, scene, nextZoom: 2 }),
+    { x: 30, y: 20, zoom: 2 },
+  )
+
+  // Zoom is clamped to the documented range in both directions.
+  assert.equal(zoomCanvasViewport({ viewport: { x: 0, y: 0, zoom: 1 }, scene, nextZoom: 99 }).zoom, MAX_CANVAS_ZOOM)
+  assert.equal(zoomCanvasViewport({ viewport: { x: 0, y: 0, zoom: 1 }, scene, nextZoom: 0.01 }).zoom, MIN_CANVAS_ZOOM)
+
+  // A pointer at the container centre must keep the same world point under it.
+  const before = { x: 120, y: 80, zoom: 1.5 }
+  const clientX = container.left + container.width / 2
+  const clientY = container.top + container.height / 2
+  const zoomed = zoomCanvasViewport({ viewport: before, scene, nextZoom: 2.5, container, clientX, clientY })
+  const worldBefore = {
+    x: before.x + 0.5 * (scene.width / before.zoom),
+    y: before.y + 0.5 * (scene.height / before.zoom),
+  }
+  const worldAfter = {
+    x: zoomed.x + 0.5 * (scene.width / zoomed.zoom),
+    y: zoomed.y + 0.5 * (scene.height / zoomed.zoom),
+  }
+  assert.ok(Math.abs(worldBefore.x - worldAfter.x) < 1e-9, `world x drifted: ${worldBefore.x} -> ${worldAfter.x}`)
+  assert.ok(Math.abs(worldBefore.y - worldAfter.y) < 1e-9, `world y drifted: ${worldBefore.y} -> ${worldAfter.y}`)
+  assert.equal(zoomed.zoom, 2.5)
+
+  // A pointer in the top-left corner anchors the origin, so only zoom changes.
+  const corner = zoomCanvasViewport({ viewport: before, scene, nextZoom: 2, container, clientX: container.left, clientY: container.top })
+  assert.equal(corner.x, before.x)
+  assert.equal(corner.y, before.y)
+
+  // Pointers outside the container are clamped to its edges instead of extrapolating.
+  const outside = zoomCanvasViewport({ viewport: before, scene, nextZoom: 2, container, clientX: container.left - 900, clientY: container.top - 900 })
+  assert.equal(outside.x, before.x)
+  assert.equal(outside.y, before.y)
+
+  // Panning converts screen pixels through the current zoom and container size.
+  const panned = panCanvasViewport({ viewport: { x: 10, y: 10, zoom: 2 }, scene, container: { width: 600, height: 400 }, deltaX: 30, deltaY: -20 })
+  assert.equal(panned.x, 10 + 30 * ((scene.width / 2) / 600))
+  assert.equal(panned.y, 10 - 20 * ((scene.height / 2) / 400))
+  assert.equal(panned.zoom, 2)
+
+  // A zero-sized container must not divide by zero.
+  const degenerate = panCanvasViewport({ viewport: { x: 0, y: 0, zoom: 1 }, scene, container: { width: 0, height: 0 }, deltaX: 10, deltaY: 10 })
+  assert.equal(degenerate.x, 10 * scene.width)
+  assert.equal(degenerate.y, 10 * scene.height)
 })
