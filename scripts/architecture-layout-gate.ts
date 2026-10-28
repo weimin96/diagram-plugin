@@ -1,4 +1,4 @@
-import { canvasArrowBoxRoute, canvasGroupFrames, type CanvasNode, type CanvasScene } from '../src/canvas.js'
+import { canvasArrowBoxRoute, canvasBundleTrunks, canvasGroupFrames, type CanvasNode, type CanvasScene } from '../src/canvas.js'
 import { assessCanvasVisualQuality } from '../src/canvasQuality.js'
 import { assessArchitecturePresentation } from '../src/architecturePresentationQuality.js'
 import { assessArchitectureRouteDiagnostics } from '../src/architectureRouteDiagnostics.js'
@@ -24,6 +24,7 @@ export function measureEditableArchitecture(scene: CanvasScene) {
     }, 0)
   return {
     quality, nonOrthogonalSegments,
+    realSharedTrunks: canvasBundleTrunks(scene).length,
     routeBends: region.totalRouteBends, frameOverflowPx,
     portNormals: region.terminalNormalViolations,
     fitPx: presentation.estimatedTitlePxAtFit,
@@ -84,6 +85,9 @@ export function judgeExternalLayout(
   }
   if (candidate.portNormals > baseline.portNormals) {
     reasons.push(`声明端口法向缺陷增加 ${baseline.portNormals}→${candidate.portNormals}`)
+  }
+  if (candidate.realSharedTrunks < baseline.realSharedTrunks) {
+    reasons.push(`真实共享主干减少 ${baseline.realSharedTrunks}→${candidate.realSharedTrunks}`)
   }
   // Purely cosmetic or terminal-only improvements must not buy extra bends.
   // A genuine reduction in independent crossings/overlaps may still justify

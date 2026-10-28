@@ -11,6 +11,7 @@ import { projectArchitectureCase, projectArchitectureCases, coreArchitectureModu
 import { externalArchitectureSourceCases, parseExternalRepoArgs } from '../scripts/architecture-external-source-cases.js'
 import { loadArchitectureReviewedTasks } from '../scripts/architecture-reviewed-tasks.js'
 import { measureArchitectureLayoutDemand } from '../scripts/architecture-layout-demand.js'
+import { attributeArchitectureCorridorConflicts } from '../scripts/architecture-corridor-conflicts.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { canvasBundleTrunks, parseCanvasScene, serializeCanvasScene } from '../src/canvas.js'
 
@@ -86,8 +87,47 @@ test('真实架构基准的每条关系必须来自仓库源码的实际 TS impo
     relations: [{ from: 'x', to: 'y' }, { from: 'y', to: 'z' }, { from: 'x', to: 'z' }],
   }, 80)
   assert.equal(longEdge.topologicalLayerCount, 3)
+  assert.deepEqual(longEdge.logicalLayers.map((item) => [item.nodeId, item.layer]),
+    [['x', 0], ['y', 1], ['z', 2]])
   assert.deepEqual(longEdge.routingFrontiers.map((frontier) => frontier.relationCount), [2, 2],
     'a real long dependency consumes two logical layer-cut frontiers without fabricating new edges')
+  const syntheticCanvas = { type: 'diagram-plugin-canvas' as const, version: 1 as const,
+    title: 'Synthetic attribution only', width: 600, height: 320,
+    elements: longEdge.logicalLayers.map((node, index) => ({
+      type: 'node' as const, id: node.nodeId, text: node.nodeId,
+      x: index * 170, y: 20, width: 120, height: 64,
+    })).concat([]) }
+  const relationships = [{ from: 'x', to: 'y' }, { from: 'y', to: 'z' }, { from: 'x', to: 'z' }]
+  const sourceScene = { ...syntheticCanvas, elements: [
+    ...syntheticCanvas.elements,
+    ...relationships.map((edge, index) => ({ type: 'arrow' as const,
+      id: `__relation-${index + 1}`, ...edge })),
+  ] }
+  const attribution = attributeArchitectureCorridorConflicts({ title: 'Synthetic long edge',
+    nodes: longEdge.logicalLayers.map((node) => ({ id: node.nodeId, text: node.nodeId })),
+    relations: relationships,
+  }, sourceScene, longEdge, [
+    { code: 'edge-crossing', severity: 'error', message: 'synthetic',
+      elementIds: ['__relation-1', '__relation-3'] },
+    { code: 'edge-overlap', severity: 'warning', message: 'synthetic',
+      elementIds: ['__relation-2', '__relation-3'] },
+  ])
+  assert.deepEqual(attribution.frontiers.map((cut) => cut.bothRelationsInCutIssueCount), [1, 1])
+  assert.deepEqual(attribution.frontiers.map((cut) => cut.touchingIssueCount), [2, 2],
+    'one real long edge can correctly attribute an issue to multiple logical frontiers')
+  assert.throws(() => attributeArchitectureCorridorConflicts({ title: 'Synthetic long edge',
+    nodes: longEdge.logicalLayers.map((node) => ({ id: node.nodeId, text: node.nodeId })),
+    relations: relationships,
+  }, { ...sourceScene, elements: sourceScene.elements.filter((e) => e.id !== '__relation-2') },
+  longEdge, []), /complete input relation graph/)
+  assert.throws(() => attributeArchitectureCorridorConflicts({ title: 'Synthetic long edge',
+    nodes: longEdge.logicalLayers.map((node) => ({ id: node.nodeId, text: node.nodeId })),
+    relations: relationships,
+  }, { ...sourceScene, elements: sourceScene.elements.map((element) =>
+    element.type === 'arrow' && element.id === '__relation-1'
+      ? { ...element, to: 'z' } : element) }, longEdge, []),
+  /cannot match the real input relationship/,
+  'logical-cut issue attribution must never silently accept a reordered relation ID')
   assert.throws(() => measureArchitectureLayoutDemand({ ...typed,
     relations: [...typed.relations, { from: 'a', to: 'missing' }] }, 80), /Unknown architecture relation endpoint/)
   assert.throws(() => measureArchitectureLayoutDemand(typed, 0), /finite positive/)
@@ -192,6 +232,12 @@ test('真实依赖密集图不能因不穿节点就获得错误的自动审查�
   const sample = await projectArchitectureCase()
   const original = JSON.stringify(sample.intent)
   const composed = composeArchitectureGraph(sample.intent)
+  const corridorPressure = measureArchitectureLayoutDemand(sample.intent, 80)
+  const fullAttribution = attributeArchitectureCorridorConflicts(
+    sample.intent, composed.scene, corridorPressure, composed.quality.issues)
+  assert.equal(fullAttribution.frontiers.length, corridorPressure.routingFrontiers.length)
+  assert.deepEqual(fullAttribution.frontiers.map((cut) => cut.realRelations),
+    corridorPressure.routingFrontiers.map((cut) => cut.relationCount))
   const q = composed.quality.metrics
   assert.equal(q.edgeNodeIntersections, 0)
   assert.equal(q.edgeCrossings, 0,

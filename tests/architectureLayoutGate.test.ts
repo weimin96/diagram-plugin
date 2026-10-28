@@ -12,6 +12,7 @@ const baseline: Metrics = {
     isolatedHubs: 0, repeatedCards: 0, crossLaneRelations: 0, excessiveEdgeDetours: 0,
   }, fitPx: 12, frames: 2, frameOverlapArea: 24000, intrusionPx: 0, nonOrthogonalSegments: 0,
   routeLength: 1800, perimeterDetours: 1, portNormals: 0, routeBends: 5, frameOverflowPx: 0,
+  realSharedTrunks: 2,
 }
 
 test('better overlap does not compensate an unreadable external layout', () => {
@@ -33,6 +34,11 @@ test('quality gate accepts genuinely improved alignment and rejects neutral alte
     ...baseline, quality: { ...baseline.quality, edgeOverlaps: 0 }, frames: 0,
   }).eligible, true)
   assert.equal(judgeExternalLayout(baseline, baseline).eligible, false)
+  const lostTrunks = judgeExternalLayout(baseline, {
+    ...baseline, realSharedTrunks: 1, quality: { ...baseline.quality, edgeOverlaps: 0 }, frames: 0,
+  })
+  assert.equal(lostTrunks.eligible, false, 'candidate cannot buy fewer collisions by dropping real source trunks')
+  assert.ok(lostTrunks.reasons.some((reason) => reason.includes('真实共享主干减少')))
 })
 
 test('a layout with new label collisions cannot pass even when paths improve', () => {

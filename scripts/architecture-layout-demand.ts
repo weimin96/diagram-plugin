@@ -118,6 +118,8 @@ export function measureArchitectureLayoutDemand(
       distinctSources: new Set(crossing.map((edge) => edge.from)).size,
       distinctTargets: new Set(crossing.map((edge) => edge.to)).size,
     }))
+  const logicalLayers = [...componentOf].map(([nodeId, component]) => ({ nodeId, layer: layer[component] }))
+    .sort((a, b) => a.nodeId.localeCompare(b.nodeId, 'en'))
 
   const spacing = CANVAS_PORT_MIN_SEPARATION_PX
   const capacity = Math.max(0, Math.floor(referenceSideSpanPx / spacing) - 1)
@@ -147,6 +149,7 @@ export function measureArchitectureLayoutDemand(
     cycleComponents: cycles.sort((a, b) => a[0].localeCompare(b[0], 'en')),
     cyclicInternalRelations,
     topologicalLayerCount: Math.max(0, ...layer) + (layer.length ? 1 : 0),
+    logicalLayers,
     routingFrontiers,
     maxLogicalFrontierRelations: Math.max(0, ...routingFrontiers.map((frontier) => frontier.relationCount)),
     declaredPartitionCount: new Set([...degrees.values()].flatMap((node) => node.partition ? [node.partition] : [])).size,

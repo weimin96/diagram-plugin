@@ -12,6 +12,7 @@ import { loadArchitectureReviewedTasks } from './architecture-reviewed-tasks.js'
 import { proposePartitionEnvelopeLayout } from './partition-envelope-candidate.js'
 import { compareEditableArchitectureSemantics, judgeExternalLayout, measureEditableArchitecture } from './architecture-layout-gate.js'
 import { measureArchitectureLayoutDemand } from './architecture-layout-demand.js'
+import { attributeArchitectureCorridorConflicts } from './architecture-corridor-conflicts.js'
 
 const outputFlag = process.argv.indexOf('--out')
 if (outputFlag >= 0 && !process.argv[outputFlag + 1]) throw new Error('--out expects a destination directory')
@@ -69,6 +70,8 @@ for (const example of examples) {
   const demand = measureArchitectureLayoutDemand(example.intent, referenceSideSpanPx)
   const started = performance.now()
   const composed = composeArchitectureGraph(example.intent)
+  const corridorConflicts = attributeArchitectureCorridorConflicts(
+    example.intent, composed.scene, demand, composed.quality.issues)
   const partitionFlow = architecturePartitionFlow(composed.scene)
   const routeDiagnostics = composed.routeDiagnostics
   if (partitionEnvelopeExperiment && routeDiagnostics.frameOverlapArea > 0) {
@@ -118,6 +121,7 @@ for (const example of examples) {
        * actual post-layout allocated ports or geometry collision count. */
       scenario: 'incoming-on-left/outgoing-on-right; hypothetical per-side span, no bundling',
     },
+    corridorConflicts,
     composition: composed.summary.composition,
     density: composed.evaluation.density,
     structuralScore: composed.evaluation.structuralScore,
@@ -201,6 +205,7 @@ ${results.map((result) => `<section><header><div><h2>${escapeHtml(result.title)}
 <span>${escapeHtml(result.visualPlan.reference.label)} · ${result.visualPlan.recommendedView === 'overview' ? '先看总览' : '直接查看详情'}</span>
 <span>${result.nodes} 节点 / ${result.relations} 关系</span>
 <span>布局前单侧端口容量假设 ${result.prelayoutDemand.assumedSingleSidePortCapacity} · 超容量节点 ${result.prelayoutDemand.overCapacityNodes.length} · 逻辑跨层切面压力峰值 ${result.prelayoutDemand.maxLogicalFrontierRelations} 条真实关系 · 未知分区节点 ${result.prelayoutDemand.nodesWithoutVerifiedPartition}</span>
+<span>已布线路线的切面冲突关联（非物理通道数量）：${result.corridorConflicts.mostConflictAffected.map((item) => `层 ${item.afterLayer} · 关系 ${item.realRelations} · 交叉 ${item.touchingCrossings} · 重叠 ${item.touchingOverlaps}`).join(' / ') || '无可关联切面'}</span>
 <span>${result.structuralScore} / 90</span>
 <span>${result.visualPlan.review.readyForVisualReview ? '待人工视觉审查' : '阻断视觉审查'}</span>
 <span>适配字号约 ${result.presentation.estimatedTitlePxAtFit}px</span>
