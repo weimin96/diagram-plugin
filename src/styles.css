@@ -111,7 +111,7 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .workspace-picker h1 { margin: 8px 0 6px; font-size: 22px; line-height: 1.25; }
 .workspace-picker p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.65; }
 .workspace-open-row { display: flex; gap: 8px; margin-top: 24px; }
-.primary-button, .icon-text-button, .form-actions button, .toolbar-actions button, .sidebar-list-head button, .error-banner button {
+.primary-button, .icon-text-button, .form-actions button, .toolbar-actions button, .sidebar-list-head button, .feedback-banner-actions button, .feedback-row-actions button {
   border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--surface-panel);
@@ -121,7 +121,7 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
   font-size: 13px;
   transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
 }
-.icon-text-button:hover:not(:disabled), .form-actions button:not(.primary-button):hover:not(:disabled), .toolbar-actions > button:not(.primary-button):hover:not(:disabled), .error-banner button:hover:not(:disabled) { border-color: var(--border-strong); background: var(--surface-hover); color: var(--text-primary); }
+.icon-text-button:hover:not(:disabled), .form-actions button:not(.primary-button):hover:not(:disabled), .toolbar-actions > button:not(.primary-button):hover:not(:disabled), .feedback-banner-actions button:hover:not(:disabled), .feedback-row-actions button:hover:not(:disabled) { border-color: var(--border-strong); background: var(--surface-hover); color: var(--text-primary); }
 .primary-button { background: var(--accent); border-color: var(--accent); color: white; font-weight: 600; }
 .primary-button.compact { height: 30px; padding-inline: 11px; font-size: 12px; }
 .inline-error { margin-top: 10px; color: var(--danger); font-size: 12px; }
@@ -203,6 +203,8 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .thread-follow-toggle { height: 28px; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; padding: 0 5px; border: 0; border-radius: 4px; background: transparent; color: var(--text-secondary); font-size: 12px; }
 .thread-follow-toggle:hover { background: color-mix(in srgb, var(--text-primary) 7%, var(--surface-panel)); color: var(--text-primary); }
 .thread-follow-toggle.is-active { color: var(--text-primary); background: var(--surface-raised); }
+.thread-follow-toggle.is-paused { color: var(--text-primary); background: var(--accent-soft); }
+.thread-follow-toggle.is-paused::before { content: ''; width: 5px; height: 5px; flex: 0 0 auto; border-radius: 50%; background: var(--accent); }
 .thread-diagram-menu { min-width: 0; width: 112px; }
 .thread-diagram-tabs { min-width: 0; display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
 .thread-diagram-tabs::-webkit-scrollbar { display: none; }
@@ -213,8 +215,6 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .thread-diagram-tab.is-active .thread-diagram-tab-main { color: var(--text-primary); }
 .thread-diagram-tab-close { flex: 0 0 24px; width: 24px; height: 100%; padding: 0; border: 0; border-left: 1px solid transparent; background: transparent; color: var(--text-tertiary); font-size: 13px; }
 .thread-diagram-tab-close:hover { border-left-color: var(--border); background: var(--surface-hover); color: var(--text-primary); }
-.sync-warning { min-height: 26px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 9px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, #b7791f 6%, var(--surface-panel)); color: var(--text-secondary); font-size: 12px; }
-.sync-warning span:last-child { color: var(--text-tertiary); }
 .thread-companion .editor-workspace { min-height: 0; }
 .thread-companion .pane-head { height: 30px; padding-inline: 8px; font-size: 12px; }
 .thread-companion .pane-head-actions { gap: 5px; }
@@ -240,34 +240,10 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .change-review-trigger:hover { background: color-mix(in srgb, var(--accent) 11%, var(--surface-panel)); color: var(--text-primary); }
 .proposal-review-trigger { height: 27px; padding: 0 8px; border: 1px solid color-mix(in srgb, #7c3aed 32%, var(--border)); border-radius: 6px; background: color-mix(in srgb, #7c3aed 7%, var(--surface-panel)); color: var(--text-secondary); font-size: 12px; }
 .proposal-review-trigger:hover { background: color-mix(in srgb, #7c3aed 12%, var(--surface-panel)); color: var(--text-primary); }
-
-.notice-banner {
-  min-height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 0 14px;
-  border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--accent) 7%, var(--surface-panel));
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-.notice-banner button { height: 24px; padding: 0 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-panel); color: var(--text-secondary); font-size: 11px; }
-.notice-banner button:hover { background: var(--surface-hover); color: var(--text-primary); }
-.proposal-banner { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 10px 7px 14px; border-bottom: 1px solid var(--border); background: var(--surface-panel); }
-.proposal-banner > div:first-child { min-width: 0; display: grid; gap: 2px; }
-.proposal-banner strong { color: var(--text-primary); font-size: 12px; }
-.proposal-banner span { overflow: hidden; color: var(--text-secondary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.proposal-banner-actions { flex: 0 0 auto; display: flex; gap: 5px; }
-.proposal-banner-actions button { height: 28px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-panel); color: var(--text-secondary); font-size: 12px; }
-.proposal-banner-actions button.primary-button { border-color: var(--accent); background: var(--accent); color: white; }
 .impact-banner { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 10px 7px 14px; border-bottom: 1px solid color-mix(in srgb, #0ea5e9 26%, var(--border)); background: color-mix(in srgb, #0ea5e9 7%, var(--surface-panel)); }
 .impact-banner > div:first-child { min-width: 0; display: grid; gap: 2px; }
 .impact-banner strong { color: var(--text-primary); font-size: 12px; }
 .impact-banner span { overflow: hidden; color: var(--text-secondary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.conflict-banner { min-height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 5px 10px 5px 14px; border-bottom: 1px solid color-mix(in srgb, #b7791f 28%, transparent); background: color-mix(in srgb, #b7791f 9%, var(--surface-panel)); color: var(--text-primary); font-size: 12px; }
-.conflict-banner button { height: 26px; padding: 0 8px; border: 1px solid color-mix(in srgb, #b7791f 34%, var(--border)); border-radius: 6px; background: var(--surface-panel); color: var(--text-primary); font-size: 12px; }
 
 .editor-workspace { min-height: 0; flex: 1; display: grid; }
 .editor-workspace.mode-split { grid-template-columns: minmax(260px, var(--diagram-split, 44%)) 5px minmax(320px, 1fr); }
@@ -1022,8 +998,6 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .canvas-invalid strong { color: var(--danger); font-size: 13px; }
 .canvas-invalid span, .canvas-invalid p { max-width: 520px; margin: 0; font-size: 12px; line-height: 1.6; }
 
-.error-banner { min-height: 36px; display: flex; align-items: center; gap: 10px; justify-content: space-between; padding: 6px 10px 6px 14px; border-bottom: 1px solid color-mix(in srgb, var(--danger) 25%, transparent); background: color-mix(in srgb, var(--danger) 7%, var(--surface-panel)); color: var(--danger); font-size: 12px; }
-.error-banner button { height: 24px; padding-inline: 7px; background: transparent; font-size: 12px; }
 .main-empty { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28px; text-align: center; }
 .main-empty h2 { margin: 18px 0 5px; font-size: 18px; }
 .main-empty p { max-width: 460px; margin: 0 0 18px; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
@@ -1241,9 +1215,17 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
   .diagram-shell.thread-companion { min-height: 100%; height: 100%; display: grid; }
   .thread-companion .diagram-main { min-height: 0; }
   .thread-companion .ai-panel { position: absolute; }
-  .thread-companion-head { padding: 6px; }
+  /* The header holds a menu, a scrolling tab strip and the document actions.
+   * Below 720px they cannot share one row, and clipping would hide the only
+   * route to create/export; let the actions wrap onto their own row instead. */
+  .thread-companion-head { padding: 6px; display: flex; flex-wrap: wrap; align-items: center; }
   .thread-follow-toggle { width: auto; padding-inline: 6px; }
-  .thread-diagram-menu { min-width: 0; width: 108px; }
+  .thread-diagram-menu { min-width: 0; width: 108px; order: 1; }
+  /* A flex item defaults to min-width:auto, so the tab strip's min-content
+   * width (every tab title at full length) would widen the whole header past
+   * the panel and push the ⋯ menu out of view. It already scrolls. */
+  .thread-diagram-tabs { order: 2; flex: 1 1 0; min-width: 0; }
+  .thread-document-actions { order: 4; flex: 1 1 100%; justify-content: flex-end; }
   .new-diagram-browser { grid-template-columns: minmax(0, 1fr) minmax(180px, 34%); gap: 8px; }
   .new-diagram-preview-content,
   .new-diagram-preview-empty { min-height: 210px; }
@@ -1307,6 +1289,35 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 
 
 .thread-document-actions [data-slot='button'] { height: 28px; font-size: 12px; padding-inline: 6px; }
+
+/* Compact mode switch: the same three view modes as the full toolbar, sized for
+ * the thread panel. Editing must be visible without opening a menu. */
+.compact-mode-switch { display: inline-flex; align-items: center; gap: 1px; padding: 1px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface-muted); }
+.compact-mode-switch button { height: 24px; padding: 0 6px; border: 0; border-radius: 4px; background: transparent; color: var(--text-secondary); font-size: 12px; line-height: 1; }
+.compact-mode-switch button:hover { color: var(--text-primary); background: color-mix(in srgb, var(--text-primary) 6%, transparent); }
+.compact-mode-switch button.is-active { color: var(--text-primary); background: var(--surface-panel); box-shadow: inset 0 0 0 1px var(--border); }
+.pane-head-hint { flex: 0 0 auto; padding: 1px 5px; border: 1px solid var(--border); border-radius: 999px; color: var(--text-tertiary); font-size: 11px; }
+/* One arbitrated feedback banner: blocking failures and file conflicts get actions,
+ * informational notices degrade to single-line rows so the document stays visible. */
+.feedback-banner { min-height: 40px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 10px 6px 14px; border-bottom: 1px solid var(--border); background: var(--surface-panel); font-size: 12px; }
+.feedback-banner-copy { min-width: 0; display: grid; gap: 2px; }
+.feedback-banner-copy strong { color: var(--text-primary); font-size: 12px; font-weight: 550; overflow-wrap: anywhere; }
+.feedback-banner-copy span { overflow: hidden; color: var(--text-secondary); text-overflow: ellipsis; white-space: nowrap; }
+.feedback-banner.is-error { border-bottom-color: color-mix(in srgb, var(--danger) 25%, transparent); background: color-mix(in srgb, var(--danger) 7%, var(--surface-panel)); }
+.feedback-banner.is-error .feedback-banner-copy strong { color: var(--danger); }
+.feedback-banner.is-warning { border-bottom-color: color-mix(in srgb, #b7791f 28%, transparent); background: color-mix(in srgb, #b7791f 9%, var(--surface-panel)); }
+.feedback-banner-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 5px; }
+.feedback-banner-actions button, .feedback-row-actions button { height: 26px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-panel); color: var(--text-secondary); font-size: 12px; }
+.feedback-banner-actions button:hover, .feedback-row-actions button:hover { background: var(--surface-hover); color: var(--text-primary); }
+.feedback-banner-actions button.primary-button, .feedback-row-actions button.primary-button { border-color: var(--accent); background: var(--accent); color: white; }
+.feedback-overflow { display: grid; border-bottom: 1px solid var(--border); background: var(--surface-muted); }
+.feedback-row { min-height: 26px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 10px 0 14px; font-size: 12px; color: var(--text-secondary); }
+.feedback-row + .feedback-row { border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
+.feedback-row-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feedback-row.is-error .feedback-row-text { color: var(--danger); }
+.feedback-row-actions { flex: 0 0 auto; display: flex; gap: 4px; }
+.feedback-row-actions button { height: 22px; padding: 0 6px; font-size: 11px; }
+.thread-companion .pane-head-actions > span:not(.pane-head-hint) { display: none; }
 .thread-diagram-menu [data-slot='button'] { font-size: 12px; padding-inline: 6px; }
 .thread-diagram-search { border-color: var(--border); background: var(--surface-panel); box-shadow: none; transition: border-color 140ms ease, box-shadow 140ms ease; }
 .thread-diagram-search:focus-visible {
@@ -1316,6 +1327,9 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 }
 
 @container diagram-panel (max-width: 720px) {
+  .editor-workspace.mode-split { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(150px, 0.85fr) minmax(190px, 1.15fr); overflow: auto; }
+  .editor-workspace.mode-split .split-resizer { display: none; }
+  .editor-workspace.mode-split .source-pane { border-right: 0; border-bottom: 1px solid var(--border); }
   .thread-companion-head { grid-template-columns: auto minmax(0, 1fr); row-gap: 3px; }
   .thread-document-actions { grid-column: 1 / -1; justify-content: flex-end; padding-top: 3px; border-top: 1px solid var(--border); }
   .thread-diagram-tab-main span { max-width: 120px; }
