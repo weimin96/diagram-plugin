@@ -1,0 +1,107 @@
+{
+  "workspace": {
+    "surface": "workspace",
+    "width": 1440,
+    "height": 900,
+    "bytes": 195325,
+    "sha256": "db6ddd13ffa1424fc08f03344b40b7cd5d01181d4593517ca91f25deca56d616",
+    "toolCalls": {
+      "total": 2,
+      "byTool": {
+        "diagram.workspace": 1,
+        "diagram.get": 1
+      }
+    }
+  },
+  "thread-wide": {
+    "surface": "thread",
+    "width": 1100,
+    "height": 900,
+    "bytes": 159559,
+    "sha256": "642e23e3bbecde39148ba7f6bc4567f366f1c2c78d17cd0e188c6fa1daa7b132",
+    "toolCalls": {
+      "total": 4,
+      "byTool": {
+        "diagram.thread": 1,
+        "diagram.get": 1,
+        "diagram.threadState": 2
+      }
+    }
+  },
+  "thread-narrow": {
+    "surface": "thread",
+    "width": 420,
+    "height": 900,
+    "bytes": 94619,
+    "sha256": "56fa2b332a44cf6df281a5790380e5a8ff0d15d7f92de65ddb37b539488b68fb",
+    "toolCalls": {
+      "total": 5,
+      "byTool": {
+        "diagram.thread": 1,
+        "diagram.get": 2,
+        "diagram.threadState": 2
+      }
+    }
+  },
+  "thread-proposal-review": {
+    "surface": "thread",
+    "width": 420,
+    "height": 900,
+    "bytes": 46830,
+    "sha256": "2e4d528bc6dca3322c157e4cd0419aca5ada5316fb83586b0d6bed8234297e74",
+    "toolCalls": {
+      "total": 10,
+      "byTool": {
+        "diagram.thread": 1,
+        "diagram.get": 2,
+        "diagram.threadState": 4,
+        "diagram.proposal": 2,
+        "diagram.revision": 1
+      }
+    }
+  },
+  "proposal-reject": {
+    "surface": "thread",
+    "width": 420,
+    "height": 900,
+    "bytes": 94293,
+    "sha256": "d3acb9728bd2679f33a5e27b682357440c73e183d306dc74a572e47a5bc1f369",
+    "toolCalls": {
+      "total": 12,
+      "byTool": {
+        "diagram.thread": 1,
+        "diagram.get": 2,
+        "diagram.threadState": 5,
+        "diagram.proposal": 2,
+        "diagram.revision": 1,
+        "diagram.dismissProposal": 1
+      }
+    },
+    "action": {
+      "label": "拒绝",
+      "ok": true
+    }
+  },
+  "proposal-accept": {
+    "surface": "thread",
+    "width": 420,
+    "height": 900,
+    "bytes": 92902,
+    "sha256": "1688d3f4db8c9c973ffc78fa7970616172a6ddd6f465ccf7d4273cf7f8e8a109",
+    "toolCalls": {
+      "total": 12,
+      "byTool": {
+        "diagram.thread": 1,
+        "diagram.get": 2,
+        "diagram.threadState": 5,
+        "diagram.proposal": 2,
+        "diagram.revision": 1,
+        "diagram.applyProposal": 1
+      }
+    },
+    "action": {
+      "label": "全部接受",
+      "ok": true
+    }
+  }
+}
