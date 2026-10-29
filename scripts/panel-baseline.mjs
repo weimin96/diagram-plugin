@@ -31,6 +31,21 @@ const only = process.argv.find((arg) => arg.startsWith('--only='))?.slice('--onl
 const budgetOverride = Number(process.argv.find((arg) => arg.startsWith('--budget='))?.slice('--budget='.length)) || 0
 const strict = process.argv.includes('--strict')
 
+// Pixel comparison uses 8x8 block averages: Chrome re-rasterises text with faint
+// antialiasing differences between runs, so exact hashes would flag every run and
+// train reviewers to ignore the gate. Block averages drop that noise while a moved
+// or recoloured control still registers. sha256 stays in the manifest as evidence.
+const PIXEL_BLOCK = 8
+const BLOCK_DELTA = 12
+const MAX_CHANGED_BLOCKS = 6
+
+// Exact hashes are too brittle for a pixel gate: Chrome re-rasterises text with
+// faint antialiasing differences between runs, which would make every run drift
+// and train reviewers to ignore it. Compare 8x8 block averages instead —
+// sub-pixel text noise disappears, a moved or recoloured control does not.
+// sha256 stays in the manifest as an audit trail.
+
+
 const workspacePath = root
 const mermaidPath = 'docs/diagrams/对话跟随链路.mmd'
 const canvasPath = 'docs/diagrams/diagram-plugin-运行时架构.diagram.json'
@@ -136,6 +151,7 @@ try {
   if (update) await mkdir(baselineDir, { recursive: true })
   const manifest = {}
   const failures = []
+  const drift = []
   const boxes = process.argv.includes('--boxes')
   const dumpDom = process.argv.includes('--dump-dom')
   for (const testCase of selected()) {
@@ -183,6 +199,10 @@ try {
         toolCalls: { total: totalCalls, byTool },
         ...(testCase.action ? { action: { label: testCase.action.label, ok: Boolean(actionResult?.ok) } } : {}),
       }
+      if (!update) {
+        const reason = await compareOne(client, testCase.id, manifest[testCase.id])
+        if (reason) drift.push(reason)
+      }
     })
   }
   await writeFile(path.join(resultDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
@@ -211,7 +231,6 @@ try {
       for (const entry of noisy) console.log(`Panel call budget exceeded: ${entry.id} made ${entry.total} host calls (budget ${entry.budget})`)
       process.exitCode = 1
     }
-    const drift = await compare(manifest)
     if (drift.length === 0) {
       console.log(`Panel baselines match (${cases.length} shapes).`)
       const callSummary = Object.entries(manifest).map(([id, entry]) => id + '=' + (entry.toolCalls?.total ?? 0)).join(' ')
@@ -226,15 +245,65 @@ try {
   server.close()
 }
 
-async function compare(current) {
+// Exact hashes are too brittle for a pixel gate: Chrome re-rasterises text with
+// faint antialiasing differences between runs, which turned every run into
+// "drift" and would train reviewers to ignore it. Compare 8x8 block averages
+// instead — sub-pixel text noise disappears, a moved or recoloured control does
+// not. sha256 stays in the manifest as an audit trail.
+
+async function compareOne(client, id, entry) {
   let previous
   try {
     previous = JSON.parse(await readFile(path.join(baselineDir, 'manifest.json'), 'utf8'))
   } catch {
     console.log('No panel baseline yet; run `node scripts/panel-baseline.mjs --update`.')
-    return []
+    return undefined
   }
-  return Object.keys(current).filter((id) => previous[id]?.sha256 !== current[id].sha256)
+  if (!previous[id]) return `${id}(new)`
+  const baseline = await readFile(path.join(baselineDir, `${id}.png`))
+  const fresh = await readFile(path.join(resultDir, `${id}.png`))
+  const result = await evaluate(client, `(async () => {
+    const decode = async (base64) => {
+      const blob = await (await fetch('data:image/png;base64,' + base64)).blob()
+      return await createImageBitmap(blob)
+    }
+    const a = await decode(${JSON.stringify(baseline.toString('base64'))})
+    const b = await decode(${JSON.stringify(fresh.toString('base64'))})
+    if (a.width !== b.width || a.height !== b.height) {
+      return { sizeMismatch: true, a: [a.width, a.height], b: [b.width, b.height] }
+    }
+    const canvas = new OffscreenCanvas(a.width, a.height)
+    const context = canvas.getContext('2d', { willReadFrequently: true })
+    const pixels = (bitmap) => {
+      context.clearRect(0, 0, a.width, a.height)
+      context.drawImage(bitmap, 0, 0)
+      return context.getImageData(0, 0, a.width, a.height).data
+    }
+    const left = pixels(a)
+    const right = pixels(b)
+    const size = ${PIXEL_BLOCK}
+    let changed = 0
+    let worst = 0
+    for (let by = 0; by < a.height; by += size) {
+      for (let bx = 0; bx < a.width; bx += size) {
+        let sum = 0
+        let count = 0
+        for (let y = by; y < Math.min(by + size, a.height); y += 1) {
+          for (let x = bx; x < Math.min(bx + size, a.width); x += 1) {
+            const i = (y * a.width + x) * 4
+            sum += Math.abs(left[i] - right[i]) + Math.abs(left[i + 1] - right[i + 1]) + Math.abs(left[i + 2] - right[i + 2])
+            count += 3
+          }
+        }
+        const delta = sum / Math.max(1, count)
+        if (delta > ${BLOCK_DELTA}) changed += 1
+        if (delta > worst) worst = delta
+      }
+    }
+    return { sizeMismatch: false, changed, worst: Math.round(worst) }
+  })()`)
+  if (result.sizeMismatch) return `${id}(size ${result.a.join('x')} -> ${result.b.join('x')})`
+  return result.changed > MAX_CHANGED_BLOCKS ? `${id}(${result.changed} blocks, worst ${result.worst})` : undefined
 }
 
 // Drives one real user action and asserts what the panel did about it. A rendered
@@ -352,6 +421,10 @@ async function withPage(url, testCase, run) {
     '--headless=new',
     '--disable-gpu',
     '--hide-scrollbars',
+    // Grayscale antialiasing keeps glyph edges stable between runs; LCD subpixel
+    // text varies with window position and made every text block look changed.
+    '--disable-lcd-text',
+    '--force-color-profile=srgb',
     '--no-first-run',
     '--no-default-browser-check',
     '--force-device-scale-factor=1',

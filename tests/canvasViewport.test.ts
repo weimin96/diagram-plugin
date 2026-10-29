@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { canvasArrowCrossesViewport, MAX_CANVAS_ZOOM, MIN_CANVAS_ZOOM, panCanvasViewport, zoomCanvasViewport } from '../src/canvasViewport.js'
+import { canvasArrowCrossesViewport, fitCanvasViewport, MAX_CANVAS_ZOOM, MIN_CANVAS_ZOOM, panCanvasViewport, recenterCanvasViewport, zoomCanvasViewport } from '../src/canvasViewport.js'
 import type { CanvasArrow, CanvasNode } from '../src/canvas.js'
 
 const boxes = new Map<string, CanvasNode>([
@@ -36,7 +36,7 @@ test('独立起止点连线按实际路径裁剪，边界相切仍可见', () =>
 // The editor keeps a viewport as (origin, zoom) over a fixed scene box. These are
 // the two gestures users perform constantly, so the arithmetic is pinned here
 // instead of being reachable only through a rendered SVG.
-test('viewport zoom and pan math keeps the pointed world position fixed', () => {
+test('viewport math keeps the pointed world position fixed and frames content predictably', () => {
   const scene = { width: 1200, height: 800 }
   const container = { width: 600, height: 400, left: 100, top: 50 }
 
@@ -87,4 +87,49 @@ test('viewport zoom and pan math keeps the pointed world position fixed', () => 
   const degenerate = panCanvasViewport({ viewport: { x: 0, y: 0, zoom: 1 }, scene, container: { width: 0, height: 0 }, deltaX: 10, deltaY: 10 })
   assert.equal(degenerate.x, 10 * scene.width)
   assert.equal(degenerate.y, 10 * scene.height)
+
+  // Framing a selection grows its box by the reading padding, fits it to the
+  // scene, then clamps to the scene edges so a fit never shows blank space.
+  const framed = fitCanvasViewport({
+    scene: { width: 1000, height: 600 },
+    rects: [{ x: 100, y: 50, width: 200, height: 100 }],
+    options: { minWidth: 280, minHeight: 180, paddingX: 200, paddingY: 160, minZoom: 0.8, maxZoom: 2.6 },
+  })
+  // content box = 400x260 -> zoom = min(1000/400, 600/260) = 2.307...
+  assert.ok(Math.abs(framed.zoom - 600 / 260) < 1e-9)
+  assert.ok(framed.x >= 0 && framed.x + 1000 / framed.zoom <= 1000 + 1e-9)
+  assert.ok(framed.y >= 0 && framed.y + 600 / framed.zoom <= 600 + 1e-9)
+
+  // A tiny selection stops at maxZoom instead of filling the screen with one node.
+  const closeUp = fitCanvasViewport({
+    scene: { width: 1000, height: 600 },
+    rects: [{ x: 10, y: 10, width: 10, height: 10 }],
+    options: { minWidth: 20, minHeight: 20, paddingX: 0, paddingY: 0, minZoom: 0.5, maxZoom: 2.5 },
+  })
+  assert.equal(closeUp.zoom, 2.5)
+
+  // An empty selection resets instead of producing NaN bounds.
+  assert.deepEqual(fitCanvasViewport({ scene: { width: 1000, height: 600 }, rects: [], options: { minWidth: 1, minHeight: 1, paddingX: 0, paddingY: 0, minZoom: 1, maxZoom: 1 } }), { x: 0, y: 0, zoom: 1 })
+
+  // Minimap clicks centre the viewport on the clicked world point.
+  const recentered = recenterCanvasViewport({
+    viewport: { x: 0, y: 0, zoom: 2 },
+    scene: { width: 1000, height: 600 },
+    minimap: { x: 0, y: 0, width: 1000, height: 600 },
+    container: { width: 200, height: 120, left: 0, top: 0 },
+    clientX: 100,
+    clientY: 60,
+  })
+  assert.deepEqual(recentered, { x: 250, y: 150, zoom: 2 })
+
+  // Clicking the minimap edge never scrolls past the scene.
+  const clampedEdge = recenterCanvasViewport({
+    viewport: { x: 0, y: 0, zoom: 1 },
+    scene: { width: 1000, height: 600 },
+    minimap: { x: 0, y: 0, width: 1000, height: 600 },
+    container: { width: 200, height: 120, left: 0, top: 0 },
+    clientX: 0,
+    clientY: 0,
+  })
+  assert.deepEqual(clampedEdge, { x: 0, y: 0, zoom: 1 })
 })

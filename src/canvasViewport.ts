@@ -119,3 +119,71 @@ export function panCanvasViewport(input: {
     y: input.viewport.y + input.deltaY * scaleY,
   }
 }
+
+export interface CanvasViewportRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface CanvasViewportFitOptions {
+  minWidth: number
+  minHeight: number
+  paddingX: number
+  paddingY: number
+  minZoom: number
+  maxZoom: number
+}
+
+// Framing a selection and framing an architecture scene are the same problem:
+// grow the content box by its reading padding, fit it into the scene box, and
+// keep the result inside the scene so a fit never reveals blank space.
+export function fitCanvasViewport(input: {
+  scene: CanvasViewportScene
+  rects: readonly CanvasViewportRect[]
+  options: CanvasViewportFitOptions
+}): CanvasViewport {
+  const { scene, rects, options } = input
+  if (!rects.length) return { x: 0, y: 0, zoom: 1 }
+  const left = Math.min(...rects.map((rect) => rect.x))
+  const top = Math.min(...rects.map((rect) => rect.y))
+  const right = Math.max(...rects.map((rect) => rect.x + rect.width))
+  const bottom = Math.max(...rects.map((rect) => rect.y + rect.height))
+  const width = Math.max(options.minWidth, right - left + options.paddingX)
+  const height = Math.max(options.minHeight, bottom - top + options.paddingY)
+  const zoom = clampValue(
+    Math.min(scene.width / width, scene.height / height),
+    options.minZoom,
+    options.maxZoom,
+  )
+  const viewWidth = scene.width / zoom
+  const viewHeight = scene.height / zoom
+  return {
+    zoom,
+    x: clampValue((left + right) / 2 - viewWidth / 2, 0, Math.max(0, scene.width - viewWidth)),
+    y: clampValue((top + bottom) / 2 - viewHeight / 2, 0, Math.max(0, scene.height - viewHeight)),
+  }
+}
+
+// Clicking the minimap centres the viewport on that world point and clamps the
+// result to the scene edges, so the minimap can never scroll into empty space.
+export function recenterCanvasViewport(input: {
+  viewport: CanvasViewport
+  scene: CanvasViewportScene
+  minimap: CanvasViewportRect
+  container: { width: number; height: number; left: number; top: number }
+  clientX: number
+  clientY: number
+}): CanvasViewport {
+  const { scene, minimap, container } = input
+  const targetX = minimap.x + ((input.clientX - container.left) / Math.max(1, container.width)) * minimap.width
+  const targetY = minimap.y + ((input.clientY - container.top) / Math.max(1, container.height)) * minimap.height
+  const width = scene.width / input.viewport.zoom
+  const height = scene.height / input.viewport.zoom
+  return {
+    ...input.viewport,
+    x: clampValue(targetX - width / 2, 0, Math.max(0, scene.width - width)),
+    y: clampValue(targetY - height / 2, 0, Math.max(0, scene.height - height)),
+  }
+}

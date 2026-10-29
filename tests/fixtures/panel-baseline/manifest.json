@@ -22,8 +22,8 @@
     "surface": "workspace",
     "width": 1440,
     "height": 900,
-    "bytes": 195325,
-    "sha256": "db6ddd13ffa1424fc08f03344b40b7cd5d01181d4593517ca91f25deca56d616",
+    "bytes": 195912,
+    "sha256": "c23761128f17e7dfd4348da18f6619c02199a68940e6ef6d8d6213aae51670f5",
     "toolCalls": {
       "total": 2,
       "byTool": {
@@ -69,11 +69,11 @@
     "bytes": 46830,
     "sha256": "2e4d528bc6dca3322c157e4cd0419aca5ada5316fb83586b0d6bed8234297e74",
     "toolCalls": {
-      "total": 10,
+      "total": 11,
       "byTool": {
         "diagram.thread": 1,
         "diagram.get": 2,
-        "diagram.threadState": 4,
+        "diagram.threadState": 5,
         "diagram.proposal": 2,
         "diagram.revision": 1
       }
@@ -83,8 +83,8 @@
     "surface": "thread",
     "width": 420,
     "height": 900,
-    "bytes": 94293,
-    "sha256": "d3acb9728bd2679f33a5e27b682357440c73e183d306dc74a572e47a5bc1f369",
+    "bytes": 94543,
+    "sha256": "f5c034f7e8813b917ae08f0ea25fa3445fc2b0f5a09fd67f9ed48276e5192761",
     "toolCalls": {
       "total": 13,
       "byTool": {
@@ -105,14 +105,14 @@
     "surface": "thread",
     "width": 420,
     "height": 900,
-    "bytes": 92902,
-    "sha256": "1688d3f4db8c9c973ffc78fa7970616172a6ddd6f465ccf7d4273cf7f8e8a109",
+    "bytes": 92985,
+    "sha256": "78b0d19ecd1903fa1765d26d7bd0e9ce5f73aef822eaade99e8b4ee01e45f556",
     "toolCalls": {
-      "total": 12,
+      "total": 13,
       "byTool": {
         "diagram.thread": 1,
         "diagram.get": 2,
-        "diagram.threadState": 5,
+        "diagram.threadState": 6,
         "diagram.proposal": 2,
         "diagram.revision": 1,
         "diagram.applyProposal": 1

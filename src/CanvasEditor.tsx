@@ -5,7 +5,8 @@ import { canvasNodeRelations, resolveCanvasRelationshipFocus, searchCanvasRelati
 import { canvasKeyDependencyLens, preferKeyDependencyLens } from './canvasDependencyLens.js'
 import { canvasArchitecturePlainTitleLines } from './canvasNodeTitleLayout.js'
 import { CanvasRectIndex } from './canvasRectIndex.js'
-import { canvasArrowCrossesViewport, MAX_CANVAS_ZOOM, panCanvasViewport, zoomCanvasViewport } from './canvasViewport.js'
+import { canvasArrowCrossesViewport, MAX_CANVAS_ZOOM } from './canvasViewport.js'
+import { useCanvasViewport } from './useCanvasViewport.js'
 import { buildCanvasPlaybackPlan } from './canvasPlayback.js'
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Hand, Link2, MousePointer2, Shapes, Type, type IconNode } from 'lucide'
@@ -424,7 +425,6 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   const [connectPreviewPoint, setConnectPreviewPoint] = useState<CanvasPoint | null>(null)
   const [arrowEndpointPreview, setArrowEndpointPreview] = useState<{ id: string; endpoint: 'from' | 'to'; fixedPoint: CanvasPoint; point: CanvasPoint; targetId?: string; targetAnchor?: Exclude<CanvasAnchor, 'auto'> } | null>(null)
   const [insertTarget, setInsertTarget] = useState<InsertTarget | null>(null)
-  const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, zoom: 1 })
   const [selectionRect, setSelectionRect] = useState<SelectionRect | null>(null)
   const [snapGuides, setSnapGuides] = useState<SnapGuides>({})
   const [gesturePositionOverrides, setGesturePositionOverrides] = useState<Record<string, CanvasPoint> | null>(null)
@@ -436,7 +436,6 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   const [imageSources, setImageSources] = useState<Record<string, string>>({})
   const [imageImportError, setImageImportError] = useState<string | null>(null)
   const [imageImporting, setImageImporting] = useState(false)
-  const [spacePanning, setSpacePanning] = useState(false)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [sourceLinkQuery, setSourceLinkQuery] = useState('')
   const [sourceLinkOptions, setSourceLinkOptions] = useState<string[]>([])
@@ -463,13 +462,26 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   const [selectedGroupTarget, setSelectedGroupTarget] = useState<string | null>(null)
   const [detailsExpanded, setDetailsExpanded] = useState(false)
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false)
-  const [minimapOpen, setMinimapOpen] = useState<boolean | null>(null)
   const [highlightedIds, setHighlightedIds] = useState<Set<string>>(new Set())
   const [traceDirection, setTraceDirection] = useState<CanvasTraceDirection | null>(null)
   const [traceDepth, setTraceDepth] = useState(2)
   const editorRef = useRef<HTMLDivElement>(null)
   const surfaceRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
+  const {
+    viewport,
+    setViewport,
+    viewportRef,
+    spacePanning,
+    setSpacePanning,
+    minimapOpen,
+    setMinimapOpen,
+    zoomAt,
+    handleWheel,
+    fitRects,
+    recenterFromMinimap,
+    reset: resetViewport,
+  } = useCanvasViewport({ currentScene, svgRef })
   const initialReadabilityApplied = useRef(false)
   const textInputRef = useRef<HTMLInputElement>(null)
   const drag = useRef<DragState | null>(null)
@@ -498,7 +510,6 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   const lastTransitionKey = useRef<string | undefined>(undefined)
   const lastFocusKey = useRef<string | undefined>(undefined)
   const lastTraceKey = useRef<string | undefined>(undefined)
-  const viewportRef = useRef(viewport)
   const arrowEndpointPreviewRef = useRef<typeof arrowEndpointPreview>(null)
   const insertTargetRef = useRef<typeof insertTarget>(null)
   const gesturePositionOverridesRef = useRef<typeof gesturePositionOverrides>(null)
@@ -596,10 +607,6 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
     if (!exists) setArchitectureScope(null)
   }, [architectureScope, parsed.scene])
 
-  useEffect(() => {
-    viewportRef.current = viewport
-  }, [viewport])
-
   useEffect(() => () => {
     if (gestureVisualFrameRef.current !== null) window.cancelAnimationFrame(gestureVisualFrameRef.current)
     if (geometryDraftFrameRef.current !== null) window.cancelAnimationFrame(geometryDraftFrameRef.current)
@@ -696,7 +703,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
         }
         if (architectureScope) {
           setArchitectureScope(null)
-          setViewport({ x: 0, y: 0, zoom: 1 })
+          resetViewport()
           return
         }
         setContextMenu(null)
@@ -1818,23 +1825,9 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   }
 
   function focusBoxes(ids: string[]) {
-    const live = currentScene()
-    const targets = live.elements.filter((item): item is CanvasNode | CanvasNote => item.type !== 'arrow' && ids.includes(item.id))
+    const targets = currentScene().elements.filter((item): item is CanvasNode | CanvasNote => item.type !== 'arrow' && ids.includes(item.id))
     if (!targets.length) return
-    const left = Math.min(...targets.map((item) => item.x))
-    const top = Math.min(...targets.map((item) => item.y))
-    const right = Math.max(...targets.map((item) => item.x + item.width))
-    const bottom = Math.max(...targets.map((item) => item.y + item.height))
-    const width = Math.max(280, right - left + 200)
-    const height = Math.max(180, bottom - top + 160)
-    const zoom = clamp(Math.min(live.width / width, live.height / height), 0.8, 2.6)
-    const viewWidth = live.width / zoom
-    const viewHeight = live.height / zoom
-    setViewport({
-      zoom,
-      x: clamp((left + right) / 2 - viewWidth / 2, 0, Math.max(0, live.width - viewWidth)),
-      y: clamp((top + bottom) / 2 - viewHeight / 2, 0, Math.max(0, live.height - viewHeight)),
-    })
+    fitRects(targets, { minWidth: 280, minHeight: 180, paddingX: 200, paddingY: 160, minZoom: 0.8, maxZoom: 2.6 })
   }
 
   function viewGuidedRelation(nodeId: string, index: number) {
@@ -1860,7 +1853,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
     setArchitectureScope(null)
     setSelectedGroupTarget(null)
     setSelectedIds([])
-    setViewport({ x: 0, y: 0, zoom: 1 })
+    resetViewport()
   }
 
   function focusArchitectureScene(projected: CanvasScene) {
@@ -1871,25 +1864,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
       ...boxes.map((item) => ({ x: item.x, y: item.y, width: item.width, height: item.height })),
       ...collapsedFrames.map((group) => ({ x: group.x, y: group.y, width: group.width, height: group.height })),
     ]
-    if (!rects.length) {
-      setViewport({ x: 0, y: 0, zoom: 1 })
-      return
-    }
-    const left = Math.min(...rects.map((item) => item.x))
-    const top = Math.min(...rects.map((item) => item.y))
-    const right = Math.max(...rects.map((item) => item.x + item.width))
-    const bottom = Math.max(...rects.map((item) => item.y + item.height))
-    const width = Math.max(360, right - left + 220)
-    const height = Math.max(240, bottom - top + 190)
-    const live = currentScene()
-    const zoom = clamp(Math.min(live.width / width, live.height / height), 0.65, 2.3)
-    const viewWidth = live.width / zoom
-    const viewHeight = live.height / zoom
-    setViewport({
-      zoom,
-      x: clamp((left + right) / 2 - viewWidth / 2, 0, Math.max(0, live.width - viewWidth)),
-      y: clamp((top + bottom) / 2 - viewHeight / 2, 0, Math.max(0, live.height - viewHeight)),
-    })
+    fitRects(rects, { minWidth: 360, minHeight: 240, paddingX: 220, paddingY: 190, minZoom: 0.65, maxZoom: 2.3 })
   }
 
   function revealAndFocus(ids: string[]) {
@@ -2664,36 +2639,6 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
     updateElement(arrow.id, (item) => item.type === 'arrow' ? { ...item, points } : item)
   }
 
-  function zoomAt(nextZoom: number, clientX?: number, clientY?: number) {
-    const live = currentScene()
-    const bounds = svgRef.current?.getBoundingClientRect()
-    setViewport(zoomCanvasViewport({
-      viewport,
-      scene: live,
-      nextZoom,
-      ...(bounds ? { container: { width: bounds.width, height: bounds.height, left: bounds.left, top: bounds.top } } : {}),
-      ...(clientX !== undefined ? { clientX } : {}),
-      ...(clientY !== undefined ? { clientY } : {}),
-    }))
-  }
-
-  function handleWheel(event: React.WheelEvent<SVGSVGElement>) {
-    event.preventDefault()
-    if (event.metaKey || event.ctrlKey) {
-      zoomAt(viewport.zoom * (event.deltaY > 0 ? 0.9 : 1.1), event.clientX, event.clientY)
-      return
-    }
-    const live = currentScene()
-    const bounds = event.currentTarget.getBoundingClientRect()
-    setViewport((current) => panCanvasViewport({
-      viewport: current,
-      scene: live,
-      container: { width: bounds.width, height: bounds.height },
-      deltaX: event.deltaX,
-      deltaY: event.deltaY,
-    }))
-  }
-
   function fit() {
     if (scene.architecture) {
       focusArchitectureScene(renderScene)
@@ -2703,7 +2648,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
       focusBoxes(boxes.map((item) => item.id))
       return
     }
-    setViewport({ x: 0, y: 0, zoom: 1 })
+    resetViewport()
   }
 
   function readArchitectureClearly() {
@@ -2712,21 +2657,6 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
     if (!live.architecture || !bounds) return
     setViewport(recommendArchitectureReadingViewport(
       renderScene, bounds.width, bounds.height, viewport.zoom, 11.5, MAX_CANVAS_ZOOM))
-  }
-
-  function recenterFromMinimap(event: React.PointerEvent<SVGSVGElement>) {
-    const bounds = event.currentTarget.getBoundingClientRect()
-    const targetX = minimapViewBounds.x + ((event.clientX - bounds.left) / Math.max(1, bounds.width)) * minimapViewBounds.width
-    const targetY = minimapViewBounds.y + ((event.clientY - bounds.top) / Math.max(1, bounds.height)) * minimapViewBounds.height
-    setViewport((current) => {
-      const width = scene.width / current.zoom
-      const height = scene.height / current.zoom
-      return {
-        ...current,
-        x: clamp(targetX - width / 2, 0, Math.max(0, scene.width - width)),
-        y: clamp(targetY - height / 2, 0, Math.max(0, scene.height - height)),
-      }
-    })
   }
 
   const viewWidth = scene.width / viewport.zoom
@@ -3779,7 +3709,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
           {scene.architecture ? <button type="button" aria-label="清晰阅读架构图主链" title="聚焦真实主业务链并放大节点文字；适配可返回全图" onClick={readArchitectureClearly}>主链</button> : null}
           <button type="button" aria-label="适配画布" onClick={fit}>适配</button>
         </div>
-        {minimapVisible ? <svg className={`freeform-minimap${architectureScope ? ' is-scoped' : ''}`} aria-label={architectureScope ? '当前架构范围缩略图' : '画布缩略图'} viewBox={`${minimapViewBounds.x} ${minimapViewBounds.y} ${minimapViewBounds.width} ${minimapViewBounds.height}`} onPointerDown={recenterFromMinimap}>
+        {minimapVisible ? <svg className={`freeform-minimap${architectureScope ? ' is-scoped' : ''}`} aria-label={architectureScope ? '当前架构范围缩略图' : '画布缩略图'} viewBox={`${minimapViewBounds.x} ${minimapViewBounds.y} ${minimapViewBounds.width} ${minimapViewBounds.height}`} onPointerDown={(event) => recenterFromMinimap(event, minimapViewBounds)}>
           <rect x={minimapViewBounds.x} y={minimapViewBounds.y} width={minimapViewBounds.width} height={minimapViewBounds.height} className="freeform-minimap-bg" />
           {canvasPresentationGroupFrames(renderScene, displayGroupBounds).filter((group) => (
             group.collapsed
