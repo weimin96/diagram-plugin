@@ -238,3 +238,33 @@ test('源码同步优先精确路径，拒绝有歧义的后缀', async () => {
     assert.equal(await readFile(path.join(root, created.path), 'utf8'), before)
   } finally { await client.close(); await rm(root, { recursive: true, force: true }) }
 })
+
+const TOOL_SURFACE = [
+  'applyProposal', 'beautifyArchitecture', 'closeThreadDiagram', 'composeArchitecture', 'composeProposalBranches',
+  'create', 'delete', 'designGuide', 'dismissGitImpact', 'dismissProposal', 'duplicate', 'exportAsset', 'findBySource',
+  'get', 'getSubgraph', 'gitChanges', 'gitImpact', 'impactFromGit', 'importImageAsset', 'inspectQuality', 'list',
+  'openWorkspace', 'patchGraph', 'patchHistory', 'proposal', 'proposeSubgraphPatch', 'proposeSubgraphUpdate',
+  'proposeUpdate', 'readImageAsset', 'redoPatchHistory', 'redoPatchHistoryChain', 'rename', 'restore', 'revision',
+  'routeArchitectureEdges', 'searchArchitectureTemplates', 'selectProposalBranch', 'sources', 'thread', 'threadState',
+  'trace', 'undoPatchHistory', 'undoPatchHistoryChain', 'update', 'upsertSourceNode', 'upsertSourceNodes', 'workspace',
+]
+const MODEL_SURFACE = [
+  'beautifyArchitecture', 'composeArchitecture', 'composeProposalBranches', 'create', 'delete', 'designGuide',
+  'duplicate', 'findBySource', 'get', 'getSubgraph', 'gitChanges', 'impactFromGit', 'inspectQuality', 'list',
+  'patchGraph', 'proposeSubgraphPatch', 'proposeSubgraphUpdate', 'proposeUpdate', 'rename', 'routeArchitectureEdges',
+  'searchArchitectureTemplates', 'thread', 'trace', 'update', 'upsertSourceNode', 'upsertSourceNodes',
+]
+
+test('工具面是稳定契约：47 个注册工具、26 个模型可见工具，增删必须显式过审', async () => {
+  const client = await connect()
+  try {
+    const tools = (await client.listTools()).tools
+    const names = tools.map((tool) => tool.name).sort()
+    assert.deepEqual(names, TOOL_SURFACE.map((name) => `diagram.${name}`).sort())
+    assert.deepEqual(tools.filter(isModelTool).map((tool) => tool.name.replace(/^diagram\./, '')).sort(), MODEL_SURFACE.slice().sort())
+    for (const tool of tools) {
+      assert.equal(tool.inputSchema?.type, 'object', `${tool.name} must declare an object schema`)
+      assert.ok((tool.description ?? '').length > 10, `${tool.name} needs a description the model can act on`)
+    }
+  } finally { await client.close() }
+})
