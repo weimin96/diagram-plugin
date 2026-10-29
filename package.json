@@ -42,7 +42,8 @@
     "visual:verify": "pnpm visual:smoke && pnpm visual:benchmark && pnpm visual:styles && pnpm visual:regression",
     "plugin:install": "pnpm build && node scripts/install-codex-plugin.mjs",
     "plugin:install:desktop": "pnpm plugin:install && node scripts/reload-codex-desktop.mjs",
-    "check:hosts": "node scripts/check-test-budget.mjs && node --test tests/integration/*.test.mjs"
+    "check:hosts": "node scripts/check-test-budget.mjs && node --test tests/integration/*.test.mjs",
+    "reload:web": "node scripts/reload-web-plugin.mjs"
   },
   "dependencies": {
     "@codemirror/language": "^6.11.3",
