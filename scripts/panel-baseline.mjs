@@ -69,6 +69,50 @@ const cases = [
       expectCalls: ['diagram.get'],
     },
   },
+  // Undo must be wired to the same history the toolbar renders. Tidy the
+  // architecture routing (one real commit), then undo and expect the source
+  // text to be byte-identical to what it was before.
+  {
+    id: 'canvas-undo',
+    surface: 'thread',
+    width: 1100,
+    height: 900,
+    settleMs: 1600,
+    action: {
+      label: '整理连线后撤销',
+      prepare: `(async () => {
+        const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+        const source = () => [...document.querySelectorAll('[data-element-id]')]
+          .map((element) => element.getAttribute('data-element-id') + ':' + element.getAttribute('transform'))
+          .join('|')
+        const canvasTab = document.querySelector('.thread-diagram-tab:nth-child(2) .thread-diagram-tab-main')
+        if (!canvasTab) return 'missing canvas tab'
+        canvasTab.click()
+        for (let attempt = 0; attempt < 60 && !document.querySelector('.freeform-svg'); attempt += 1) await wait(50)
+        if (!document.querySelector('.freeform-svg')) return 'canvas editor did not open'
+        const button = (text) => [...document.querySelectorAll('.freeform-floating-toolbar button, [role="menu"] button, .freeform-toolbar-menu button')]
+          .find((item) => (item.textContent || '').trim() === text)
+        window.__orig = source()
+        const trigger = [...document.querySelectorAll('.freeform-floating-toolbar button')]
+          .find((item) => (item.textContent || '').trim().startsWith('布局'))
+        if (!trigger) return 'missing layout trigger'
+        trigger.click()
+        for (let attempt = 0; attempt < 40 && !button('重新整理'); attempt += 1) await wait(50)
+        const tidy = button('重新整理')
+        if (!tidy) return 'missing tidy button'
+        tidy.click()
+        for (let attempt = 0; attempt < 60 && source() === window.__orig; attempt += 1) await wait(50)
+        if (source() === window.__orig) return 'tidy did not change the source'
+        window.__tidied = source()
+        return 'ok'
+      })()`,
+      click: 'button[aria-label="撤销"]',
+      expectEval: [
+        { expression: `[...document.querySelectorAll('[data-element-id]')].map((element) => element.getAttribute('data-element-id') + ':' + element.getAttribute('transform')).join('|') === window.__orig`, expected: true },
+        { expression: `document.querySelector('button[aria-label="重做"]').disabled`, expected: false },
+      ],
+    },
+  },
   // A fresh AI proposal opens its review surface; this pins that dialog at panel width.
   { id: 'thread-proposal-review', surface: 'thread', width: 420, height: 900, proposal: true, settleMs: 2600 },
   // Interaction cases: a click must reach the host and move the surface. Pixels alone
@@ -309,6 +353,10 @@ async function compareOne(client, id, entry) {
 // Drives one real user action and asserts what the panel did about it. A rendered
 // button proves nothing: the click must reach the host and the surface must change.
 async function runAction(client, action) {
+  if (action.prepare) {
+    const prepared = await evaluate(client, action.prepare)
+    if (prepared !== 'ok') return { ok: false, reason: `「${action.label}」的准备步骤失败：${prepared}` }
+  }
   const clicked = await evaluate(client, `(() => {
     const target = document.querySelector(${JSON.stringify(action.click)})
     if (!target) return 'missing'
@@ -349,6 +397,12 @@ async function runAction(client, action) {
   for (const name of action.expectCalls ?? []) {
     if (!state.calls.includes(name)) {
       return { ok: false, reason: `点击「${action.label}」没有触发 ${name}（实际调用：${state.calls.join(', ') || '无'}）`, calls: state.calls }
+    }
+  }
+  for (const check of action.expectEval ?? []) {
+    const actual = await evaluate(client, check.expression)
+    if (JSON.stringify(actual) !== JSON.stringify(check.expected)) {
+      return { ok: false, reason: `「${action.label}」后 ${check.expression} 是 ${JSON.stringify(actual)}，期望 ${JSON.stringify(check.expected)}`, calls: state.calls }
     }
   }
   for (const [index, item] of (action.expectText ?? []).entries()) {

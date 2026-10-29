@@ -69,11 +69,11 @@
     "bytes": 46830,
     "sha256": "2e4d528bc6dca3322c157e4cd0419aca5ada5316fb83586b0d6bed8234297e74",
     "toolCalls": {
-      "total": 11,
+      "total": 10,
       "byTool": {
         "diagram.thread": 1,
         "diagram.get": 2,
-        "diagram.threadState": 5,
+        "diagram.threadState": 4,
         "diagram.proposal": 2,
         "diagram.revision": 1
       }
@@ -86,11 +86,11 @@
     "bytes": 94543,
     "sha256": "f5c034f7e8813b917ae08f0ea25fa3445fc2b0f5a09fd67f9ed48276e5192761",
     "toolCalls": {
-      "total": 13,
+      "total": 12,
       "byTool": {
         "diagram.thread": 1,
         "diagram.get": 2,
-        "diagram.threadState": 6,
+        "diagram.threadState": 5,
         "diagram.proposal": 2,
         "diagram.revision": 1,
         "diagram.dismissProposal": 1
@@ -108,11 +108,11 @@
     "bytes": 92985,
     "sha256": "78b0d19ecd1903fa1765d26d7bd0e9ce5f73aef822eaade99e8b4ee01e45f556",
     "toolCalls": {
-      "total": 13,
+      "total": 12,
       "byTool": {
         "diagram.thread": 1,
         "diagram.get": 2,
-        "diagram.threadState": 6,
+        "diagram.threadState": 5,
         "diagram.proposal": 2,
         "diagram.revision": 1,
         "diagram.applyProposal": 1
@@ -120,6 +120,25 @@
     },
     "action": {
       "label": "全部接受",
+      "ok": true
+    }
+  },
+  "canvas-undo": {
+    "surface": "thread",
+    "width": 1100,
+    "height": 900,
+    "bytes": 165525,
+    "sha256": "2efdb6539ae9a0af9d320e69bde67f9690b2b053393556c774c8535c1701a519",
+    "toolCalls": {
+      "total": 9,
+      "byTool": {
+        "diagram.thread": 1,
+        "diagram.get": 2,
+        "diagram.threadState": 6
+      }
+    },
+    "action": {
+      "label": "整理连线后撤销",
       "ok": true
     }
   }
