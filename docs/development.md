@@ -69,12 +69,12 @@ pnpm check:hosts
 `visual:smoke` / `visual:regression` 只渲染图表本身，不覆盖承载图表的面板与编辑器。面板层的行为由 `scripts/panel-baseline.mjs` 单独守住：
 
 ```sh
-pnpm baseline:panel            # 8 个形态：像素 + 宿主调用预算 + 交互断言
+pnpm baseline:panel            # 9 个形态：像素 + 宿主调用预算 + 交互断言
 node scripts/panel-baseline.mjs --only=thread-canvas --update
 ```
 
 - 脚本用 `package/dist/app.js` 与 `app.css` 的真实产物，在 node:http 临时页里以桩宿主（`diagram.ready` / `diagram.connect` / MessagePort）驱动面板，并通过 CDP `Emulation.setDeviceMetricsOverride` 设定真实视口——Chrome 会把 `--window-size=420` 夹到约 500px 再裁剪，直接用窗口参数会得到假布局。
-- 形态：workspace 1440×900、thread 1100×900、thread 420×900、thread-canvas（点击画布标签后编辑器真实渲染）、canvas-undo（重新整理后撤销，要求所有 `data-element-id` 变换逐字还原且重做可用）、thread-proposal-review，以及 proposal-reject / proposal-accept（点击 拒绝 / 全部接受，断言评审面关闭、对应工具被调用、文档回到已保存）。
+- 形态：workspace 1440×900、thread 1100×900、thread 420×900、thread-canvas（点击画布标签后编辑器真实渲染）、canvas-undo（重新整理后撤销，要求所有 `data-element-id` 变换逐字还原且重做可用）、canvas-layer-select（从层级面板点击节点，断言恰好一个节点被选中且属性面板出现）、thread-proposal-review，以及 proposal-reject / proposal-accept（点击 拒绝 / 全部接受，断言评审面关闭、对应工具被调用、文档回到已保存）。
 - 比较用 8×8 块平均而不是 sha256：Chrome 每次重新栅格化文字会产生轻微抗锯齿差异，精确哈希会让门禁永远为红并被忽略。块平均消除亚像素文字噪声，控件移动或改色仍会命中。渲染统一加 `--disable-lcd-text` 与 `--force-color-profile=srgb` 保持字形边缘稳定。
 - 每个形态记录宿主调用次数并受预算约束（默认 24）。轮询风暴在像素上不可见：跟随 effect 曾因 `callTool`/`selectDiagram` 进入依赖而每次渲染重建，3 秒发出约 500 次 `diagram.threadState`，正是这条预算抓到的。
 - 基线存于 `tests/fixtures/panel-baseline/`（PNG + `manifest.json` 含 bytes、sha256、toolCalls）。`--only=<id> --update` 只更新单个形态并与已存 manifest 合并；默认不带 `--strict` 时漂移只报告，`--strict` 才非零退出。

@@ -113,6 +113,38 @@ const cases = [
       ],
     },
   },
+  // Selection through the layer panel: a real click must select exactly one
+  // node and open the inspector. The panel lists every node, so this avoids
+  // clicking architecture geometry that may sit outside the visible preview.
+  {
+    id: 'canvas-layer-select',
+    surface: 'thread',
+    width: 1100,
+    height: 900,
+    settleMs: 1600,
+    action: {
+      label: '从层级面板选择节点',
+      prepare: `(async () => {
+        const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+        const canvasTab = document.querySelector('.thread-diagram-tab:nth-child(2) .thread-diagram-tab-main')
+        if (!canvasTab) return 'missing canvas tab'
+        canvasTab.click()
+        for (let attempt = 0; attempt < 60 && !document.querySelector('.freeform-svg'); attempt += 1) await wait(50)
+        if (!document.querySelector('.freeform-svg')) return 'canvas editor did not open'
+        const layers = [...document.querySelectorAll('.freeform-floating-toolbar button')]
+          .find((item) => (item.textContent || '').trim() === '层级')
+        if (!layers) return 'missing layers button'
+        layers.click()
+        for (let attempt = 0; attempt < 40 && !document.querySelector('.freeform-layer-panel'); attempt += 1) await wait(50)
+        return document.querySelector('.freeform-layer-panel') ? 'ok' : 'layers panel did not open'
+      })()`,
+      click: '.freeform-layer-panel section:last-of-type button',
+      expectEval: [
+        { expression: `document.querySelectorAll('.freeform-box.is-selected').length`, expected: 1 },
+        { expression: `Boolean(document.querySelector('.freeform-inspector'))`, expected: true },
+      ],
+    },
+  },
   // A fresh AI proposal opens its review surface; this pins that dialog at panel width.
   { id: 'thread-proposal-review', surface: 'thread', width: 420, height: 900, proposal: true, settleMs: 2600 },
   // Interaction cases: a click must reach the host and move the surface. Pixels alone

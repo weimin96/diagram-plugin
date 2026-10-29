@@ -127,8 +127,8 @@
     "surface": "thread",
     "width": 1100,
     "height": 900,
-    "bytes": 165525,
-    "sha256": "2efdb6539ae9a0af9d320e69bde67f9690b2b053393556c774c8535c1701a519",
+    "bytes": 165522,
+    "sha256": "5cad820e9bea31f8e676dd775c6f1bf9f0054f474e7bb6d69c81d6cec6c6fdee",
     "toolCalls": {
       "total": 9,
       "byTool": {
@@ -139,6 +139,25 @@
     },
     "action": {
       "label": "整理连线后撤销",
+      "ok": true
+    }
+  },
+  "canvas-layer-select": {
+    "surface": "thread",
+    "width": 1100,
+    "height": 900,
+    "bytes": 178314,
+    "sha256": "e6477ae9e699c5549383b0fe3e6eb4e3073f666016bf894b6b75a08c055e93e5",
+    "toolCalls": {
+      "total": 7,
+      "byTool": {
+        "diagram.thread": 1,
+        "diagram.get": 2,
+        "diagram.threadState": 4
+      }
+    },
+    "action": {
+      "label": "从层级面板选择节点",
       "ok": true
     }
   }
