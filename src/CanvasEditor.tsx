@@ -10,6 +10,8 @@ import { useCanvasViewport } from './useCanvasViewport.js'
 import { useCanvasDocument } from './useCanvasDocument.js'
 import { selectableCanvasIds, toggleCanvasSelection } from './canvasSelection.js'
 import { useCanvasSelection } from './useCanvasSelection.js'
+import { useCanvasGestureDrafts } from './useCanvasGestureDrafts.js'
+import type { GestureVisualDraft, InsertTarget, SnapGuides } from './canvasGesture.js'
 import { buildCanvasPlaybackPlan } from './canvasPlayback.js'
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Hand, Link2, MousePointer2, Shapes, Type, type IconNode } from 'lucide'
@@ -60,15 +62,6 @@ interface CanvasEditorProps {
 type Viewport = { x: number; y: number; zoom: number }
 type SelectionRect = { x1: number; y1: number; x2: number; y2: number }
 type ContextMenuState = { x: number; y: number }
-type SnapGuides = {
-  x?: number
-  y?: number
-  spacing?: CanvasSpacingGuide[]
-  sizeLabel?: string
-  sizePoint?: CanvasPoint
-}
-type InsertTarget = { arrowId: string; point: CanvasPoint }
-type GestureVisualDraft = { positions: Record<string, CanvasPoint>; guides: SnapGuides; insertTarget: InsertTarget | null }
 type DragState =
   | { kind: 'move'; pointerId: number; startX: number; startY: number; before: string; positions: Map<string, { x: number; y: number }> }
   | { kind: 'pan'; pointerId: number; clientX: number; clientY: number; start: Viewport }
@@ -431,6 +424,14 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   const [transformDrafts, setTransformDrafts] = useState<Record<string, CanvasTransformBox> | null>(null)
   const [arrowPointDraft, setArrowPointDraft] = useState<{ id: string; points: CanvasPoint[] } | null>(null)
   const [arrowLabelDraft, setArrowLabelDraft] = useState<{ id: string; position: CanvasPoint } | null>(null)
+
+  const {
+    gesturePositionOverridesRef, insertTargetRef, transformDraftsRef, arrowPointDraftRef, arrowLabelDraftRef,
+    scheduleGestureVisual, clearGestureVisual, clearGeometryDrafts, scheduleGeometryDraftRender,
+  } = useCanvasGestureDrafts({
+    setGesturePositionOverrides, setSnapGuides, setInsertTarget,
+    setTransformDrafts, setArrowPointDraft, setArrowLabelDraft,
+  })
   const [lineDraft, setLineDraft] = useState<LineDraft | null>(null)
   const [freehandDraft, setFreehandDraft] = useState<FreehandDraft | null>(null)
   const [imageSources, setImageSources] = useState<Record<string, string>>({})
@@ -526,19 +527,11 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   const lastFocusKey = useRef<string | undefined>(undefined)
   const lastTraceKey = useRef<string | undefined>(undefined)
   const arrowEndpointPreviewRef = useRef<typeof arrowEndpointPreview>(null)
-  const insertTargetRef = useRef<typeof insertTarget>(null)
-  const gesturePositionOverridesRef = useRef<typeof gesturePositionOverrides>(null)
-  const transformDraftsRef = useRef<typeof transformDrafts>(null)
-  const arrowPointDraftRef = useRef<typeof arrowPointDraft>(null)
-  const arrowLabelDraftRef = useRef<typeof arrowLabelDraft>(null)
   const lineDraftRef = useRef<typeof lineDraft>(null)
   const freehandDraftRef = useRef<typeof freehandDraft>(null)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const imageLoadPathsRef = useRef(new Set<string>())
   const imageImportVersion = useRef(0)
-  const gestureVisualFrameRef = useRef<number | null>(null)
-  const pendingGestureVisualRef = useRef<GestureVisualDraft | null>(null)
-  const geometryDraftFrameRef = useRef<number | null>(null)
 
   useLayoutEffect(() => {
     if (!active) setImageImporting(false)
@@ -610,11 +603,6 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
         : parsed.scene.elements.some((item) => item.type !== 'arrow' && item.id === architectureScope.id)
     if (!exists) setArchitectureScope(null)
   }, [architectureScope, parsed.scene])
-
-  useEffect(() => () => {
-    if (gestureVisualFrameRef.current !== null) window.cancelAnimationFrame(gestureVisualFrameRef.current)
-    if (geometryDraftFrameRef.current !== null) window.cancelAnimationFrame(geometryDraftFrameRef.current)
-  }, [])
 
   useEffect(() => {
     if (!connectFrom) {
@@ -1251,56 +1239,6 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   function commit(next: CanvasScene, record = true, animate = false) {
     if (animate) layoutBefore.current = currentScene()
     applyScene(next, record)
-  }
-
-  function scheduleGestureVisual(draft: GestureVisualDraft) {
-    pendingGestureVisualRef.current = draft
-    if (gestureVisualFrameRef.current !== null) return
-    gestureVisualFrameRef.current = window.requestAnimationFrame(() => {
-      gestureVisualFrameRef.current = null
-      const pending = pendingGestureVisualRef.current
-      pendingGestureVisualRef.current = null
-      if (!pending) return
-      setGesturePositionOverrides(pending.positions)
-      setSnapGuides(pending.guides)
-      setInsertTarget(pending.insertTarget)
-    })
-  }
-
-  function clearGestureVisual() {
-    if (gestureVisualFrameRef.current !== null) {
-      window.cancelAnimationFrame(gestureVisualFrameRef.current)
-      gestureVisualFrameRef.current = null
-    }
-    pendingGestureVisualRef.current = null
-    gesturePositionOverridesRef.current = null
-    insertTargetRef.current = null
-    setGesturePositionOverrides(null)
-    setSnapGuides({})
-    setInsertTarget(null)
-  }
-
-  function clearGeometryDrafts() {
-    if (geometryDraftFrameRef.current !== null) {
-      window.cancelAnimationFrame(geometryDraftFrameRef.current)
-      geometryDraftFrameRef.current = null
-    }
-    transformDraftsRef.current = null
-    arrowPointDraftRef.current = null
-    arrowLabelDraftRef.current = null
-    setTransformDrafts(null)
-    setArrowPointDraft(null)
-    setArrowLabelDraft(null)
-  }
-
-  function scheduleGeometryDraftRender() {
-    if (geometryDraftFrameRef.current !== null) return
-    geometryDraftFrameRef.current = window.requestAnimationFrame(() => {
-      geometryDraftFrameRef.current = null
-      setTransformDrafts(transformDraftsRef.current)
-      setArrowPointDraft(arrowPointDraftRef.current)
-      setArrowLabelDraft(arrowLabelDraftRef.current)
-    })
   }
 
   function commitGeometry(next: CanvasScene, record = true, changedNodeIds?: Iterable<string>, animate = false) {
