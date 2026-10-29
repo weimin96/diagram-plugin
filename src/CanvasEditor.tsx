@@ -8,6 +8,8 @@ import { CanvasRectIndex } from './canvasRectIndex.js'
 import { canvasArrowCrossesViewport, MAX_CANVAS_ZOOM } from './canvasViewport.js'
 import { useCanvasViewport } from './useCanvasViewport.js'
 import { useCanvasDocument } from './useCanvasDocument.js'
+import { selectableCanvasIds, toggleCanvasSelection } from './canvasSelection.js'
+import { useCanvasSelection } from './useCanvasSelection.js'
 import { buildCanvasPlaybackPlan } from './canvasPlayback.js'
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Hand, Link2, MousePointer2, Shapes, Type, type IconNode } from 'lucide'
@@ -409,9 +411,6 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   const [keyDependenciesOnly, setKeyDependenciesOnly] = useState(() =>
     parsed.scene ? preferKeyDependencyLens(parsed.scene) : false)
   const [relationQuery, setRelationQuery] = useState('')
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const [hoveredRelationId, setHoveredRelationId] = useState<string | null>(null)
-  const [guidedRelation, setGuidedRelation] = useState<{ nodeId: string; index: number } | null>(null)
   const keyDependencyLens = useMemo(() => parsed.scene?.architecture
     ? canvasKeyDependencyLens(parsed.scene) : null, [parsed.scene])
   useEffect(() => {
@@ -494,6 +493,15 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
     canUndo,
     canRedo,
   } = useCanvasDocument({ source, scene: parsed.scene, onChange })
+  const {
+    selectedIds,
+    setSelectedIds,
+    selectedIdSet,
+    hoveredRelationId,
+    setHoveredRelationId,
+    guidedRelation,
+    setGuidedRelation,
+  } = useCanvasSelection({ scene: parsed.scene })
   const initialReadabilityApplied = useRef(false)
   const textInputRef = useRef<HTMLInputElement>(null)
   const drag = useRef<DragState | null>(null)
@@ -626,12 +634,6 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   }, [])
 
   useEffect(() => {
-    if (!parsed.scene) return
-    const valid = selectedIds.filter((id) => parsed.scene!.elements.some((item) => item.id === id))
-    if (valid.length !== selectedIds.length) setSelectedIds(valid)
-  }, [parsed.scene, selectedIds])
-
-  useEffect(() => {
     const element = editorRef.current
     if (!element) return
     const onKeyDown = (event: KeyboardEvent) => {
@@ -658,7 +660,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
       }
       if (mod && event.key.toLowerCase() === 'a') {
         event.preventDefault()
-        setSelectedIds(currentScene().elements.filter((item) => item.type !== 'arrow').map((item) => item.id))
+        setSelectedIds(selectableCanvasIds(currentScene().elements))
         return
       }
       if (mod && event.key.toLowerCase() === 'c') {
@@ -928,11 +930,6 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   [selectedIds, sourceBoxes, sourceArrows])
   const selectedNodeEdges = selectedNodeRelations
     ? [...selectedNodeRelations.incoming, ...selectedNodeRelations.outgoing] : []
-  useEffect(() => {
-    if (guidedRelation && (selectedIds.length !== 1 || selectedIds[0] !== guidedRelation.nodeId)) {
-      setGuidedRelation(null)
-    }
-  }, [guidedRelation, selectedIds])
   const sourceCollisionIndex = useMemo(() => selectedIds.length > 3 ? new CanvasRectIndex(sourceBoxes) : null, [selectedIds.length > 3, sourceBoxes])
   const staticRenderItems = useMemo(() => {
     const scene = staticSemanticLodProjection?.scene
@@ -1180,7 +1177,6 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   const relationBundleTrunks = Boolean(gesturePositionOverrides) && renderArrows.length > 120
     ? []
     : reuseStaticRelationships && staticRelationshipGeometry ? staticRelationshipGeometry.trunks : canvasBundleTrunks(relationshipRenderScene)
-  const selectedIdSet = new Set(selectedIds)
   const reusableVisibleLabels = Boolean(largeSceneViewportCulling && staticGeometry && !hasGeometryDraft && !arrowLabelDraft)
   const selectedArrowIds = reusableVisibleLabels ? viewportRenderArrows.filter((arrow) => selectedIdSet.has(arrow.id)).map((arrow) => arrow.id) : []
   const previouslyVisible = visibleLabelCache.current
@@ -3408,7 +3404,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                   y: ((fromMove ? fromMove.y - fromOrigin!.y : 0) + (toMove ? toMove.y - toOrigin!.y : 0)) / 2 }
               : null
             return (
-              <g key={arrow.id} data-element-id={arrow.id} className={`freeform-arrow emphasis-${displayArrow.emphasis ?? 'secondary'}${standalone ? ' is-free-line' : ''}${displayArrow.freehand ? ' is-freehand' : ''}${displayArrow.bundleKey ? ' is-bundled' : ''}${displayArrow.bundleKey?.startsWith('group:') ? ' is-group-bundle' : ''}${keyDependencyActive ? keyDependencyLens?.arrowIds.has(arrow.id) ? ' is-key-dependency' : ' is-key-dimmed' : ''}${relationFocus ? relationFocus.id === arrow.id ? ' is-relation-focused' : ' is-relation-dimmed' : ''}${selectedIds.includes(arrow.id) ? ' is-selected' : ''}${insertTarget?.arrowId === arrow.id ? ' is-insert-target' : ''}${displayArrow.lineStyle === 'dashed' ? ' is-dashed' : displayArrow.lineStyle === 'dotted' ? ' is-dotted' : ''}${traceResult ? tracedArrowIds.has(arrow.id) ? ' is-traced' : ' is-trace-dimmed' : ''}${highlightedIds.has(arrow.id) ? ' is-updated' : ''}`} style={displayArrow.opacity !== undefined ? { opacity: displayArrow.opacity } : undefined} onPointerEnter={() => { if (scene.architecture && tool === 'select') setHoveredRelationId(arrow.id) }} onPointerLeave={() => setHoveredRelationId((current) => current === arrow.id ? null : current)} onContextMenu={(event) => openContextMenu(event, arrow.id)} onPointerDown={(event) => { event.stopPropagation(); setContextMenu(null); setSelectedGroupTarget(null); editorRef.current?.focus({ preventScroll: true }); setSelectedIds(event.shiftKey ? toggleId(selectedIds, arrow.id) : [arrow.id]) }}>
+              <g key={arrow.id} data-element-id={arrow.id} className={`freeform-arrow emphasis-${displayArrow.emphasis ?? 'secondary'}${standalone ? ' is-free-line' : ''}${displayArrow.freehand ? ' is-freehand' : ''}${displayArrow.bundleKey ? ' is-bundled' : ''}${displayArrow.bundleKey?.startsWith('group:') ? ' is-group-bundle' : ''}${keyDependencyActive ? keyDependencyLens?.arrowIds.has(arrow.id) ? ' is-key-dependency' : ' is-key-dimmed' : ''}${relationFocus ? relationFocus.id === arrow.id ? ' is-relation-focused' : ' is-relation-dimmed' : ''}${selectedIds.includes(arrow.id) ? ' is-selected' : ''}${insertTarget?.arrowId === arrow.id ? ' is-insert-target' : ''}${displayArrow.lineStyle === 'dashed' ? ' is-dashed' : displayArrow.lineStyle === 'dotted' ? ' is-dotted' : ''}${traceResult ? tracedArrowIds.has(arrow.id) ? ' is-traced' : ' is-trace-dimmed' : ''}${highlightedIds.has(arrow.id) ? ' is-updated' : ''}`} style={displayArrow.opacity !== undefined ? { opacity: displayArrow.opacity } : undefined} onPointerEnter={() => { if (scene.architecture && tool === 'select') setHoveredRelationId(arrow.id) }} onPointerLeave={() => setHoveredRelationId((current) => current === arrow.id ? null : current)} onContextMenu={(event) => openContextMenu(event, arrow.id)} onPointerDown={(event) => { event.stopPropagation(); setContextMenu(null); setSelectedGroupTarget(null); editorRef.current?.focus({ preventScroll: true }); setSelectedIds(event.shiftKey ? toggleCanvasSelection(selectedIds, arrow.id) : [arrow.id]) }}>
                 <CanvasArrowInk label={displayArrow.label ?? (scene.architecture && from && to ? `${from.text} → ${to.text}` : undefined)} path={path} markerEnd={displayArrow.markerEnd === 'none' ? undefined : 'url(#canvas-arrow)'} strokeColor={displayArrow.strokeColor || visualSkin ? displayArrow.strokeColor ?? visualSkin?.edge : undefined} strokeWidth={displayArrow.strokeWidth} />
                 {displayArrow.label && labelLayout ? (
                   <g
@@ -4289,9 +4285,6 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
-function toggleId(ids: string[], id: string) {
-  return ids.includes(id) ? ids.filter((value) => value !== id) : [...ids, id]
-}
 
 function truncate(value: string, max: number) {
   const normalized = value.replace(/\s+/g, ' ').trim()

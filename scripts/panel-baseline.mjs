@@ -360,7 +360,10 @@ async function runAction(client, action) {
   const clicked = await evaluate(client, `(() => {
     const target = document.querySelector(${JSON.stringify(action.click)})
     if (!target) return 'missing'
-    target.click()
+    // SVG <g> has no click(); dispatch a bubbling MouseEvent so React's
+    // synthetic handler still sees a real user-shaped event.
+    if (typeof target.click === 'function') target.click()
+    else target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }))
     return 'clicked'
   })()`)
   if (clicked !== 'clicked') {
