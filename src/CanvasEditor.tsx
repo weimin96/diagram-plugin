@@ -7,6 +7,7 @@ import { canvasArchitecturePlainTitleLines } from './canvasNodeTitleLayout.js'
 import { CanvasRectIndex } from './canvasRectIndex.js'
 import { canvasArrowCrossesViewport, MAX_CANVAS_ZOOM } from './canvasViewport.js'
 import { useCanvasViewport } from './useCanvasViewport.js'
+import { useCanvasDocument } from './useCanvasDocument.js'
 import { buildCanvasPlaybackPlan } from './canvasPlayback.js'
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Hand, Link2, MousePointer2, Shapes, Type, type IconNode } from 'lucide'
@@ -482,6 +483,17 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
     recenterFromMinimap,
     reset: resetViewport,
   } = useCanvasViewport({ currentScene, svgRef })
+  const {
+    sourceRef,
+    sceneRef,
+    applyScene,
+    emitSource,
+    recordGesture,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+  } = useCanvasDocument({ source, scene: parsed.scene, onChange })
   const initialReadabilityApplied = useRef(false)
   const textInputRef = useRef<HTMLInputElement>(null)
   const drag = useRef<DragState | null>(null)
@@ -500,11 +512,6 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
     selectedArrowIds: string[]
     labels: ReturnType<typeof canvasArrowLabelLayouts>
   } | null>(null)
-  const sourceRef = useRef(source)
-  const sceneRef = useRef<CanvasScene | null>(parsed.scene)
-  const undoStack = useRef<string[]>([])
-  const redoStack = useRef<string[]>([])
-  const [, refreshHistoryControls] = useState(0)
   const clipboard = useRef<CanvasElement[]>([])
   const layoutBefore = useRef<CanvasScene | null>(null)
   const lastTransitionKey = useRef<string | undefined>(undefined)
@@ -557,17 +564,6 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
       parsed.scene, visible, bounds.width, bounds.height)
     if (recommended) setViewport(recommended)
   }, [active, parsed.scene])
-
-  useEffect(() => {
-    if (source !== sourceRef.current) {
-      // 外部源码更新建立新的撤销边界，避免旧的整图快照覆盖已同步内容。
-      undoStack.current = []
-      redoStack.current = []
-      refreshHistoryControls((revision) => revision + 1)
-    }
-    sourceRef.current = source
-    sceneRef.current = parsed.scene
-  }, [parsed.scene, source])
 
   useEffect(() => {
     if (!parsed.scene || !onResolveImage) return
@@ -1256,22 +1252,9 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
     return sceneRef.current
   }
 
-  function emitSource(nextSource: string, record = true) {
-    if (nextSource === sourceRef.current) return
-    if (record) {
-      undoStack.current.push(sourceRef.current)
-      if (undoStack.current.length > 100) undoStack.current.shift()
-      redoStack.current = []
-    }
-    sourceRef.current = nextSource
-    try { sceneRef.current = parseCanvasScene(nextSource) } catch { /* source editor owns invalid JSON */ }
-    onChange(nextSource)
-  }
-
   function commit(next: CanvasScene, record = true, animate = false) {
     if (animate) layoutBefore.current = currentScene()
-    sceneRef.current = next
-    emitSource(serializeCanvasScene(next), record)
+    applyScene(next, record)
   }
 
   function scheduleGestureVisual(draft: GestureVisualDraft) {
@@ -1384,27 +1367,6 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
     })
     setArchitectureDensity(density)
     commit(result.scene, true, true)
-  }
-
-  function recordGesture(before: string) {
-    if (before === sourceRef.current) return
-    undoStack.current.push(before)
-    if (undoStack.current.length > 100) undoStack.current.shift()
-    redoStack.current = []
-  }
-
-  function undo() {
-    const previous = undoStack.current.pop()
-    if (!previous) return
-    redoStack.current.push(sourceRef.current)
-    emitSource(previous, false)
-  }
-
-  function redo() {
-    const next = redoStack.current.pop()
-    if (!next) return
-    undoStack.current.push(sourceRef.current)
-    emitSource(next, false)
   }
 
   function updateElement(id: string, updater: (item: CanvasElement) => CanvasElement, record = true) {
@@ -3125,8 +3087,8 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
           </div>
           <div className="freeform-tool-history">
           <span className="freeform-toolbar-separator" />
-          <button type="button" title="撤销 ⌘Z" aria-label="撤销" disabled={undoStack.current.length === 0} onClick={undo}>↶</button>
-          <button type="button" title="重做 ⇧⌘Z" aria-label="重做" disabled={redoStack.current.length === 0} onClick={redo}>↷</button>
+          <button type="button" title="撤销 ⌘Z" aria-label="撤销" disabled={!canUndo} onClick={undo}>↶</button>
+          <button type="button" title="重做 ⇧⌘Z" aria-label="重做" disabled={!canRedo} onClick={redo}>↷</button>
           </div>
         </div>
 
