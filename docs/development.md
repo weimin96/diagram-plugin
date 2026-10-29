@@ -64,6 +64,22 @@ pnpm check:hosts
 
 `pnpm build` 生成同时支持 Codex 与 DSH 的 `package/`。宿主测试基于真实 MCP stdio 子进程，覆盖身份/工作区边界、候选保存、revision 冲突和工具可见性；单元测试负责领域合同。类型检查、打包通过不是 Desktop 原生人工验收。
 
+## 面板与编辑器门禁
+
+`visual:smoke` / `visual:regression` 只渲染图表本身，不覆盖承载图表的面板与编辑器。面板层的行为由 `scripts/panel-baseline.mjs` 单独守住：
+
+```sh
+pnpm baseline:panel            # 8 个形态：像素 + 宿主调用预算 + 交互断言
+node scripts/panel-baseline.mjs --only=thread-canvas --update
+```
+
+- 脚本用 `package/dist/app.js` 与 `app.css` 的真实产物，在 node:http 临时页里以桩宿主（`diagram.ready` / `diagram.connect` / MessagePort）驱动面板，并通过 CDP `Emulation.setDeviceMetricsOverride` 设定真实视口——Chrome 会把 `--window-size=420` 夹到约 500px 再裁剪，直接用窗口参数会得到假布局。
+- 形态：workspace 1440×900、thread 1100×900、thread 420×900、thread-canvas（点击画布标签后编辑器真实渲染）、canvas-undo（重新整理后撤销，要求所有 `data-element-id` 变换逐字还原且重做可用）、thread-proposal-review，以及 proposal-reject / proposal-accept（点击 拒绝 / 全部接受，断言评审面关闭、对应工具被调用、文档回到已保存）。
+- 比较用 8×8 块平均而不是 sha256：Chrome 每次重新栅格化文字会产生轻微抗锯齿差异，精确哈希会让门禁永远为红并被忽略。块平均消除亚像素文字噪声，控件移动或改色仍会命中。渲染统一加 `--disable-lcd-text` 与 `--force-color-profile=srgb` 保持字形边缘稳定。
+- 每个形态记录宿主调用次数并受预算约束（默认 24）。轮询风暴在像素上不可见：跟随 effect 曾因 `callTool`/`selectDiagram` 进入依赖而每次渲染重建，3 秒发出约 500 次 `diagram.threadState`，正是这条预算抓到的。
+- 基线存于 `tests/fixtures/panel-baseline/`（PNG + `manifest.json` 含 bytes、sha256、toolCalls）。`--only=<id> --update` 只更新单个形态并与已存 manifest 合并；默认不带 `--strict` 时漂移只报告，`--strict` 才非零退出。
+- 这层门禁证明的是面板 chrome 与交互接线没有回归，**不是**架构图可读性评审，也不能替代真实 Chrome 截图、六维像素评分与人工批准。
+
 ## 架构生成质量与真实性
 
 **2026-10-27 Composer 第一阶段收敛（不改变算法）**：在固定真实 12 个核心模块、26 条静态 import 上做单阶段消融，基线 **81.4/90、0 交叉、3 独立重叠**；去掉首轮走廊优化为 **66.0/90、3 交叉、3 重叠**，去掉同分区节点槽位为 **56.9/90、2 交叉、8 重叠**，去掉第二轮走廊优化为 **67.4/90、2 交叉、3 重叠**，去掉终局协商为 **65.7/90、1 交叉、7 重叠**。这些阶段在当前实现中均有独立收益，不能靠删除其中一个实现安全收敛，失败实验全部撤销。第一阶段只把隐式深层函数嵌套改为明确的四阶段顺序，同时统一四处重复的**节点遮挡、穿节点、标签碰撞**硬约束判定；各阶段特有的交叉、端口、走廊、共享主干及路长门禁保持原样。下一步应以更广的真实场景检验新的节点—端口—走廊联合候选，然后在输出与耗时均有证据时逐步替换现有阶段，不再追加独立修补环路。
