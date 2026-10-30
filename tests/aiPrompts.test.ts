@@ -127,6 +127,10 @@ test('architecture generation uses topology archetypes and a bounded quality loo
   }
   assert.deepEqual(enterprise.scene.groups?.map((group) => group.label), ['接入层', '应用层', '数据层'])
   assert.equal(enterprise.scene.groups?.every((group) => group.labelSide === 'left'), true)
+  const verifiedPath = composeEnterpriseArchitecture({ ...intent, primaryPath: ['Web', 'API', 'DB'] })
+  assert.equal(verifiedPath.scene.elements.filter((item) => item.type === 'node' && item.emphasis === 'primary').length, 3)
+  assert.equal(verifiedPath.scene.elements.filter((item) => item.type === 'arrow' && item.emphasis === 'primary').length, 2)
+  assert.equal(verifiedPath.summary.resolvedDensity, 'comfortable')
   assert.notEqual(engineering.scene.groups?.[0]?.labelSide, 'left')
   assert.throws(() => composeEnterpriseArchitecture({ ...intent, nodes: intent.nodes.map((node) => ({ ...node, layer: '应用层' })) }), /至少需要两个/)
 
@@ -156,6 +160,9 @@ test('architecture generation uses topology archetypes and a bounded quality loo
   assert.equal(dense.quality.metrics.nodeOverlaps, 0)
   assert.equal(dense.quality.metrics.edgeNodeIntersections, 0)
   assert.equal(dense.scene.groups?.length, 6)
+  assert.equal(dense.scene.architecture?.density, 'auto')
+  assert.equal(dense.summary.resolvedDensity, 'compact')
+  assert.equal(dense.summary.bundledEdges, dense.scene.elements.filter((item) => item.type === 'arrow' && item.bundleKey).length)
   assert.ok(dense.visualPlan.review && Array.isArray(dense.visualPlan.review.blockers))
 })
 

@@ -22,7 +22,11 @@ export function recommendArchitectureReadableZoom(
   if (!scene.architecture || viewportWidth <= 0 || viewportHeight <= 0 || scene.width <= 0 || scene.height <= 0) {
     return currentZoom
   }
-  const font = (scene.architecture.density === 'dense' ? 12 : 12.5) * (scene.architecture.titleScale ?? 1)
+  const generatedEnterpriseFont = scene.architecture.diagramStyle === 'enterprise'
+    ? Math.min(...scene.elements.filter((item): item is CanvasNode => item.type === 'node')
+      .map((item) => item.fontSize ?? 12.5)) : undefined
+  const font = (generatedEnterpriseFont ?? (scene.architecture.density === 'dense' ? 12 : 12.5))
+    * (scene.architecture.titleScale ?? 1)
   const screenScaleAtOne = Math.min(viewportWidth / scene.width, viewportHeight / scene.height)
   const target = targetFontPx / Math.max(.01, font * screenScaleAtOne)
   return Math.min(maxZoom, Math.max(currentZoom, 1, Math.ceil(target * 100) / 100))
@@ -76,11 +80,17 @@ export function recommendArchitectureInitialReadingViewport(
   viewportWidth: number,
   viewportHeight: number,
 ): { x: number; y: number; zoom: number } | null {
-  if (!scene.architecture || scene.architecture.view !== 'overview'
-    || scene.elements.filter((item) => item.type === 'node').length < 17
-    || (assessArchitecturePresentation(scene).estimatedTitlePxAtFit >= 11
-      && !visibleScene.groups?.some((group) => group.collapsed && group.id.startsWith('arch-')))
-    || viewportWidth <= 0 || viewportHeight <= 0) return null
+  if (!scene.architecture || viewportWidth <= 0 || viewportHeight <= 0) return null
+  const nodes = scene.elements.filter((item): item is CanvasNode => item.type === 'node')
+  if (nodes.length < 17) return null
+  const fitFont = Math.min(...nodes.map((node) => node.fontSize ?? (scene.architecture?.density === 'dense' ? 12 : 12.5)))
+    * Math.min(viewportWidth / scene.width, viewportHeight / scene.height)
+  const enterpriseDetail = scene.architecture.diagramStyle === 'enterprise'
+    && scene.architecture.view !== 'overview' && fitFont < 11.5
+  const unreadableOverview = scene.architecture.view === 'overview'
+    && (assessArchitecturePresentation(scene).estimatedTitlePxAtFit < 11
+      || visibleScene.groups?.some((group) => group.collapsed && group.id.startsWith('arch-')))
+  if (!enterpriseDetail && !unreadableOverview) return null
   return recommendArchitectureReadingViewport(visibleScene, viewportWidth, viewportHeight, 1)
 }
 
@@ -107,7 +117,9 @@ export function assessArchitecturePresentation(
 ): ArchitecturePresentationQuality {
   const nodes = scene.elements.filter((item): item is CanvasNode => item.type === 'node')
   const scale = Math.min(1, referenceWidth / Math.max(1, scene.width))
-  const nominalTitlePx = (scene.architecture?.density === 'dense' ? 12 : 12.5)
+  const nominalTitlePx = (scene.architecture?.diagramStyle === 'enterprise' && nodes.length
+    ? Math.min(...nodes.map((node) => node.fontSize ?? 12.5))
+    : scene.architecture?.density === 'dense' ? 12 : 12.5)
     * (scene.architecture?.titleScale ?? 1)
   const estimatedTitlePxAtFit = Math.round(nominalTitlePx * scale * 10) / 10
   if (!nodes.length || scene.width <= 0 || scene.height <= 0) {

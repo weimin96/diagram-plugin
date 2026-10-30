@@ -126,6 +126,15 @@ test('过宽架构总览初次打开自动聚焦可读区域，其他画布和�
   assert.ok(12.5 * recommendation.zoom * initialFitScale >= 11.5)
   assert.deepEqual(recommendArchitectureInitialReadingViewport(overview, overview, 900, 600), recommendation)
   assert.equal(recommendArchitectureInitialReadingViewport(wide, wide, 900, 600), null)
+  const enterprise: CanvasScene = { ...wide,
+    architecture: { ...wide.architecture!, diagramStyle: 'enterprise', view: 'detail' },
+    elements: wide.elements.map((item) => item.type === 'node' ? { ...item, fontSize: 16 } : item),
+  }
+  assert.equal(assessArchitecturePresentation(enterprise).estimatedTitlePxAtFit, 8)
+  const enterpriseCamera = recommendArchitectureInitialReadingViewport(enterprise, enterprise, 900, 600)
+  assert.ok(enterpriseCamera && enterpriseCamera.zoom > 1, '密集企业分层图从可读主链区域打开')
+  assert.ok(16 * enterpriseCamera.zoom * Math.min(900 / enterprise.width, 600 / enterprise.height) >= 11.5)
+  assert.equal(recommendArchitectureInitialReadingViewport({ ...enterprise, width: 900, height: 600 }, enterprise, 900, 600), null)
   assert.equal(recommendArchitectureInitialReadingViewport({ ...overview, architecture: undefined }, overview, 900, 600), null)
   assert.equal(recommendArchitectureInitialReadingViewport(overview, overview, 0, 600), null)
   assert.equal(recommendArchitectureInitialReadingViewport({ ...overview, width: 960 }, overview, 900, 600), null)

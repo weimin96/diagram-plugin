@@ -5,7 +5,8 @@ import { assessCanvasVisualQuality } from './canvasQuality.js'
 import { assessArchitectureRouteDiagnostics } from './architectureRouteDiagnostics.js'
 import { assessArchitecturePresentation } from './architecturePresentationQuality.js'
 import { planArchitectureVisual } from './architectureVisualPlan.js'
-import type { CanvasArrow, CanvasNode, CanvasScene } from './canvas.js'
+import { canvasVisualSkin } from './diagramVisualStyles.js'
+import { resolveCanvasArchitectureDensity, type CanvasArrow, type CanvasNode, type CanvasScene } from './canvas.js'
 
 const regionNames: Record<NonNullable<ArchitectureIntentGraph['nodes'][number]['partition']>, string> = {
   external: '外部与参与方', experience: '访问与接入层', application: '业务应用层',
@@ -117,15 +118,19 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
     nodes: nodes.map((node) => ({ text: node.text, subtitle: node.subtitle, icon: node.icon, width: nodeWidth, height: nodeHeight })),
   }))
   const template = buildLayeredTemplateScene(intent.title, { layers: specs })
+  const templateNodes = new Map(template.elements.filter((item): item is CanvasNode => item.type === 'node').map((item) => [item.id, item]))
+  const primaryNodes = new Set(intent.primaryPath ?? [])
+  const primaryStroke = canvasVisualSkin(intent.style ?? 'ocean', false, 'accent')?.stroke
   const elements: CanvasScene['elements'] = []
   let y = topInset
   for (const [layerIndex, [, nodes]] of entries.entries()) {
     nodes.forEach((node, nodeIndex) => {
-      const seed = template.elements.find((element) => element.id === `layer-${layerIndex + 1}-${nodeIndex + 1}`) as CanvasNode
+      const seed = templateNodes.get(`layer-${layerIndex + 1}-${nodeIndex + 1}`)!
       const { layer: _layer, partition: _partition, ...metadata } = node
       elements.push({
         ...seed, ...metadata, id: node.id, groupId: `__arch-layer-${layerIndex + 1}`,
         fontSize: 16,
+        ...(primaryNodes.has(node.id) ? { emphasis: 'primary' as const, strokeColor: primaryStroke, strokeWidth: 2 } : {}),
         x: leftInset + (nodeIndex % columns) * (nodeWidth + columnGap),
         y: y + Math.floor(nodeIndex / columns) * (nodeHeight + rowGap),
       })
@@ -148,7 +153,7 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
     height: Math.max(720, y + 40),
     style: intent.style ?? 'ocean',
     architecture: {
-      theme: intent.theme ?? 'presentation', diagramStyle: 'enterprise', view: 'detail', density: intent.density ?? 'comfortable',
+      theme: intent.theme ?? 'presentation', diagramStyle: 'enterprise', view: 'detail', density: intent.density ?? 'auto',
       ...(intent.visualScenario ? { scenario: intent.visualScenario } : {}),
     },
     elements: [...elements, ...arrows],
@@ -162,7 +167,8 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
     semanticComposition: 'layered' as const,
     summary: { theme: scene.architecture!.theme, composition: 'layered' as const, partitions: entries.length,
       enrichedNodes: elements.length, routedEdges: arrows.length, primaryNodes: intent.primaryPath?.length ?? 0,
-      bundledEdges: 0, view: 'detail' as const, density: scene.architecture!.density!, resolvedDensity: 'comfortable' as const },
+      bundledEdges: scene.elements.filter((item) => item.type === 'arrow' && Boolean(item.bundleKey)).length,
+      view: 'detail' as const, density: scene.architecture!.density!, resolvedDensity: resolveCanvasArchitectureDensity(scene) },
     evaluation: undefined, candidates: [], inputOrderStrategy: 'verified-layer-order',
     layoutOrderingStrategy: 'verified-layer-order', reroutedEdges: arrows.length, reorderedPairs: 0,
   }
