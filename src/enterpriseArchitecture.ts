@@ -106,7 +106,55 @@ export function composeEnterpriseArchitecture(intent: ArchitectureIntentGraph) {
     + a.routeDiagnostics.unrelatedFrameIntrusionLength / 100)
     - (b.quality.metrics.edgeCrossings * 5 + b.quality.metrics.edgeOverlaps * 2
       + b.routeDiagnostics.unrelatedFrameIntrusionLength / 100))
-  return eligible[0] ?? baseline
+  const selected = eligible[0] ?? baseline
+  const boxes = new Map(selected.scene.elements.filter((item): item is CanvasNode => item.type === 'node').map((item) => [item.id, item]))
+  const sourceX = (id: string) => {
+    const node = boxes.get(id)!
+    return node.x + node.width / 2
+  }
+  const arrows = selected.scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow')
+  const routeOrders = [
+    arrows.slice().reverse(),
+    arrows.slice().sort((a, b) => sourceX(a.from) - sourceX(b.from) || a.id.localeCompare(b.id)),
+    arrows.slice().sort((a, b) => Math.abs(sourceX(b.from) - sourceX(b.to)) - Math.abs(sourceX(a.from) - sourceX(a.to))
+      || a.id.localeCompare(b.id)),
+  ]
+  let best = selected
+  for (const order of routeOrders) {
+    const rerouted = routeArchitectureEdges({
+      ...selected.scene,
+      elements: [
+        ...selected.scene.elements.filter((item) => item.type !== 'arrow'),
+        ...order.map(({ points: _points, bundleKey: _bundle, fromAnchor: _from, toAnchor: _to,
+          fromPortRatio: _fromRatio, toPortRatio: _toRatio, ...arrow }) => arrow),
+      ],
+    })
+    const byId = new Map(rerouted.elements.filter((item): item is CanvasArrow => item.type === 'arrow').map((item) => [item.id, item]))
+    const scene: CanvasScene = {
+      ...selected.scene,
+      elements: selected.scene.elements.map((item) => item.type === 'arrow' ? byId.get(item.id)! : item),
+    }
+    const quality = assessCanvasVisualQuality(scene)
+    const routes = assessArchitectureRouteDiagnostics(scene)
+    const before = selected.quality.metrics
+    const after = quality.metrics
+    if (after.nodeOverlaps > before.nodeOverlaps || after.edgeNodeIntersections > before.edgeNodeIntersections
+      || after.labelNodeIntersections > before.labelNodeIntersections || after.labelOverlaps > before.labelOverlaps
+      || after.labelOverflows > before.labelOverflows || after.edgeCrossings > before.edgeCrossings
+      || after.edgeOverlaps > before.edgeOverlaps
+      || routes.unrelatedFrameIntrusionLength > selected.routeDiagnostics.unrelatedFrameIntrusionLength
+      || routes.totalRouteLength > selected.routeDiagnostics.totalRouteLength * 1.1) continue
+    const score = (assessment: typeof quality) => assessment.metrics.edgeCrossings * 5 + assessment.metrics.edgeOverlaps * 2
+    if (score(quality) >= score(best.quality)) continue
+    const presentation = assessArchitecturePresentation(scene)
+    const visualPlan = planArchitectureVisual(scene, 'layered', quality, presentation, routes)
+    best = {
+      ...selected, scene, quality, routeDiagnostics: routes, presentation, visualPlan,
+      summary: { ...selected.summary, bundledEdges: scene.elements.filter((item) =>
+        item.type === 'arrow' && Boolean(item.bundleKey)).length },
+    }
+  }
+  return best
 }
 
 function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array<[string, ArchitectureIntentGraph['nodes']]>, gap: number) {

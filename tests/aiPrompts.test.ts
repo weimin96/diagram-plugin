@@ -164,6 +164,12 @@ test('architecture generation uses topology archetypes and a bounded quality loo
   assert.equal(dense.summary.resolvedDensity, 'compact')
   assert.equal(dense.summary.bundledEdges, dense.scene.elements.filter((item) => item.type === 'arrow' && item.bundleKey).length)
   assert.ok(dense.visualPlan.review && Array.isArray(dense.visualPlan.review.blockers))
+
+  // Dense route-order refinement must preserve the editable graph, not hide edges.
+  const denseReopened = composeEnterpriseArchitecture({ title: '密集关系', nodes: denseNodes, relations: denseEdges })
+  assert.deepEqual(denseReopened.scene.elements, dense.scene.elements, 'route order is stable across generation')
+  assert.equal(dense.scene.elements.filter((item) => item.type === 'arrow').length, denseEdges.length)
+  assert.equal(dense.quality.metrics.edgeNodeIntersections, 0)
 })
 
 test('参考图片忠实重绘不强制走语义自动布局', () => {
