@@ -28,6 +28,8 @@ export interface ArchitectureIntentGraph {
     sourcePaths?: string[]
     /** Verified functional region, not a guessed position or arbitrary visual group. */
     partition?: ArchitecturePartition
+    /** Verified display layer for enterprise proposal-style architecture diagrams. */
+    layer?: string
   }>
   relations: Array<{
     from: string
@@ -326,7 +328,7 @@ function composeArchitectureGraphCandidate(
       cloud: 'nord', editorial: 'graphite', sketch: 'warm',
     } satisfies Record<ArchitectureTheme, DiagramVisualStyle>)[intent.theme ?? 'enterprise'],
     elements: [
-      ...intent.nodes.map(({ partition: _partition, ...node }) => ({
+      ...intent.nodes.map(({ partition: _partition, layer: _layer, ...node }) => ({
         ...node, type: 'node' as const, x: 0, y: 0, width: 204, height: 84,
       })),
       ...intent.relations.map((relation, index) => ({
@@ -341,7 +343,7 @@ function composeArchitectureGraphCandidate(
       })),
     ],
     architecture: {
-      theme: intent.theme ?? 'enterprise', view: 'detail', density: intent.density ?? 'auto',
+      theme: intent.theme ?? 'enterprise', diagramStyle: 'engineering', view: 'detail', density: intent.density ?? 'auto',
       ...(intent.visualScenario ? { scenario: intent.visualScenario } : {}),
     },
   }

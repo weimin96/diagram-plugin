@@ -1,0 +1,1524 @@
+{
+  "type": "diagram-plugin-canvas",
+  "version": 1,
+  "title": "企业统一知识库 · 分层架构",
+  "width": 1514,
+  "height": 1318,
+  "elements": [
+    {
+      "id": "web",
+      "type": "node",
+      "x": 196,
+      "y": 150,
+      "width": 208,
+      "height": 84,
+      "text": "React Web 应用",
+      "tone": "accent",
+      "shape": "rounded",
+      "groupId": "layer-experience",
+      "icon": "web",
+      "subtitle": "知识空间 · 项目 · AI 工作台 · 管理中心",
+      "description": "统一 HTTP 传输与会话续期；浏览器不能自行声明 Runtime owner。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "extmcp",
+      "type": "node",
+      "x": 1236,
+      "y": 150,
+      "width": 208,
+      "height": 84,
+      "text": "外部 MCP 客户端",
+      "tone": "muted",
+      "shape": "rounded",
+      "groupId": "layer-experience",
+      "icon": "external",
+      "subtitle": "MCP JSON-RPC 调用方",
+      "description": "复用后端知识服务与权限规则，工具结果由服务端过滤权限。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "api",
+      "type": "node",
+      "x": 196,
+      "y": 358,
+      "width": 208,
+      "height": 84,
+      "text": "REST / SSE API",
+      "tone": "accent",
+      "shape": "rounded",
+      "groupId": "layer-api",
+      "icon": "api",
+      "subtitle": "HTTP 接入 · 流式响应",
+      "description": "Web 与 MCP 复用同一知识服务与授权规则。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "mcp",
+      "type": "node",
+      "x": 1236,
+      "y": 358,
+      "width": 208,
+      "height": 84,
+      "text": "MCP 网关",
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "layer-api",
+      "icon": "gateway",
+      "subtitle": "工具 / 资源 / 引用 / 审计",
+      "description": "所有工具在服务端过滤权限，返回结果需回数据库复核。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "acl",
+      "type": "node",
+      "x": 456,
+      "y": 566,
+      "width": 208,
+      "height": 84,
+      "text": "认证与授权",
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "layer-domain",
+      "icon": "auth",
+      "subtitle": "用户 · 组织 · 项目 · Grant · 资源限制",
+      "description": "本地会话、OIDC、平台能力、组织/访问组、项目角色与知识库 Grant 的统一权限边界。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "search",
+      "type": "node",
+      "x": 976,
+      "y": 566,
+      "width": 208,
+      "height": 84,
+      "text": "检索与证据",
+      "tone": "accent",
+      "shape": "rounded",
+      "groupId": "layer-domain",
+      "icon": "search",
+      "subtitle": "混合召回 · RRF · Rerank · 上下文",
+      "description": "postgres / keyword / vector / hybrid 四种模式，外部召回结果必须回库复核。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "content",
+      "type": "node",
+      "x": 716,
+      "y": 566,
+      "width": 208,
+      "height": 84,
+      "text": "知识与内容",
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "layer-domain",
+      "icon": "service",
+      "subtitle": "知识库 · 文件版本 · 在线文档",
+      "description": "知识库归属、不可变版本、在线文档正式版本与搜索投影。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "control",
+      "type": "node",
+      "x": 196,
+      "y": 566,
+      "width": 208,
+      "height": 84,
+      "text": "处理控制面",
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "layer-domain",
+      "icon": "scheduler",
+      "subtitle": "Stage Binding · Materialization",
+      "description": "ACTIVE 与 candidate 分离，按数据版本与契约版本决定重建与切换。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "agentproxy",
+      "type": "node",
+      "x": 1236,
+      "y": 566,
+      "width": 208,
+      "height": 84,
+      "text": "Agent 会话与代理",
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "layer-domain",
+      "icon": "service",
+      "subtitle": "会话归属 · 知识范围 · 内部凭据",
+      "description": "Java 注入内部服务 Token 与已认证 userId，浏览器不持有 Runtime 凭据。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "collab",
+      "type": "node",
+      "x": 716,
+      "y": 774,
+      "width": 208,
+      "height": 84,
+      "text": "独立协作服务",
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "layer-runtime",
+      "icon": "service",
+      "subtitle": "Hocuspocus · Yjs · WebSocket",
+      "description": "执行 VIEW / EDIT 协议，正文持久化仍由 Java 后端承担。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "office",
+      "type": "node",
+      "x": 456,
+      "y": 774,
+      "width": 208,
+      "height": 84,
+      "text": "独立 Office 服务",
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "layer-runtime",
+      "icon": "service",
+      "subtitle": "ONLYOFFICE DocumentServer",
+      "description": "经前端 /office/ 同源代理接入，回调后端保存为新文件版本。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "workers",
+      "type": "node",
+      "x": 196,
+      "y": 774,
+      "width": 208,
+      "height": 84,
+      "text": "后台执行 Worker",
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "layer-runtime",
+      "icon": "worker",
+      "subtitle": "Scan / Capture / Parse / Index / Semantic / Graph",
+      "description": "同一后端应用内的任务执行器，不是独立微服务；远程 I/O 在领取事务外执行。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "runtime",
+      "type": "node",
+      "x": 1236,
+      "y": 774,
+      "width": 208,
+      "height": 84,
+      "text": "独立 Agent Runtime",
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "layer-runtime",
+      "icon": "ai",
+      "subtitle": "DeerFlow Harness · CompanyDocsMiddleware",
+      "description": "独立部署单元，直接使用锁定版本 Harness SDK，不建立第二套平台用户体系。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "index",
+      "type": "node",
+      "x": 716,
+      "y": 982,
+      "width": 208,
+      "height": 84,
+      "text": "检索投影",
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "layer-data",
+      "icon": "search",
+      "subtitle": "OpenSearch / Qdrant（可选，可重建）",
+      "description": "关键词与向量两路独立投影，默认关闭，不决定用户权限。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "pg",
+      "type": "node",
+      "x": 456,
+      "y": 982,
+      "width": 208,
+      "height": 84,
+      "text": "PostgreSQL",
+      "tone": "accent",
+      "shape": "rounded",
+      "groupId": "layer-data",
+      "icon": "database",
+      "subtitle": "业务 · ACL · Chunk · 图谱证据 · 控制数据",
+      "description": "业务与授权权威数据源；Runtime 使用独立 schema，不作为业务授权来源。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "store",
+      "type": "node",
+      "x": 196,
+      "y": 982,
+      "width": 208,
+      "height": 84,
+      "text": "对象存储",
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "layer-data",
+      "icon": "file",
+      "subtitle": "本地文件系统 或 MinIO / S3",
+      "description": "不可变原始 Blob、解析产物与图像资源；数据库保存引用与内容身份。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "redis",
+      "type": "node",
+      "x": 1236,
+      "y": 982,
+      "width": 208,
+      "height": 84,
+      "text": "Redis",
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "layer-data",
+      "icon": "cache",
+      "subtitle": "限流 · 防重放 · StreamBridge",
+      "description": "短期 Token 与事件分发，不承担知识正文、Grant 或正式版本。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "sources",
+      "type": "node",
+      "x": 196,
+      "y": 1190,
+      "width": 208,
+      "height": 84,
+      "text": "外部文件源",
+      "tone": "muted",
+      "shape": "rounded",
+      "groupId": "layer-external",
+      "icon": "cloud",
+      "subtitle": "LOCAL / FTP / SFTP / SMB / S3 / WebDAV / Website",
+      "description": "连接账号只决定采集范围，不能推导最终用户权限。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "mineru",
+      "type": "node",
+      "x": 716,
+      "y": 1190,
+      "width": 208,
+      "height": 84,
+      "text": "MinerU HTTP 服务",
+      "tone": "muted",
+      "shape": "rounded",
+      "groupId": "layer-external",
+      "icon": "external",
+      "subtitle": "复杂版面 · OCR · 视觉解析（可选）",
+      "description": "仅按内容画像与格式能力选择，XLSX 走原生流式解析。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "models",
+      "type": "node",
+      "x": 1236,
+      "y": 1190,
+      "width": 208,
+      "height": 84,
+      "text": "模型服务",
+      "tone": "muted",
+      "shape": "rounded",
+      "groupId": "layer-external",
+      "icon": "ai",
+      "subtitle": "Embedding / Rerank / 多模态 / Agent 推理",
+      "description": "按能力分别配置，Agent 推理与检索增强使用不同调用边界。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "rel-01",
+      "type": "arrow",
+      "from": "web",
+      "to": "api",
+      "label": "HTTPS / SSE",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.16,
+      "toPortRatio": 0.5,
+      "points": [
+        {
+          "x": 229.3,
+          "y": 240
+        },
+        {
+          "x": 300,
+          "y": 240
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 245.5,
+        "y": 299
+      }
+    },
+    {
+      "id": "rel-02",
+      "type": "arrow",
+      "from": "extmcp",
+      "to": "mcp",
+      "label": "MCP JSON-RPC",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.5,
+      "toPortRatio": 0.16,
+      "points": [
+        {
+          "x": 1340,
+          "y": 240
+        },
+        {
+          "x": 1269.3,
+          "y": 240
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 1209.29,
+        "y": 299
+      }
+    },
+    {
+      "id": "rel-03",
+      "type": "arrow",
+      "from": "api",
+      "to": "acl",
+      "label": "会话与能力校验",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.33,
+      "toPortRatio": 0.16,
+      "points": [
+        {
+          "x": 264.6,
+          "y": 496
+        },
+        {
+          "x": 489.3,
+          "y": 496
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 431.287,
+        "y": 541.5
+      }
+    },
+    {
+      "id": "rel-04",
+      "type": "arrow",
+      "from": "mcp",
+      "to": "acl",
+      "label": "凭据与 Scope 校验",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.16,
+      "toPortRatio": 0.84,
+      "points": [
+        {
+          "x": 1269.3,
+          "y": 464
+        },
+        {
+          "x": 630.7,
+          "y": 464
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 950,
+        "y": 445
+      }
+    },
+    {
+      "id": "rel-05",
+      "type": "arrow",
+      "from": "api",
+      "to": "content",
+      "label": "知识库 / 文件 / 文档",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.5,
+      "toPortRatio": 0.16,
+      "points": [
+        {
+          "x": 300,
+          "y": 480
+        },
+        {
+          "x": 749.3,
+          "y": 480
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 524.65,
+        "y": 499
+      }
+    },
+    {
+      "id": "rel-06",
+      "type": "arrow",
+      "from": "api",
+      "to": "search",
+      "label": "检索请求",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.67,
+      "toPortRatio": 0.16,
+      "points": [
+        {
+          "x": 335.4,
+          "y": 512
+        },
+        {
+          "x": 1009.3,
+          "y": 512
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 672.3499999999999,
+        "y": 493
+      }
+    },
+    {
+      "id": "rel-07",
+      "type": "arrow",
+      "from": "mcp",
+      "to": "search",
+      "label": "search_chunks / search_context",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.5,
+      "toPortRatio": 0.84,
+      "points": [
+        {
+          "x": 1340,
+          "y": 480
+        },
+        {
+          "x": 1150.7,
+          "y": 480
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 1245.35,
+        "y": 499
+      }
+    },
+    {
+      "id": "rel-08",
+      "type": "arrow",
+      "from": "search",
+      "to": "acl",
+      "label": "权限与可见性复核",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "top",
+      "toAnchor": "top",
+      "fromPortRatio": 0.16,
+      "toPortRatio": 0.5,
+      "points": [
+        {
+          "x": 1009.3,
+          "y": 672
+        },
+        {
+          "x": 560,
+          "y": 672
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 784.65,
+        "y": 691
+      }
+    },
+    {
+      "id": "rel-09",
+      "type": "arrow",
+      "from": "search",
+      "to": "content",
+      "label": "Chunk 与邻近上下文",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "left",
+      "toAnchor": "right",
+      "fromPortRatio": 0.5,
+      "toPortRatio": 0.84,
+      "points": [],
+      "emphasis": "primary",
+      "markerEnd": "arrow"
+    },
+    {
+      "id": "rel-10",
+      "type": "arrow",
+      "from": "api",
+      "to": "agentproxy",
+      "label": "Agent 会话",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.84,
+      "toPortRatio": 0.5,
+      "points": [
+        {
+          "x": 370.7,
+          "y": 448
+        },
+        {
+          "x": 1340,
+          "y": 448
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 709.9549999999999,
+        "y": 429
+      }
+    },
+    {
+      "id": "rel-11",
+      "type": "arrow",
+      "from": "api",
+      "to": "control",
+      "label": "处理状态与操作",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.16,
+      "toPortRatio": 0.16,
+      "points": [
+        {
+          "x": 229.3,
+          "y": 448
+        },
+        {
+          "x": 229.3,
+          "y": 448
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 171.29000000000002,
+        "y": 507
+      }
+    },
+    {
+      "id": "rel-12",
+      "type": "arrow",
+      "from": "workers",
+      "to": "control",
+      "label": "阶段结果回写",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "top",
+      "toAnchor": "bottom",
+      "fromPortRatio": 0.16,
+      "toPortRatio": 0.84,
+      "points": [
+        {
+          "x": 229.3,
+          "y": 656
+        },
+        {
+          "x": 370.7,
+          "y": 656
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 177.29000000000002,
+        "y": 715
+      }
+    },
+    {
+      "id": "rel-13",
+      "type": "arrow",
+      "from": "content",
+      "to": "pg",
+      "label": "业务与版本数据",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.5,
+      "toPortRatio": 0.568,
+      "points": [
+        {
+          "x": 820,
+          "y": 688
+        },
+        {
+          "x": 678,
+          "y": 688
+        },
+        {
+          "x": 678,
+          "y": 896
+        },
+        {
+          "x": 574.1,
+          "y": 896
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 626.05,
+        "y": 915
+      }
+    },
+    {
+      "id": "rel-14",
+      "type": "arrow",
+      "from": "acl",
+      "to": "pg",
+      "label": "授权与身份数据",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.5,
+      "toPortRatio": 0.432,
+      "points": [
+        {
+          "x": 560,
+          "y": 656
+        },
+        {
+          "x": 442,
+          "y": 656
+        },
+        {
+          "x": 442,
+          "y": 896
+        },
+        {
+          "x": 545.9,
+          "y": 896
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 384,
+        "y": 708.8
+      }
+    },
+    {
+      "id": "rel-15",
+      "type": "arrow",
+      "from": "control",
+      "to": "pg",
+      "label": "Binding / Materialization",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.5,
+      "toPortRatio": 0.16,
+      "points": [
+        {
+          "x": 300,
+          "y": 768
+        },
+        {
+          "x": 418,
+          "y": 768
+        },
+        {
+          "x": 418,
+          "y": 864
+        },
+        {
+          "x": 489.3,
+          "y": 864
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 359,
+        "y": 749
+      }
+    },
+    {
+      "id": "rel-16",
+      "type": "arrow",
+      "from": "workers",
+      "to": "pg",
+      "label": "任务状态 · claim / lease",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.5,
+      "toPortRatio": 0.296,
+      "points": [
+        {
+          "x": 300,
+          "y": 912
+        },
+        {
+          "x": 517.6,
+          "y": 912
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 429.0792,
+        "y": 957.5
+      }
+    },
+    {
+      "id": "rel-17",
+      "type": "arrow",
+      "from": "workers",
+      "to": "store",
+      "label": "不可变 Blob / 解析产物",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.273,
+      "toPortRatio": 0.5,
+      "points": [
+        {
+          "x": 252.9,
+          "y": 912
+        },
+        {
+          "x": 300,
+          "y": 912
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 171.37448,
+        "y": 900.12
+      }
+    },
+    {
+      "id": "rel-18",
+      "type": "arrow",
+      "from": "workers",
+      "to": "index",
+      "label": "Outbox 索引投影",
+      "lineStyle": "dashed",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.613,
+      "toPortRatio": 0.16,
+      "points": [
+        {
+          "x": 323.6,
+          "y": 880
+        },
+        {
+          "x": 749.3,
+          "y": 880
+        }
+      ],
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 472.595,
+        "y": 899
+      }
+    },
+    {
+      "id": "rel-19",
+      "type": "arrow",
+      "from": "workers",
+      "to": "sources",
+      "label": "扫描 / 采集",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.387,
+      "toPortRatio": 0.5,
+      "points": [
+        {
+          "x": 276.4,
+          "y": 864
+        },
+        {
+          "x": 54,
+          "y": 864
+        },
+        {
+          "x": 54,
+          "y": 1072
+        },
+        {
+          "x": 300,
+          "y": 1072
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 108.12,
+        "y": 1053
+      }
+    },
+    {
+      "id": "rel-20",
+      "type": "arrow",
+      "from": "workers",
+      "to": "mineru",
+      "label": "HTTP 解析",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.727,
+      "toPortRatio": 0.5,
+      "points": [
+        {
+          "x": 347.1,
+          "y": 864
+        },
+        {
+          "x": 418,
+          "y": 864
+        },
+        {
+          "x": 418,
+          "y": 1072
+        },
+        {
+          "x": 820,
+          "y": 1072
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 372.5,
+        "y": 909.76
+      }
+    },
+    {
+      "id": "rel-21",
+      "type": "arrow",
+      "from": "workers",
+      "to": "models",
+      "label": "Embedding / 语义增强",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.84,
+      "toPortRatio": 0.16,
+      "points": [
+        {
+          "x": 370.7,
+          "y": 896
+        },
+        {
+          "x": 426,
+          "y": 896
+        },
+        {
+          "x": 426,
+          "y": 1088
+        },
+        {
+          "x": 1269.3,
+          "y": 1088
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 847.65,
+        "y": 1107
+      }
+    },
+    {
+      "id": "rel-22",
+      "type": "arrow",
+      "from": "search",
+      "to": "index",
+      "label": "关键词 / 向量召回",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.67,
+      "toPortRatio": 0.84,
+      "points": [
+        {
+          "x": 1115.4,
+          "y": 688
+        },
+        {
+          "x": 946,
+          "y": 688
+        },
+        {
+          "x": 946,
+          "y": 896
+        },
+        {
+          "x": 890.7,
+          "y": 896
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 1030.7,
+        "y": 707
+      }
+    },
+    {
+      "id": "rel-23",
+      "type": "arrow",
+      "from": "search",
+      "to": "pg",
+      "label": "PostgreSQL 检索与复核",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.33,
+      "toPortRatio": 0.704,
+      "points": [
+        {
+          "x": 1044.6,
+          "y": 656
+        },
+        {
+          "x": 938,
+          "y": 656
+        },
+        {
+          "x": 938,
+          "y": 864
+        },
+        {
+          "x": 602.4,
+          "y": 864
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 1022,
+        "y": 760
+      }
+    },
+    {
+      "id": "rel-24",
+      "type": "arrow",
+      "from": "search",
+      "to": "models",
+      "label": "查询向量 / Rerank",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.84,
+      "toPortRatio": 0.5,
+      "points": [
+        {
+          "x": 1150.7,
+          "y": 656
+        },
+        {
+          "x": 1198,
+          "y": 656
+        },
+        {
+          "x": 1198,
+          "y": 1072
+        },
+        {
+          "x": 1340,
+          "y": 1072
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 1129.5,
+        "y": 864
+      }
+    },
+    {
+      "id": "rel-25",
+      "type": "arrow",
+      "from": "mcp",
+      "to": "redis",
+      "label": "限流 · 防重放 · 短期 Token",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.84,
+      "toPortRatio": 0.5,
+      "points": [
+        {
+          "x": 1410.7,
+          "y": 496
+        },
+        {
+          "x": 1222,
+          "y": 496
+        },
+        {
+          "x": 1222,
+          "y": 864
+        },
+        {
+          "x": 1340,
+          "y": 864
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 1247.5,
+        "y": 923
+      }
+    },
+    {
+      "id": "rel-26",
+      "type": "arrow",
+      "from": "agentproxy",
+      "to": "runtime",
+      "label": "HTTP / SSE",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.5,
+      "toPortRatio": 0.5,
+      "points": [
+        {
+          "x": 1340,
+          "y": 656
+        },
+        {
+          "x": 1340,
+          "y": 656
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 1289.5,
+        "y": 715
+      }
+    },
+    {
+      "id": "rel-27",
+      "type": "arrow",
+      "from": "runtime",
+      "to": "mcp",
+      "label": "短期用户 Token",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "top",
+      "toAnchor": "bottom",
+      "fromPortRatio": 0.387,
+      "toPortRatio": 0.84,
+      "points": [
+        {
+          "x": 1316.4,
+          "y": 656
+        },
+        {
+          "x": 1458,
+          "y": 656
+        },
+        {
+          "x": 1458,
+          "y": 448
+        },
+        {
+          "x": 1410.7,
+          "y": 448
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 1256.97488,
+        "y": 748.04
+      }
+    },
+    {
+      "id": "rel-28",
+      "type": "arrow",
+      "from": "runtime",
+      "to": "pg",
+      "label": "Thread / Run / checkpoint",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.16,
+      "toPortRatio": 0.84,
+      "points": [
+        {
+          "x": 1269.3,
+          "y": 912
+        },
+        {
+          "x": 630.7,
+          "y": 912
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 726.7130000000001,
+        "y": 957.5
+      }
+    },
+    {
+      "id": "rel-29",
+      "type": "arrow",
+      "from": "runtime",
+      "to": "redis",
+      "label": "StreamBridge 事件",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.613,
+      "toPortRatio": 0.84,
+      "points": [
+        {
+          "x": 1363.6,
+          "y": 864
+        },
+        {
+          "x": 1410.7,
+          "y": 864
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 1339.2156,
+        "y": 956.04
+      }
+    },
+    {
+      "id": "rel-30",
+      "type": "arrow",
+      "from": "runtime",
+      "to": "models",
+      "label": "Agent 推理",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.84,
+      "toPortRatio": 0.84,
+      "points": [
+        {
+          "x": 1410.7,
+          "y": 864
+        },
+        {
+          "x": 1458,
+          "y": 864
+        },
+        {
+          "x": 1458,
+          "y": 1072
+        },
+        {
+          "x": 1410.7,
+          "y": 1072
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 1410.5,
+        "y": 909.76
+      }
+    },
+    {
+      "id": "rel-31",
+      "type": "arrow",
+      "from": "web",
+      "to": "collab",
+      "label": "WebSocket",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.84,
+      "toPortRatio": 0.5,
+      "points": [
+        {
+          "x": 370.7,
+          "y": 256
+        },
+        {
+          "x": 426,
+          "y": 256
+        },
+        {
+          "x": 426,
+          "y": 704
+        },
+        {
+          "x": 820,
+          "y": 704
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 473.5,
+        "y": 412.79999999999995
+      }
+    },
+    {
+      "id": "rel-32",
+      "type": "arrow",
+      "from": "collab",
+      "to": "content",
+      "label": "内部业务 API",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "top",
+      "toAnchor": "bottom",
+      "fromPortRatio": 0.16,
+      "toPortRatio": 0.613,
+      "points": [
+        {
+          "x": 749.3,
+          "y": 720
+        },
+        {
+          "x": 843.6,
+          "y": 720
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 897.5664,
+        "y": 695.5
+      }
+    },
+    {
+      "id": "rel-33",
+      "type": "arrow",
+      "from": "collab",
+      "to": "redis",
+      "label": "多副本广播（可选）",
+      "lineStyle": "dashed",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.84,
+      "toPortRatio": 0.16,
+      "points": [
+        {
+          "x": 890.7,
+          "y": 880
+        },
+        {
+          "x": 1269.3,
+          "y": 880
+        }
+      ],
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 1080,
+        "y": 899
+      }
+    },
+    {
+      "id": "rel-34",
+      "type": "arrow",
+      "from": "web",
+      "to": "office",
+      "label": "/office/ 同源代理",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "fromPortRatio": 0.5,
+      "toPortRatio": 0.5,
+      "points": [
+        {
+          "x": 300,
+          "y": 240
+        },
+        {
+          "x": 418,
+          "y": 240
+        },
+        {
+          "x": 418,
+          "y": 768
+        },
+        {
+          "x": 560,
+          "y": 768
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 349,
+        "y": 504
+      }
+    },
+    {
+      "id": "rel-35",
+      "type": "arrow",
+      "from": "office",
+      "to": "content",
+      "label": "下载 / 保存回调",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "top",
+      "toAnchor": "bottom",
+      "fromPortRatio": 0.5,
+      "toPortRatio": 0.387,
+      "points": [
+        {
+          "x": 560,
+          "y": 656
+        },
+        {
+          "x": 796.4,
+          "y": 656
+        }
+      ],
+      "emphasis": "primary",
+      "markerEnd": "arrow",
+      "labelPosition": {
+        "x": 500.5,
+        "y": 715
+      }
+    },
+    {
+      "id": "title",
+      "type": "note",
+      "x": 196,
+      "y": 14,
+      "width": 720,
+      "height": 34,
+      "text": "企业统一知识库 · 分层架构",
+      "textOnly": true,
+      "fontSize": 24
+    },
+    {
+      "id": "subtitle",
+      "type": "note",
+      "x": 196,
+      "y": 48,
+      "width": 760,
+      "height": 22,
+      "text": "依据 docs/architecture.md 生成 · 六层视图：参与方与入口 / 接口层 / 领域模块层 / 执行与运行服务 / 数据与存储 / 外部依赖",
+      "opacity": 0.72,
+      "textOnly": true,
+      "fontSize": 13,
+      "fontWeight": 500
+    }
+  ],
+  "workbench": "architecture",
+  "style": "ocean",
+  "background": "#ffffff",
+  "groups": [
+    {
+      "id": "layer-experience",
+      "label": "参与方与入口",
+      "tone": "muted",
+      "kind": "group",
+      "fillColor": "#eef4fb",
+      "labelSide": "left"
+    },
+    {
+      "id": "layer-api",
+      "label": "接口层",
+      "tone": "muted",
+      "kind": "group",
+      "fillColor": "#e8f1fb",
+      "labelSide": "left"
+    },
+    {
+      "id": "layer-domain",
+      "label": "领域模块层",
+      "tone": "muted",
+      "kind": "group",
+      "fillColor": "#eef7f2",
+      "labelSide": "left"
+    },
+    {
+      "id": "layer-runtime",
+      "label": "执行与运行服务",
+      "tone": "muted",
+      "kind": "group",
+      "fillColor": "#f4effb",
+      "labelSide": "left"
+    },
+    {
+      "id": "layer-data",
+      "label": "数据与存储",
+      "tone": "muted",
+      "kind": "group",
+      "fillColor": "#eaf5f7",
+      "labelSide": "left"
+    },
+    {
+      "id": "layer-external",
+      "label": "外部依赖",
+      "tone": "muted",
+      "kind": "group",
+      "fillColor": "#f6f2ea",
+      "labelSide": "left"
+    }
+  ],
+  "architecture": {
+    "theme": "enterprise",
+    "view": "overview",
+    "density": "compact",
+    "scenario": "enterprise-system"
+  }
+}

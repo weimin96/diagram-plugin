@@ -325,8 +325,8 @@ export function playbackActionTarget(scene: CanvasScene, action: CanvasPlaybackA
   const item = scene.elements.find((candidate) => candidate.id === action.id)
   if (!item) return null
   if (item.type !== 'arrow') {
-    if (action.kind === 'box' && action.rough) return { x: action.rough.x + item.width / 2, y: action.rough.y + item.height / 2 }
-    if (action.kind === 'box' && action.before) return center(action.before)
+    // The activity marker tracks the saved result, not speculative rough layout
+    // positions that the model never actually wrote.
     return center(item)
   }
   const from = scene.elements.find((candidate): candidate is CanvasNode | CanvasNote => candidate.type !== 'arrow' && candidate.id === item.from)

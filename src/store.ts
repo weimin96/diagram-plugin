@@ -3,6 +3,7 @@ import lockfile from 'proper-lockfile'
 import { createHash, randomUUID } from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
+import { createCanvasTemplateSource, type CanvasTemplateId } from './canvasTemplates.js'
 import { createCanvasSource, parseCanvasScene, type CanvasWorkbenchMode } from './canvas.js'
 import { createTemplate, detectDiagramType } from './templates.js'
 import type { DiagramCanvasWorkbench, DiagramDocument, DiagramRevision, DiagramSummary, DiagramType, MermaidDiagramType } from './types.js'
@@ -69,12 +70,16 @@ export class DiagramStore {
     }
   }
 
-  async create(type: DiagramType, title: string, canvasWorkbench?: CanvasWorkbenchMode): Promise<DiagramDocument> {
+  async create(type: DiagramType, title: string, canvasWorkbench?: CanvasWorkbenchMode, canvasTemplate?: CanvasTemplateId): Promise<DiagramDocument> {
     return withWorkspaceMutation(this.workspacePath, async () => {
       const directory = await this.prepareDirectory(['docs', 'diagrams'])
       const base = slugify(title) || type
       const target = await nextAvailablePath(directory, base, type === 'canvas' ? '.diagram.json' : '.mmd')
-      const source = type === 'canvas' ? createCanvasSource(title, canvasWorkbench) : createTemplate(type as MermaidDiagramType, title)
+      const source = type === 'canvas'
+        ? canvasTemplate
+          ? createCanvasTemplateSource(title, canvasTemplate)
+          : createCanvasSource(title, canvasWorkbench)
+        : createTemplate(type as MermaidDiagramType, title)
       await writeFile(target, source, { encoding: 'utf8', flag: 'wx' })
       const info = await stat(target)
       return this.document(relativePathFromRoot(this.workspacePath, target), source, info.mtime)

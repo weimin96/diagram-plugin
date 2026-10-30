@@ -8,7 +8,7 @@ export interface ViewPreferences {
 }
 
 /** Bump when the stored shape changes; stale keys are ignored, never migrated blindly. */
-export const VIEW_PREFERENCES_KEY = 'diagram.view-preferences.v1'
+export const VIEW_PREFERENCES_KEY = 'diagram.view-preferences.v2'
 
 /** Keeps the store bounded when a project accumulates many diagrams. */
 export const VIEW_PREFERENCES_LIMIT = 64

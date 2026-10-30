@@ -1,0 +1,390 @@
+{
+  "type": "diagram-plugin-canvas",
+  "version": 1,
+  "title": "企业统一知识库 · 分层架构",
+  "width": 1380,
+  "height": 1080,
+  "workbench": "architecture",
+  "style": "blueprint",
+  "groups": [
+    {
+      "id": "layer-access",
+      "label": "接入层",
+      "kind": "boundary",
+      "tone": "muted",
+      "fillColor": "#fde8ea",
+      "labelSide": "left"
+    },
+    {
+      "id": "layer-api",
+      "label": "接口层",
+      "kind": "boundary",
+      "tone": "accent",
+      "fillColor": "#e8f1fb",
+      "labelSide": "left"
+    },
+    {
+      "id": "layer-modules",
+      "label": "业务模块层",
+      "kind": "boundary",
+      "tone": "default",
+      "fillColor": "#fff4d6",
+      "labelSide": "left"
+    },
+    {
+      "id": "layer-runtime",
+      "label": "运行服务层",
+      "kind": "boundary",
+      "tone": "warning",
+      "fillColor": "#ece7fb",
+      "labelSide": "left"
+    },
+    {
+      "id": "layer-data",
+      "label": "数据层",
+      "kind": "boundary",
+      "tone": "success",
+      "fillColor": "#e5f4e8",
+      "labelSide": "left"
+    }
+  ],
+  "lanes": [],
+  "elements": [
+    {
+      "id": "web",
+      "type": "node",
+      "x": 190,
+      "y": 76,
+      "width": 300,
+      "height": 92,
+      "text": "React Web",
+      "subtitle": "员工 / 管理员",
+      "icon": "user",
+      "groupId": "layer-access",
+      "tone": "muted",
+      "shape": "rounded",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ]
+    },
+    {
+      "id": "mcp_client",
+      "type": "node",
+      "x": 520,
+      "y": 82,
+      "width": 230,
+      "height": 80,
+      "text": "外部 MCP 客户端",
+      "subtitle": "JSON-RPC",
+      "icon": "mcp",
+      "groupId": "layer-access",
+      "tone": "muted",
+      "shape": "rounded",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ]
+    },
+    {
+      "id": "files",
+      "type": "node",
+      "x": 780,
+      "y": 82,
+      "width": 230,
+      "height": 80,
+      "text": "外部文件源",
+      "subtitle": "统一文件资产接入",
+      "icon": "file",
+      "groupId": "layer-access",
+      "tone": "muted",
+      "shape": "rounded",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ]
+    },
+    {
+      "id": "models",
+      "type": "node",
+      "x": 1040,
+      "y": 82,
+      "width": 230,
+      "height": 80,
+      "text": "模型与解析服务",
+      "subtitle": "MinerU / 模型 API",
+      "icon": "ai",
+      "groupId": "layer-access",
+      "tone": "muted",
+      "shape": "rounded",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ]
+    },
+    {
+      "id": "api",
+      "type": "node",
+      "x": 190,
+      "y": 286,
+      "width": 300,
+      "height": 92,
+      "text": "REST / SSE API",
+      "subtitle": "HTTP / SSE",
+      "icon": "api",
+      "groupId": "layer-api",
+      "tone": "accent",
+      "shape": "rounded",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ]
+    },
+    {
+      "id": "mcp_gateway",
+      "type": "node",
+      "x": 520,
+      "y": 292,
+      "width": 230,
+      "height": 80,
+      "text": "MCP 网关",
+      "subtitle": "工具 / 资源 / 引用 / 审计",
+      "icon": "gateway",
+      "groupId": "layer-api",
+      "tone": "accent",
+      "shape": "rounded",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ]
+    },
+    {
+      "id": "acl",
+      "type": "node",
+      "x": 780,
+      "y": 292,
+      "width": 230,
+      "height": 80,
+      "text": "认证与授权",
+      "subtitle": "用户 / 组织 / 项目 / Grant",
+      "icon": "auth",
+      "groupId": "layer-api",
+      "tone": "accent",
+      "shape": "rounded",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ]
+    },
+    {
+      "id": "content",
+      "type": "node",
+      "x": 190,
+      "y": 486,
+      "width": 300,
+      "height": 92,
+      "text": "知识与内容",
+      "subtitle": "知识库 / 文件版本 / 在线文档",
+      "icon": "service",
+      "groupId": "layer-modules",
+      "tone": "default",
+      "shape": "rounded",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ]
+    },
+    {
+      "id": "search",
+      "type": "node",
+      "x": 520,
+      "y": 492,
+      "width": 230,
+      "height": 80,
+      "text": "检索与证据",
+      "subtitle": "召回 / 融合 / 重排 / 引用",
+      "icon": "search",
+      "groupId": "layer-modules",
+      "tone": "default",
+      "shape": "rounded",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ]
+    },
+    {
+      "id": "pipeline",
+      "type": "node",
+      "x": 780,
+      "y": 492,
+      "width": 230,
+      "height": 80,
+      "text": "文档处理与索引",
+      "subtitle": "Scan / Parse / Index",
+      "icon": "worker",
+      "groupId": "layer-modules",
+      "tone": "default",
+      "shape": "rounded",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ]
+    },
+    {
+      "id": "agent_proxy",
+      "type": "node",
+      "x": 1040,
+      "y": 492,
+      "width": 230,
+      "height": 80,
+      "text": "Agent 会话代理",
+      "subtitle": "会话 / 知识范围 / Runtime 代理",
+      "icon": "service",
+      "groupId": "layer-modules",
+      "tone": "default",
+      "shape": "rounded",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ]
+    },
+    {
+      "id": "runtime",
+      "type": "node",
+      "x": 190,
+      "y": 712,
+      "width": 230,
+      "height": 80,
+      "text": "Agent Runtime",
+      "subtitle": "DeerFlow Harness",
+      "icon": "worker",
+      "groupId": "layer-runtime",
+      "tone": "warning",
+      "shape": "rounded",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ]
+    },
+    {
+      "id": "collab",
+      "type": "node",
+      "x": 520,
+      "y": 712,
+      "width": 230,
+      "height": 80,
+      "text": "协作服务",
+      "subtitle": "Hocuspocus / Yjs",
+      "icon": "service",
+      "groupId": "layer-runtime",
+      "tone": "warning",
+      "shape": "rounded",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ]
+    },
+    {
+      "id": "office",
+      "type": "node",
+      "x": 780,
+      "y": 712,
+      "width": 230,
+      "height": 80,
+      "text": "Office 服务",
+      "subtitle": "ONLYOFFICE",
+      "icon": "service",
+      "groupId": "layer-runtime",
+      "tone": "warning",
+      "shape": "rounded",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ]
+    },
+    {
+      "id": "pg",
+      "type": "node",
+      "x": 190,
+      "y": 906,
+      "width": 300,
+      "height": 92,
+      "text": "PostgreSQL",
+      "subtitle": "业务 / ACL / Chunk / 证据",
+      "icon": "database",
+      "groupId": "layer-data",
+      "tone": "success",
+      "shape": "rounded",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ]
+    },
+    {
+      "id": "redis",
+      "type": "node",
+      "x": 520,
+      "y": 912,
+      "width": 230,
+      "height": 80,
+      "text": "Redis",
+      "subtitle": "限流 / 防重放 / StreamBridge",
+      "icon": "cache",
+      "groupId": "layer-data",
+      "tone": "success",
+      "shape": "rounded",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ]
+    },
+    {
+      "id": "store",
+      "type": "node",
+      "x": 780,
+      "y": 912,
+      "width": 230,
+      "height": 80,
+      "text": "对象存储",
+      "subtitle": "本地 / MinIO / S3",
+      "icon": "file",
+      "groupId": "layer-data",
+      "tone": "success",
+      "shape": "rounded",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ]
+    },
+    {
+      "id": "index",
+      "type": "node",
+      "x": 1040,
+      "y": 912,
+      "width": 230,
+      "height": 80,
+      "text": "检索投影",
+      "subtitle": "OpenSearch / Qdrant",
+      "icon": "search",
+      "groupId": "layer-data",
+      "tone": "success",
+      "shape": "rounded",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ]
+    },
+    {
+      "id": "a_web_api",
+      "type": "arrow",
+      "from": "web",
+      "to": "api",
+      "label": "HTTPS",
+      "lineStyle": "solid"
+    },
+    {
+      "id": "a_mcp_gateway",
+      "type": "arrow",
+      "from": "mcp_client",
+      "to": "mcp_gateway",
+      "label": "JSON-RPC",
+      "lineStyle": "solid"
+    },
+    {
+      "id": "a_api_content",
+      "type": "arrow",
+      "from": "api",
+      "to": "content",
+      "label": "应用调用",
+      "lineStyle": "solid"
+    }
+  ],
+  "architecture": {
+    "theme": "enterprise",
+    "view": "detail",
+    "density": "comfortable",
+    "scenario": "enterprise-system"
+  }
+}

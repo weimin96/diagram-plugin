@@ -3,8 +3,8 @@
     "surface": "thread",
     "width": 1100,
     "height": 900,
-    "bytes": 166674,
-    "sha256": "629847a69fe705e8e0e50c43edfe0841cbea28c84889f4ddfae151dd0d21894d",
+    "bytes": 108024,
+    "sha256": "8dbf05e2c6d77f3e1a6a5dbd5a097f308e2c0895e0d19c7d53a55f7a24d362e4",
     "toolCalls": {
       "total": 7,
       "byTool": {
@@ -51,8 +51,8 @@
     "surface": "thread",
     "width": 420,
     "height": 900,
-    "bytes": 94619,
-    "sha256": "56fa2b332a44cf6df281a5790380e5a8ff0d15d7f92de65ddb37b539488b68fb",
+    "bytes": 94501,
+    "sha256": "85f0b98bd13e3dffbbef058b4ec6eb66b0801f0c371bb6dae8494e931d97d8b2",
     "toolCalls": {
       "total": 5,
       "byTool": {
@@ -83,14 +83,14 @@
     "surface": "thread",
     "width": 420,
     "height": 900,
-    "bytes": 94543,
-    "sha256": "f5c034f7e8813b917ae08f0ea25fa3445fc2b0f5a09fd67f9ed48276e5192761",
+    "bytes": 94365,
+    "sha256": "ac40be2b1b89a2f05f928648635461506f384ae2ed37133564c139c2d1e837a0",
     "toolCalls": {
-      "total": 12,
+      "total": 13,
       "byTool": {
         "diagram.thread": 1,
         "diagram.get": 2,
-        "diagram.threadState": 5,
+        "diagram.threadState": 6,
         "diagram.proposal": 2,
         "diagram.revision": 1,
         "diagram.dismissProposal": 1
@@ -105,8 +105,8 @@
     "surface": "thread",
     "width": 420,
     "height": 900,
-    "bytes": 92985,
-    "sha256": "78b0d19ecd1903fa1765d26d7bd0e9ce5f73aef822eaade99e8b4ee01e45f556",
+    "bytes": 92806,
+    "sha256": "e6161e004faf41688c947ca2820d570b7cf6063c269fcf867ce771795d2b3d10",
     "toolCalls": {
       "total": 12,
       "byTool": {
@@ -127,8 +127,8 @@
     "surface": "thread",
     "width": 1100,
     "height": 900,
-    "bytes": 165522,
-    "sha256": "5cad820e9bea31f8e676dd775c6f1bf9f0054f474e7bb6d69c81d6cec6c6fdee",
+    "bytes": 108232,
+    "sha256": "b3e724ba5773317dab0b2925cfdde41e30a0680f0a0ac3cf14d7d84268c89ffc",
     "toolCalls": {
       "total": 9,
       "byTool": {
@@ -146,8 +146,65 @@
     "surface": "thread",
     "width": 1100,
     "height": 900,
-    "bytes": 178314,
-    "sha256": "e6477ae9e699c5549383b0fe3e6eb4e3073f666016bf894b6b75a08c055e93e5",
+    "bytes": 172929,
+    "sha256": "269020d923171242fdb21d02450cdcc8179bd9ed9c22aeadecd83eaa68e620e2",
+    "toolCalls": {
+      "total": 8,
+      "byTool": {
+        "diagram.thread": 1,
+        "diagram.get": 2,
+        "diagram.threadState": 5
+      }
+    },
+    "action": {
+      "label": "从层级面板选择节点",
+      "ok": true
+    }
+  },
+  "thread-follow": {
+    "surface": "thread",
+    "width": 420,
+    "height": 900,
+    "bytes": 60209,
+    "sha256": "8eb4b5b2d4438ef273da084ca49b0003ac359020eebbedc13fa49c5ffbfb3e7c",
+    "toolCalls": {
+      "total": 14,
+      "byTool": {
+        "diagram.thread": 1,
+        "diagram.threadState": 10,
+        "diagram.get": 3
+      }
+    },
+    "action": {
+      "label": "首次创建自动跟随，暂停后恢复当前图",
+      "ok": true
+    }
+  },
+  "canvas-style": {
+    "surface": "thread",
+    "width": 1100,
+    "height": 900,
+    "bytes": 120274,
+    "sha256": "dc346fa502dd6a18d1717f1429c8e3c460b87e865fcab08bf5f47567097668c0",
+    "toolCalls": {
+      "total": 8,
+      "byTool": {
+        "diagram.thread": 1,
+        "diagram.get": 2,
+        "diagram.threadState": 5
+      }
+    },
+    "action": {
+      "label": "打开画布样式设置",
+      "ok": true
+    }
+  },
+  "canvas-layers": {
+    "surface": "thread",
+    "width": 1100,
+    "height": 900,
+    "bytes": 137985,
+    "sha256": "4113db15adad4d77aef2cd951053bb1c0e3278b56ec7be3f0312da6c7d1ae27f",
     "toolCalls": {
       "total": 7,
       "byTool": {
@@ -157,7 +214,26 @@
       }
     },
     "action": {
-      "label": "从层级面板选择节点",
+      "label": "打开画布层级面板",
+      "ok": true
+    }
+  },
+  "canvas-architecture-menu": {
+    "surface": "thread",
+    "width": 1100,
+    "height": 900,
+    "bytes": 152154,
+    "sha256": "905cd6e7a10443b4ca0c0b773a0e397de85afb6a29442db3a95928772d10f071",
+    "toolCalls": {
+      "total": 7,
+      "byTool": {
+        "diagram.thread": 1,
+        "diagram.get": 2,
+        "diagram.threadState": 4
+      }
+    },
+    "action": {
+      "label": "打开架构布局面板",
       "ok": true
     }
   }

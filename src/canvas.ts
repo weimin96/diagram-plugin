@@ -1,6 +1,6 @@
 import { canvasVisualSkin, canvasStyledBox, canvasFillTextColor, isDiagramVisualStyle, type DiagramVisualStyle } from './diagramVisualStyles.js'
 import { hexLuminance } from './colors.js'
-import { canvasArrowLabelText } from './canvasLabelText.js'
+import { canvasArrowLabelText, fitCanvasText } from './canvasLabelText.js'
 import { canvasArchitecturePlainTitleLines } from './canvasNodeTitleLayout.js'
 import { preferKeyDependencyLens } from './canvasDependencyLens.js'
 import { CanvasRectIndex } from './canvasRectIndex.js'
@@ -18,6 +18,7 @@ import {
 } from './iconRegistry.js'
 import { cloudArchitectureIconData } from './cloudIconPacks.js'
 import { canvasShapeGeometry, isCanvasShapeRef, type CanvasShapeRef } from './shapeRegistry.js'
+import type { ArchitectureDiagramStyle } from './architectureStyle.js'
 
 export type CanvasElement = CanvasNode | CanvasNote | CanvasArrow
 export type CanvasTone = 'default' | 'accent' | 'success' | 'warning' | 'danger' | 'muted'
@@ -54,6 +55,15 @@ export interface CanvasGroup {
   parentId?: string
   c4Type?: 'software-system' | 'container'
   description?: string
+  /** Optional paint override for layered/banded architecture scenes. */
+  fillColor?: string
+  /** Draw the group title outside the frame on the left, like a layer caption. */
+  labelSide?: 'inside' | 'left'
+  /** Optional label typography; absent inherits the layer-caption default. */
+  labelFontSize?: number
+  labelColor?: string
+  /** Optional per-group frame line style; absent follows the scene preference. */
+  borderStyle?: 'solid' | 'dashed'
 }
 
 export interface CanvasLane {
@@ -78,11 +88,16 @@ export interface CanvasScene {
   height: number
   elements: CanvasElement[]
   workbench?: CanvasWorkbenchMode
+  /** Full-canvas background colour; absent means the visual style decides, 'transparent' means no fill. */
+  background?: string
+  /** Default line style for group frames; individual groups may override it. */
+  groupBorderStyle?: 'solid' | 'dashed'
   style?: DiagramVisualStyle
   groups?: CanvasGroup[]
   lanes?: CanvasLane[]
   architecture?: {
     theme: CanvasArchitectureTheme
+    diagramStyle?: ArchitectureDiagramStyle
     presentation?: boolean
     view?: CanvasArchitectureView
     density?: CanvasArchitectureDensity
@@ -122,6 +137,10 @@ export interface CanvasNode {
   opacity?: number
   cornerRadius?: number
   rotation?: number
+  /** Optional title typography overrides for hand-authored canvases. */
+  fontSize?: number
+  fontWeight?: 400 | 500 | 600 | 700
+  textColor?: string
 }
 
 export interface CanvasNote {
@@ -324,6 +343,7 @@ export function createCanvasSource(title: string, workbench: CanvasWorkbenchMode
     width: 1600,
     height: 1000,
     workbench,
+    background: 'transparent',
     elements: [],
     ...(workbench === 'architecture' ? { architecture: { theme: 'enterprise', view: 'detail', density: 'auto' } as const } : {}),
   })
@@ -345,6 +365,8 @@ export function parseCanvasScene(source: string): CanvasScene {
   if (scene.style !== undefined && !isDiagramVisualStyle(scene.style)) throw new Error('不支持的画布样式，请从内置样式中选择。')
   const architecture = normalizeArchitectureAppearance(scene.architecture)
   const workbench = normalizeCanvasWorkbench(scene.workbench, Boolean(architecture))
+  const background = normalizeCanvasBackground(scene.background)
+  const groupBorderStyle = scene.groupBorderStyle === 'solid' || scene.groupBorderStyle === 'dashed' ? scene.groupBorderStyle : undefined
   return {
     type: CANVAS_DOCUMENT_TYPE,
     version: 1,
@@ -354,6 +376,8 @@ export function parseCanvasScene(source: string): CanvasScene {
     elements: scene.elements.filter(isCanvasElement).map(normalizeCanvasElement),
     workbench,
     ...(isDiagramVisualStyle(scene.style) ? { style: scene.style } : {}),
+    ...(background ? { background } : {}),
+    ...(groupBorderStyle ? { groupBorderStyle } : {}),
     ...(Array.isArray(scene.groups) ? { groups: normalizeCanvasGroups(scene.groups) } : {}),
     ...(Array.isArray(scene.lanes) ? { lanes: normalizeCanvasLanes(scene.lanes, positive(scene.width, 1600), positive(scene.height, 1000)) } : {}),
     ...(architecture ? { architecture } : {}),
@@ -366,6 +390,13 @@ function normalizeCanvasWorkbench(value: unknown, architecture: boolean): Canvas
   return 'freeform'
 }
 
+function normalizeCanvasBackground(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const colour = value.trim()
+  if (/^(?:transparent|none)$/i.test(colour)) return 'transparent'
+  return /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(colour) ? colour : undefined
+}
+
 export function serializeCanvasScene(scene: CanvasScene): string {
   return `${JSON.stringify(scene, null, 2)}\n`
 }
@@ -373,6 +404,7 @@ export function serializeCanvasScene(scene: CanvasScene): string {
 export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: string; panel?: string; text?: string; border?: string; note?: string; imageSources?: Readonly<Record<string, string>> }): string {
   const sourceScene = scene
   const architectureMode = Boolean(sourceScene.architecture)
+  const groupBorderStyle = sourceScene.groupBorderStyle ?? 'dashed'
   // The same verified primary-path contract used by the editor determines
   // visual weight in dense exported diagrams. All real relationships remain
   // present and accessible via their SVG-native <title> source/target labels.
@@ -381,9 +413,9 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
   const architectureProfile = canvasArchitectureThemeProfile(architectureTheme)
   const projection = canvasArchitectureProjection(scene)
   scene = projection.scene
-  const baseBackground = colors?.background || '#ffffff'
+  const baseBackground = scene.background || colors?.background || '#ffffff'
   const visualSkin = canvasVisualSkin(scene.style, hexLuminance(baseBackground) < 0.18)
-  const background = visualSkin?.background ?? (architectureMode && architectureTheme === 'technical'
+  const background = scene.background ?? visualSkin?.background ?? (architectureMode && architectureTheme === 'technical'
     ? hexLuminance(baseBackground) < 0.18 ? '#111827' : '#f5f8fc'
     : baseBackground)
   const panel = colors?.panel || '#f8f8f8'
@@ -435,7 +467,7 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
     const stroke = arrow.strokeColor ?? visualSkin?.edge ?? (architectureMode ? architectureBorder : border)
     const visibleLabel = architectureMode && arrow.label && !canvasArchitectureRelationLabelVisible(arrow) ? undefined : arrow.label
     const label = visibleLabel ? labelLayouts.get(arrow.id) : undefined
-    const labelText = label ? `<text x="${label.x}" y="${label.y + 4 - (label.lines.length - 1) * 8}" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="600" fill="${escapeXml(text)}"${architectureMode ? ` stroke="${escapeXml(background)}" stroke-width="4" stroke-linejoin="round" paint-order="stroke"` : ''}>${label.lines.map((line, index) => `<tspan x="${label.x}" dy="${index ? 16 : 0}">${escapeXml(line)}</tspan>`).join('')}</text>` : ''
+    const labelText = label ? `<text x="${label.x}" y="${label.y + 4 - (label.lines.length - 1) * 8}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${architectureMode ? 14 : 12}" font-weight="600" fill="${escapeXml(text)}"${architectureMode ? ` stroke="${escapeXml(background)}" stroke-width="4" stroke-linejoin="round" paint-order="stroke"` : ''}>${label.lines.map((line, index) => `<tspan x="${label.x}" dy="${index ? 16 : 0}">${escapeXml(line)}</tspan>`).join('')}</text>` : ''
     const labelMarkup = visibleLabel && label
       ? `<g class="canvas-arrow-label"><title>${escapeXml(visibleLabel)}</title>${architectureMode ? '' : `<rect x="${label.x - label.width / 2}" y="${label.y - label.height / 2}" width="${label.width}" height="${label.height}" rx="8" fill="${escapeXml(background)}" stroke="${escapeXml(border)}" stroke-opacity="0.28"/>`}${labelText}</g>`
       : ''
@@ -506,8 +538,8 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
         architectureTheme === 'technical' ? 'monospace' : 'sans')
       : lines
     const texts = architectureCard
-      ? `<text x="${item.x + 16}" y="${item.y + (showSubtitle ? 55 : Math.max(54, item.height / 2 + 5))}" font-size="15" font-weight="650" fill="${escapeXml(palette.text)}">${escapeXml(truncateCanvasText(lines.join(' '), cardTitleLimit))}</text>`
-      : plainArchitectureLines.map((line, index) => `<text x="${item.x + item.width / 2}" y="${item.y + item.height / 2 + (index - (plainArchitectureLines.length - 1) / 2) * 19}" text-anchor="middle" dominant-baseline="middle" font-size="15"${architectureMode && item.emphasis === 'primary' ? ' font-weight="700"' : ''}${architectureMode && architectureTheme === 'technical' ? ' font-family="ui-monospace, SFMono-Regular, Menlo, monospace"' : ''} fill="${escapeXml(palette.text)}">${escapeXml(line)}</text>`).join('')
+      ? `<text x="${item.x + 16}" y="${item.y + (showSubtitle ? 55 : Math.max(54, item.height / 2 + 5))}" font-size="${item.fontSize ?? 15}" font-weight="${item.fontWeight ?? 650}" fill="${escapeXml(item.textColor ?? palette.text)}">${escapeXml(truncateCanvasText(lines.join(' '), cardTitleLimit))}</text>`
+      : plainArchitectureLines.map((line, index) => `<text x="${item.x + item.width / 2}" y="${item.y + item.height / 2 + (index - (plainArchitectureLines.length - 1) / 2) * ((item.fontSize ?? 15) * 1.36)}" text-anchor="middle" dominant-baseline="middle" font-size="${item.fontSize ?? 15}"${item.fontWeight ? ` font-weight="${item.fontWeight}"` : architectureMode && item.emphasis === 'primary' ? ' font-weight="700"' : ''}${architectureMode && architectureTheme === 'technical' ? ' font-family="ui-monospace, SFMono-Regular, Menlo, monospace"' : ''} fill="${escapeXml(item.textColor ?? palette.text)}">${escapeXml(line)}</text>`).join('')
     const rolePaths = item.icon ? canvasIconPaths(item.icon) : []
     const icon = item.iconRef
       ? `<g transform="translate(${item.x + 8} ${item.y + 8}) scale(.8333)">${canvasIconRefMarkup(item.iconRef, hexLuminance(palette.text) > 0.62, palette.stroke)}</g>`
@@ -515,7 +547,7 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
     const cardMeta = item.iconRef ? canvasIconRefLabel(item.iconRef) : item.stencil ? canvasStencilLabel(item.stencil) : architectureCard ? cardTemplate.label : item.icon ? canvasIconLabel(item.icon) : ''
     const stencil = cardMeta ? `<text x="${item.x + (item.iconRef || item.icon ? 34 : 14)}" y="${item.y + 21}" font-size="10" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-weight="700" letter-spacing="0.3" fill="${escapeXml(palette.stroke)}">${escapeXml(cardMeta)}</text>` : ''
     const c4 = item.c4Type ? `<text x="${item.x + item.width - 12}" y="${item.y + 20}" text-anchor="end" font-size="10" font-weight="600" fill="${escapeXml(palette.stroke)}">${escapeXml(c4Label(item.c4Type))}</text>` : ''
-    const subtitle = showSubtitle ? `<text x="${architectureCard ? item.x + 16 : item.x + item.width / 2}" y="${item.y + item.height - 16}"${architectureCard ? '' : ' text-anchor="middle"'} font-size="11" fill="${escapeXml(palette.stroke)}">${escapeXml(truncateCanvasText(item.subtitle!, 34))}</text>` : ''
+    const subtitle = showSubtitle ? `<text x="${architectureCard ? item.x + 16 : item.x + item.width / 2}" y="${item.y + item.height - 16}"${architectureCard ? '' : ' text-anchor="middle"'} font-size="${item.fontSize ? Math.max(9, item.fontSize * 0.72) : 11}" fill="${escapeXml(item.textColor ?? palette.stroke)}">${escapeXml(truncateCanvasText(item.subtitle!, 34))}</text>` : ''
     const fillColor = item.fillColor ?? palette.fill
     const strokeColor = item.strokeColor ?? palette.stroke
     const strokeWidth = item.strokeWidth ?? (item.emphasis === 'primary' ? 2.4 : item.emphasis === 'muted' ? 1.1 : 1.5)
@@ -542,15 +574,18 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
       : canvasTonePalette(group.tone, { panel, text, border, note }, 'node')
     const softwareSystem = group.c4Type === 'software-system'
     const container = group.c4Type === 'container'
-    const dash = architectureMode
-      ? architectureProfile.groupSolid ? '' : softwareSystem ? '10 7' : container ? '8 6' : group.kind === 'boundary' ? '6 5' : '5 5'
-      : softwareSystem ? '' : container ? '10 6' : group.kind === 'boundary' ? '12 6' : '8 6'
+    const groupSolid = group.borderStyle === 'solid' || (group.borderStyle !== 'dashed' && groupBorderStyle === 'solid')
+    const dash = groupSolid
+      ? ''
+      : architectureMode
+        ? architectureProfile.groupSolid ? '' : softwareSystem ? '10 7' : container ? '8 6' : group.kind === 'boundary' ? '6 5' : '5 5'
+        : softwareSystem ? '' : container ? '10 6' : group.kind === 'boundary' ? '12 6' : '8 6'
     const strokeWidth = architectureMode ? (softwareSystem ? 1.35 : container ? 1.15 : 1) * architectureProfile.groupScale : softwareSystem ? 2.4 : container ? 1.7 : 1.4
     const fillOpacity = architectureMode
       ? group.collapsed ? '0.34' : String(architectureProfile.groupFillOpacity)
       : group.collapsed ? '0.5' : softwareSystem ? '0.10' : container ? '0.05' : '0'
     const collapsed = group.collapsed ? ' · 已折叠' : ''
-    const fill = architectureMode || group.collapsed || softwareSystem || container ? escapeXml(palette.fill) : 'none'
+    const fill = group.fillColor ? escapeXml(group.fillColor) : architectureMode || group.collapsed || softwareSystem || container ? escapeXml(palette.fill) : 'none'
     if (architectureMode) {
       if (group.collapsed && group.id.startsWith('arch-')) {
         // Generated overview summaries are readable cards, not the faded,
@@ -561,8 +596,13 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
       // system-level frames quieter and collapsed summaries independently
       // styled, but strengthen the actual region outlines.
       const groupStrokeOpacity = softwareSystem ? 0.55 : 0.92
-      const frameFillOpacity = group.collapsed ? fillOpacity : '0.07'
-      return `<g><rect x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" rx="${architectureProfile.groupRadius}" fill="${fill}" fill-opacity="${frameFillOpacity}" stroke="${escapeXml(softwareSystem ? architectureBorder : palette.stroke)}" stroke-opacity="${groupStrokeOpacity}" stroke-width="${Math.max(softwareSystem ? 1.35 : 1.65, strokeWidth)}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>${group.label ? `<text x="${group.x + 10}" y="${group.y + 18}" font-size="11.5" font-weight="650" fill="${escapeXml(text)}" opacity="0.90">${escapeXml(`${group.label}${collapsed}`)}</text>` : ''}</g>`
+      const frameFillOpacity = group.fillColor ? '1' : group.collapsed ? fillOpacity : '0.07'
+      const groupLabel = group.label
+        ? group.labelSide === 'left'
+          ? `<text x="${group.x - 12}" y="${group.y + group.height / 2}" text-anchor="end" dominant-baseline="middle" font-size="${group.labelFontSize ?? 17}" font-weight="730" fill="${escapeXml(group.labelColor ?? palette.stroke)}">${escapeXml(fitCanvasText(`${group.label}${collapsed}`, Math.max(60, group.x - 20), group.labelFontSize ?? 17, 730))}</text>`
+          : `<text x="${group.x + 32}" y="${group.y + (group.labelFontSize ?? 11.5) + 6}" font-size="${group.labelFontSize ?? 11.5}" font-weight="650" fill="${escapeXml(text)}" opacity="0.90">${escapeXml(fitCanvasText(`${group.label}${collapsed}`, Math.max(60, group.width - 34), group.labelFontSize ?? 11.5, 650))}</text>`
+        : ''
+      return `<g><rect x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" rx="${architectureProfile.groupRadius}" fill="${fill}" fill-opacity="${frameFillOpacity}" stroke="${escapeXml(softwareSystem ? architectureBorder : palette.stroke)}" stroke-opacity="${groupStrokeOpacity}" stroke-width="${Math.max(softwareSystem ? 1.35 : 1.65, strokeWidth)}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>${groupLabel}</g>`
     }
     const c4 = group.c4Type ? ` · ${c4Label(group.c4Type)}` : ''
     const header = group.label && softwareSystem
@@ -1291,8 +1331,16 @@ export function canvasPresentationGroupFrames(
   return frames.map((frame) => {
     const generatedRegion = /^arch-(external|experience|application|processing|data)$/.test(frame.id)
       && frame.kind === 'boundary' && !frame.c4Type && !frame.collapsed
-    if (!generatedRegion || frame.height < 92) return frame
-    return { ...frame, y: frame.y + 16, height: frame.height - 36 }
+    if (generatedRegion && frame.height >= 92) {
+      return { ...frame, y: frame.y + 16, height: frame.height - 36 }
+    }
+    // Card templates place the group title inside the frame. Give that title
+    // breathing room in presentation only; routing and fit calculations keep
+    // using the real member bounds.
+    if (!frame.collapsed && !frame.id.startsWith('arch-') && frame.fillColor && frame.label && frame.labelSide !== 'left') {
+      return { ...frame, y: frame.y - 12, height: frame.height + 12 }
+    }
+    return frame
   })
 }
 
@@ -1547,11 +1595,14 @@ function renderArchitectureCanvasNode(
   const iconY = item.y + (item.height - iconSize) / 2
   const hasIcon = Boolean(item.iconRef || item.stencil || item.icon)
   const textX = hasIcon ? iconX + iconSize + 12 : item.x + 16
-  const titleY = item.y + item.height / 2 + (item.subtitle ? -4 : 4)
-  const subtitleY = titleY + 17
+  const titleY = item.y + item.height / 2 + (item.subtitle ? -10 : 4)
+  const subtitleY = titleY + 25
   const titleSize = compact ? 12 : density === 'compact' ? 12.5 : 13
   const focused = item.emphasis === 'primary' && theme === 'enterprise'
   const subtitleSize = compact ? 9 : 9.5
+  const titleFontSize = (item.fontSize ?? (titleSize + profile.titleSizeDelta + (focused ? 0.8 : 0))) * titleScale
+  const subtitleFontSize = item.fontSize ? Math.max(9, item.fontSize * 0.72) : subtitleSize
+  const textWidth = Math.max(28, item.x + item.width - textX - 12)
   const opacity = item.opacity ?? (item.emphasis === 'muted' ? '0.88' : '1')
   const darkSurface = hexLuminance(palette.text) > 0.62
   const mark = item.iconRef
@@ -1564,12 +1615,12 @@ function renderArchitectureCanvasNode(
   const family = fontOverride ?? profile.fontFamily
   const fontFamily = family ? ` font-family="${family}"` : ''
   const subtitle = item.subtitle
-    ? `<text x="${textX}" y="${subtitleY}" font-size="${subtitleSize}" fill="${escapeXml(palette.text)}" opacity="${profile.subtitleOpacity}"${fontFamily}>${escapeXml(truncateCanvasText(item.subtitle, compact ? 20 : 26))}</text>`
+    ? `<text x="${textX}" y="${subtitleY}" font-size="${subtitleFontSize}" fill="${escapeXml(item.textColor ?? palette.text)}" opacity="${profile.subtitleOpacity}"${fontFamily}>${escapeXml(fitCanvasText(item.subtitle, textWidth, subtitleFontSize, 500))}</text>`
     : ''
   // Every architecture node, including a technology logo or external actor,
   // has the same hit area and visible card. No invisible technical-node plates.
   const plate = `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="${profile.nodeRadius || 8}" fill="${escapeXml(item.fillColor ?? neutralSurface)}" fill-opacity="${item.fillColor ? 1 : 0.94}" stroke="${escapeXml(item.strokeColor ?? palette.stroke)}" stroke-opacity="${item.strokeColor ? 1 : focused ? 0.9 : 0.72}" stroke-width="${item.strokeWidth ?? (focused ? 1.7 : 1.25)}"/>`
-  return `<g opacity="${opacity}">${plate}${mark}<text x="${textX}" y="${titleY}" font-size="${(titleSize + profile.titleSizeDelta + (focused ? 0.8 : 0)) * titleScale}" font-weight="${focused ? 730 : profile.titleWeight}" fill="${escapeXml(palette.text)}"${fontFamily}>${escapeXml(truncateCanvasText(item.text.replace(/\n/g, ' '), compact ? 20 : 26))}</text>${subtitle}</g>`
+  return `<g opacity="${opacity}">${plate}${mark}<text x="${textX}" y="${titleY}" font-size="${titleFontSize}" font-weight="${item.fontWeight ?? (focused ? 730 : profile.titleWeight)}" fill="${escapeXml(item.textColor ?? palette.text)}"${fontFamily}>${escapeXml(fitCanvasText(item.text.replace(/\n/g, ' '), textWidth, titleFontSize, item.fontWeight ?? (focused ? 730 : profile.titleWeight)))}</text>${subtitle}</g>`
 }
 
 function canvasArchitectureThemeProfile(theme: CanvasArchitectureTheme) {
@@ -1740,6 +1791,7 @@ function normalizeArchitectureAppearance(value: unknown): CanvasScene['architect
   if (typeof item.theme !== 'string' || !themes.includes(item.theme as CanvasArchitectureTheme)) return undefined
   return {
     theme: item.theme as CanvasArchitectureTheme,
+    ...(item.diagramStyle === 'enterprise' || item.diagramStyle === 'engineering' ? { diagramStyle: item.diagramStyle } : {}),
     ...(item.presentation === true ? { presentation: true } : {}),
     ...(typeof item.view === 'string' && views.includes(item.view as CanvasArchitectureView) ? { view: item.view as CanvasArchitectureView } : {}),
     ...(typeof item.density === 'string' && densities.includes(item.density as CanvasArchitectureDensity) ? { density: item.density as CanvasArchitectureDensity } : {}),
@@ -1842,9 +1894,9 @@ function normalizeCanvasElement(item: CanvasElement): CanvasElement {
     ...(typeof item.cornerRadius === 'number' && Number.isFinite(item.cornerRadius) && item.cornerRadius >= 0 && item.cornerRadius <= 80 ? { cornerRadius: item.cornerRadius } : {}),
     ...(normalizedRotation(item.rotation) !== undefined ? { rotation: normalizedRotation(item.rotation) } : {}),
     ...(item.type === 'note' && item.textOnly === true ? { textOnly: true } : {}),
-    ...(item.type === 'note' && typeof item.fontSize === 'number' && Number.isFinite(item.fontSize) && item.fontSize >= 8 && item.fontSize <= 96 ? { fontSize: item.fontSize } : {}),
-    ...(item.type === 'note' && [400, 500, 600, 700].includes(item.fontWeight ?? 0) ? { fontWeight: item.fontWeight } : {}),
-    ...(item.type === 'note' && normalizedHexColor(item.textColor) ? { textColor: normalizedHexColor(item.textColor) } : {}),
+    ...((item.type === 'note' || item.type === 'node') && typeof item.fontSize === 'number' && Number.isFinite(item.fontSize) && item.fontSize >= 8 && item.fontSize <= 96 ? { fontSize: item.fontSize } : {}),
+    ...((item.type === 'note' || item.type === 'node') && [400, 500, 600, 700].includes(item.fontWeight ?? 0) ? { fontWeight: item.fontWeight } : {}),
+    ...((item.type === 'note' || item.type === 'node') && normalizedHexColor(item.textColor) ? { textColor: normalizedHexColor(item.textColor) } : {}),
     ...(item.type === 'note' && typeof item.imagePath === 'string' && item.imagePath.trim() ? { imagePath: item.imagePath.trim().slice(0, 500) } : {}),
     ...(item.type === 'note' && (item.imageFit === 'contain' || item.imageFit === 'cover') ? { imageFit: item.imageFit } : {}),
   }
@@ -1868,6 +1920,11 @@ function normalizeCanvasGroups(value: unknown[]): CanvasGroup[] {
       ...(typeof item.parentId === 'string' && item.parentId.trim() && item.parentId.trim() !== id ? { parentId: item.parentId.trim() } : {}),
       ...(item.c4Type === 'software-system' || item.c4Type === 'container' ? { c4Type: item.c4Type } : {}),
       ...(typeof item.description === 'string' && item.description.trim() ? { description: item.description.trim().slice(0, 1000) } : {}),
+      ...(typeof item.fillColor === 'string' && item.fillColor.trim() ? { fillColor: item.fillColor.trim() } : {}),
+      ...(item.labelSide === 'left' ? { labelSide: 'left' as const } : {}),
+      ...(typeof item.labelFontSize === 'number' && Number.isFinite(item.labelFontSize) && item.labelFontSize >= 10 && item.labelFontSize <= 32 ? { labelFontSize: item.labelFontSize } : {}),
+      ...(typeof item.labelColor === 'string' && /^#[0-9a-f]{6}$/i.test(item.labelColor.trim()) ? { labelColor: item.labelColor.trim().toLowerCase() } : {}),
+      ...(item.borderStyle === 'solid' || item.borderStyle === 'dashed' ? { borderStyle: item.borderStyle } : {}),
     }]
   })
 }

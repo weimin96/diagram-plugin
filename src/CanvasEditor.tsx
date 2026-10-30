@@ -1,6 +1,6 @@
 import { routeArchitectureArrowIds, routeArchitectureEdges, routeArchitectureEdgesIncremental } from './architectureRouting.js'
 import { canvasVisualSkin, canvasStyledBox, canvasFillTextColor, diagramVisualStyles, type DiagramVisualStyle } from './diagramVisualStyles.js'
-import { canvasArrowLabelText } from './canvasLabelText.js'
+import { canvasArrowLabelText, fitCanvasText } from './canvasLabelText.js'
 import { canvasNodeRelations, resolveCanvasRelationshipFocus, searchCanvasRelations } from './canvasRelationshipFocus.js'
 import { canvasKeyDependencyLens, preferKeyDependencyLens } from './canvasDependencyLens.js'
 import { canvasArchitecturePlainTitleLines } from './canvasNodeTitleLayout.js'
@@ -12,7 +12,7 @@ import { selectableCanvasIds, toggleCanvasSelection } from './canvasSelection.js
 import { useCanvasSelection } from './useCanvasSelection.js'
 import { useCanvasGestureDrafts } from './useCanvasGestureDrafts.js'
 import type { GestureVisualDraft, InsertTarget, SnapGuides } from './canvasGesture.js'
-import { buildCanvasPlaybackPlan } from './canvasPlayback.js'
+import { buildCanvasPlaybackPlan, playbackActionIntent, playbackActionTarget } from './canvasPlayback.js'
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Hand, Link2, MousePointer2, Shapes, Type, type IconNode } from 'lucide'
 import { applyArchitectureTheme as applyArchitectureThemeToScene, beautifyArchitectureScene, type ArchitectureTheme } from './architectureDesign.js'
@@ -198,16 +198,17 @@ const STYLE_COLOR_SWATCHES = ['#1f2937', '#ef3340', '#22a45d', '#2f73d9', '#f59e
 const CANVAS_IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp'])
 const MAX_CANVAS_IMAGE_BYTES = 12 * 1024 * 1024
 
-function StyleColorControl({ label, value, mixed = false, onChange }: { label: string; value?: string; mixed?: boolean; onChange: (value?: string) => void }) {
+function StyleColorControl({ label, value, mixed = false, allowTransparent = false, onChange }: { label: string; value?: string; mixed?: boolean; allowTransparent?: boolean; onChange: (value?: string) => void }) {
   return (
     <div className="freeform-style-color">
       <span>{label}{mixed ? <em>混合</em> : null}</span>
       <div>
+        {allowTransparent ? <button type="button" aria-label={`${label} 无色`} className={`freeform-style-none${value === 'transparent' ? ' is-selected' : ''}`} onClick={() => onChange('transparent')}>无色</button> : null}
         {STYLE_COLOR_SWATCHES.map((color) => <button key={color} type="button" aria-label={`${label} ${color}`} className={value === color ? 'is-selected' : ''} style={{ background: color }} onClick={() => onChange(color)} />)}
         <label className="freeform-style-native-color" title="自定义颜色">
-          <input type="color" value={value ?? '#64748b'} onChange={(event) => onChange(event.target.value)} />
+          <input type="color" value={value && value !== 'transparent' ? value : '#64748b'} onChange={(event) => onChange(event.target.value)} />
         </label>
-        <button type="button" className="freeform-style-auto" onClick={() => onChange(undefined)}>自动</button>
+        <button type="button" className={`freeform-style-auto${!value ? ' is-selected' : ''}`} onClick={() => onChange(undefined)}>自动</button>
       </div>
     </div>
   )
@@ -283,12 +284,18 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
   const showC4Badge = !architecture && (level === 'detail' || level === 'compact' || selected)
   const showCardSubtitle = level === 'detail' && Boolean(displayItem.subtitle && (!architectureCard || density !== 'dense'))
   const showSourceBadge = architecture ? selected : level === 'detail' || selected
-  const cardTitleLimit = density === 'dense' ? 22 : density === 'compact' ? 26 : 30
   const architectureMarkSize = density === 'dense' ? 30 : density === 'compact' ? 34 : 38
   const architectureMarkX = 14
   const architectureMarkY = (displayItem.height - architectureMarkSize) / 2
   const architectureTextX = architectureMark ? architectureMarkX + architectureMarkSize + 12 : architectureCard ? 16 : displayItem.width / 2
-  const architectureTitleY = architectureMark ? displayItem.height / 2 + (showCardSubtitle ? -4 : 4) : architectureCard ? (showCardSubtitle ? 55 : Math.max(54, displayItem.height / 2 + 5)) : displayItem.height / 2
+  const architectureTitleY = architectureMark ? displayItem.height / 2 + (showCardSubtitle ? -10 : 4) : architectureCard ? (showCardSubtitle ? 55 : Math.max(54, displayItem.height / 2 + 5)) : displayItem.height / 2
+  const titleFontSize = displayItem.fontSize ?? 15
+  const subtitleFontSize = displayItem.fontSize ? Math.max(9, displayItem.fontSize * 0.72) : 11
+  const architectureTextWidth = architectureCard
+    ? Math.max(28, displayItem.width - architectureTextX - 14)
+    : Math.max(28, displayItem.width - 28)
+  const titleText = architectureCard ? fitCanvasText(displayText, architectureTextWidth, titleFontSize, displayItem.fontWeight ?? 600) : displayText
+  const subtitleText = displayItem.subtitle ? fitCanvasText(displayItem.subtitle, architectureTextWidth, subtitleFontSize, 500) : ''
   const plainTitleLines = architecture && !architectureCard && displayItem.type === 'node'
     ? canvasArchitecturePlainTitleLines(displayText, displayItem.width, displayItem.height,
       architectureTheme === 'technical' ? 'monospace' : 'sans') : null
@@ -344,9 +351,12 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
                   {displayText.split('\n').slice(0, 8).map((line, index) => <tspan key={index} x="0" dy={index === 0 ? 0 : (displayItem.fontSize ?? 20) * 1.35}>{line}</tspan>)}
                 </text>
               ) : <text style={{
-                ...(displayItem.type === 'node' && (skin || originalItem.fillColor) ? { fill: titleColor, fontFamily: skin?.font, fontWeight: 600 } : {}),
+                ...(displayItem.type === 'node' && (skin || originalItem.fillColor) ? { fill: titleColor, fontFamily: skin?.font, fontWeight: displayItem.fontWeight ?? 600 } : {}),
+                ...(displayItem.type === 'node' && displayItem.textColor ? { fill: displayItem.textColor } : {}),
+                ...(displayItem.type === 'node' && displayItem.fontSize ? { fontSize: displayItem.fontSize } : {}),
+                ...(displayItem.type === 'node' && displayItem.fontWeight ? { fontWeight: displayItem.fontWeight } : {}),
                 ...(plainTitleLines && architectureTheme === 'technical' ? { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' } : {}),
-                ...(architecture && architectureCard && titleScale && titleScale > 1 ? {
+                ...(architecture && architectureCard && titleScale && titleScale > 1 && !displayItem.fontSize ? {
                   fontSize: (architectureMark
                     ? ({ technical: 12, presentation: 14, editorial: 14.5 } as Partial<Record<ArchitectureTheme, number>>)[architectureTheme ?? 'enterprise'] ?? 13
                     : density === 'dense' ? 12 : density === 'compact' ? 13 : 14) * titleScale,
@@ -354,10 +364,10 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
               }} className={architectureCard ? 'freeform-node-title' : undefined} x={architectureTextX} y={architectureTitleY} textAnchor={architectureCard ? 'start' : 'middle'} dominantBaseline={architectureCard ? undefined : 'middle'}>
                 {plainTitleLines
                   ? plainTitleLines.map((line, index) => <tspan key={index} x={architectureTextX}
-                    dy={index === 0 ? -(plainTitleLines.length - 1) * 19 / 2 : 19}>{line}</tspan>)
-                  : truncate(displayText, architectureCard ? cardTitleLimit : 28)}
+                    dy={index === 0 ? -(plainTitleLines.length - 1) * ((displayItem.fontSize ?? 15) * 1.36) / 2 : (displayItem.fontSize ?? 15) * 1.3}>{line}</tspan>)
+                  : titleText}
               </text> : null}
-              {showCardSubtitle ? <text className="freeform-node-subtitle" x={architectureTextX} y={architectureMark ? architectureTitleY + 17 : displayItem.height - 12} textAnchor={architectureCard ? 'start' : 'middle'}>{truncate(displayItem.subtitle!, architectureCard ? 34 : 32)}</text> : null}
+              {showCardSubtitle ? <text className="freeform-node-subtitle" style={displayItem.type === 'node' && (displayItem.fontSize || displayItem.textColor) ? { fontSize: subtitleFontSize, fill: displayItem.textColor } : undefined} x={architectureTextX} y={architectureMark ? architectureTitleY + 25 : displayItem.height - 12} textAnchor={architectureCard ? 'start' : 'middle'}>{subtitleText}</text> : null}
               {displayItem.sourcePaths?.length && showSourceBadge ? <text className="freeform-source-badge" x={displayItem.width - 10} y={displayItem.c4Type ? 34 : 18} textAnchor="end">⌘ {displayItem.sourcePaths.length}</text> : null}
   </>
 })
@@ -464,6 +474,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   const [detailsExpanded, setDetailsExpanded] = useState(false)
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false)
   const [highlightedIds, setHighlightedIds] = useState<Set<string>>(new Set())
+  const [playbackStep, setPlaybackStep] = useState<{ target: CanvasPoint; label: string; index: number; total: number } | null>(null)
   const [traceDirection, setTraceDirection] = useState<CanvasTraceDirection | null>(null)
   const [traceDepth, setTraceDepth] = useState(2)
   const editorRef = useRef<HTMLDivElement>(null)
@@ -628,6 +639,17 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
       if (!active || event.defaultPrevented) return
       const target = event.target as HTMLElement | null
       if (target && (target.isContentEditable || target.closest('input, textarea, select, a, summary, [role="combobox"], [role="listbox"], [role="menu"]'))) return
+      const nudge = event.key === 'ArrowLeft' ? [-1, 0] as const
+        : event.key === 'ArrowRight' ? [1, 0] as const
+        : event.key === 'ArrowUp' ? [0, -1] as const
+        : event.key === 'ArrowDown' ? [0, 1] as const
+        : null
+      if (!event.metaKey && !event.ctrlKey && nudge && selectedBoxes.length > 0) {
+        event.preventDefault()
+        const step = event.shiftKey ? 10 : 1
+        nudgeSelection(nudge[0] * step, nudge[1] * step)
+        return
+      }
       if (target?.closest('button') && (!target.closest('.freeform-floating-toolbar') || event.code === 'Space' || event.key === 'Enter')) return
       const mod = event.metaKey || event.ctrlKey
       if (event.code === 'Space') {
@@ -834,17 +856,80 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
         try { before = parseCanvasScene(external.fromSource) } catch { onPlaybackComplete?.(external.key); return }
       }
     }
-    if (!parsed.scene || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (!parsed.scene || !active || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       if (external) onPlaybackComplete?.(external.key)
       return
     }
     const next = parsed.scene
     const plan = buildCanvasPlaybackPlan(before ?? undefined, next, external?.mode ?? 'update')
+    if (external) {
+      // Tools write a complete scene atomically. Replay only verified differences
+      // in that scene, without pretending to receive live pointer commands.
+      const actions = plan.actions.flatMap((action) => {
+        const target = playbackActionTarget(next, action)
+        if (!target) return []
+        const ids = action.kind === 'arrange' ? action.ids
+          : action.kind === 'boundary' ? []
+          : action.kind === 'delete' ? [action.element.id] : [action.id]
+        return [{ target, ids, label: playbackActionIntent(next, action) }]
+      })
+      if (!actions.length) {
+        onPlaybackComplete?.(external.key)
+        return
+      }
+      const count = Math.min(10, actions.length)
+      const steps = Array.from({ length: count }, (_, i) =>
+        actions[count === 1 ? 0 : Math.round(i * (actions.length - 1) / (count - 1))])
+      const timers: number[] = []
+      let cameraFrame = 0
+      const moveCamera = (target: CanvasPoint) => {
+        const start = viewportRef.current
+        const zoom = Math.min(2, Math.max(1.35, start.zoom))
+        const width = next.width / zoom
+        const height = next.height / zoom
+        const goal = {
+          zoom,
+          x: clamp(target.x - width / 2, 0, Math.max(0, next.width - width)),
+          y: clamp(target.y - height / 2, 0, Math.max(0, next.height - height)),
+        }
+        const started = performance.now()
+        window.cancelAnimationFrame(cameraFrame)
+        const advance = (now: number) => {
+          const progress = Math.min(1, (now - started) / 320)
+          const easing = 1 - Math.pow(1 - progress, 3)
+          setViewport({
+            zoom: start.zoom + (goal.zoom - start.zoom) * easing,
+            x: start.x + (goal.x - start.x) * easing,
+            y: start.y + (goal.y - start.y) * easing,
+          })
+          if (progress < 1) cameraFrame = window.requestAnimationFrame(advance)
+        }
+        cameraFrame = window.requestAnimationFrame(advance)
+      }
+      steps.forEach((step, index) => {
+        timers.push(window.setTimeout(() => {
+          if (drag.current) return
+          setHighlightedIds(new Set(step.ids))
+          setPlaybackStep({ target: step.target, label: step.label, index: index + 1, total: count })
+          moveCamera(step.target)
+        }, index * 650))
+      })
+      timers.push(window.setTimeout(() => {
+        setHighlightedIds(new Set())
+        setPlaybackStep(null)
+        onPlaybackComplete?.(external.key)
+      }, count * 650 + 400))
+      return () => {
+        timers.forEach(window.clearTimeout)
+        window.cancelAnimationFrame(cameraFrame)
+        setHighlightedIds(new Set())
+        setPlaybackStep(null)
+      }
+    }
     const changedIds = new Set(plan.actions.flatMap((action) => action.kind === 'arrange' ? action.ids
       : action.kind === 'boundary' ? [] : action.kind === 'delete' ? [action.element.id] : [action.id]))
     const previousById = new Map(before?.elements.map((item) => [item.id, item]) ?? [])
     const nextById = new Map(next.elements.map((item) => [item.id, item]))
-    const regionOrder = new Map(plan.regions.flatMap((region, index) => region.elementIds.map((id) => [id, index] as const)))
     setHighlightedIds(changedIds)
     const animations: Animation[] = []
     const frame = window.requestAnimationFrame(() => {
@@ -855,7 +940,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
         const current = nextById.get(id)
         if (!previous) {
           animations.push(element.animate([{ opacity: 0 }, { opacity: 1 }], {
-            duration: 180, delay: external?.mode === 'create' ? Math.min(120, (regionOrder.get(id) ?? 0) * 40) : 0,
+            duration: 180,
             easing: 'ease-out', fill: 'backwards',
           }))
         } else if (previous.type !== 'arrow' && current && current.type !== 'arrow'
@@ -868,18 +953,16 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
     })
     const finish = window.setTimeout(() => {
       setHighlightedIds(new Set())
-      if (external) onPlaybackComplete?.(external.key)
     }, 700)
     return () => {
       window.cancelAnimationFrame(frame)
       window.clearTimeout(finish)
       animations.forEach((animation) => animation.cancel())
       setHighlightedIds(new Set())
-      if (external) onPlaybackComplete?.(external.key)
     }
     // 每次数据更新只触发一次，手工拖动期间不插入位置过渡。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source, playbackRequest?.key, playbackRequest?.path])
+  }, [source, playbackRequest?.key, playbackRequest?.path, active])
 
   const traceResult = useMemo(() => {
     if (!parsed.scene || !traceDirection) return null
@@ -1805,6 +1888,28 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
       elements: live.elements.map((item) => item.type !== 'arrow' && ids.has(item.id) ? { ...item, locked: shouldLock || undefined } : item),
     })
     setContextMenu(null)
+  }
+
+  function nudgeSelection(dx: number, dy: number) {
+    if (!dx && !dy) return
+    const live = currentScene()
+    const ids = new Set(selectedBoxes.filter((item) => !item.locked).map((item) => item.id))
+    if (ids.size === 0) return
+    const before = sourceRef.current
+    let changed = false
+    const elements = live.elements.map((item) => {
+      if (item.type === 'arrow' || !ids.has(item.id)) return item
+      const x = clamp(item.x + dx, 0, live.width - item.width)
+      const y = clamp(item.y + dy, 0, live.height - item.height)
+      if (x === item.x && y === item.y) return item
+      changed = true
+      return { ...item, x, y }
+    })
+    if (!changed) return
+    let next: CanvasScene = { ...live, elements }
+    if (next.architecture) next = routeArchitectureEdgesIncremental(next, ids)
+    commit(next, false)
+    recordGesture(before)
   }
 
   function updateSelectedBoxes(updater: (item: CanvasNode | CanvasNote) => CanvasNode | CanvasNote) {
@@ -2868,6 +2973,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
             </div>
             </Popover>
           ) : null}
+          <button type="button" className={scene.groupBorderStyle === 'solid' ? 'is-active' : ''} title="切换分区边框线型：虚线 / 实线" aria-pressed={scene.groupBorderStyle === 'solid'} onClick={() => commit({ ...currentScene(), groupBorderStyle: scene.groupBorderStyle === 'solid' ? 'dashed' : 'solid' })}>{scene.groupBorderStyle === 'solid' ? '实线框' : '虚线框'}</button>
           <Popover open={toolbarMenu === 'style'} onOpenChange={(open) => setToolbarMenu(open ? 'style' : null)}>
             <PopoverTrigger asChild><button type="button" className={toolbarMenu === 'style' ? 'is-active' : ''}>样式</button></PopoverTrigger>
             <PopoverContent align="end" sideOffset={8} collisionPadding={12} className="freeform-toolbar-menu is-style" aria-label="画布样式设置">
@@ -2877,6 +2983,16 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
             {diagramVisualStyles.map((style) => <option key={style.id} value={style.id}>{style.label}</option>)}
           </select>
               </label>
+              <section className="freeform-canvas-background">
+                <StyleColorControl label="画布底色" value={scene.background} allowTransparent onChange={(value) => commit({ ...currentScene(), background: value })} />
+              </section>
+              <section className="freeform-frame-style">
+                <span>分区框线</span>
+                <div className="freeform-menu-grid two">
+                  <button type="button" aria-pressed={scene.groupBorderStyle !== 'solid'} className={scene.groupBorderStyle !== 'solid' ? 'is-selected' : ''} onClick={() => commit({ ...currentScene(), groupBorderStyle: 'dashed' })}>虚线</button>
+                  <button type="button" aria-pressed={scene.groupBorderStyle === 'solid'} className={scene.groupBorderStyle === 'solid' ? 'is-selected' : ''} onClick={() => commit({ ...currentScene(), groupBorderStyle: 'solid' })}>实线</button>
+                </div>
+              </section>
               {scene.architecture ? <>
                   <section className="freeform-theme-section">
                     <span>主题</span>
@@ -2934,7 +3050,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   </>
 
   return (
-    <div ref={editorRef} className={`freeform-editor workbench-${workbench} architecture-view-${architectureProjection.view} architecture-density-${architectureProjection.density} architecture-theme-${architectureTheme} lod-${semanticLodLevel}${scene.architecture ? ' is-architecture-mode' : ''}${relationFocus ? ' has-relation-lens' : ''}${keyDependencyActive ? ' has-key-dependency-lens' : ''}${architectureScope ? ' has-architecture-scope' : ''}`} tabIndex={0} inert={!active || undefined} aria-label="自由画布编辑器" aria-busy={imageImporting || undefined} onPaste={handleEditorPaste}>
+    <div ref={editorRef} className={`freeform-editor workbench-${workbench} architecture-view-${architectureProjection.view} architecture-density-${architectureProjection.density} architecture-theme-${architectureTheme} lod-${semanticLodLevel}${scene.architecture ? ' is-architecture-mode' : ''}${relationFocus ? ' has-relation-lens' : ''}${keyDependencyActive ? ' has-key-dependency-lens' : ''}${architectureScope ? ' has-architecture-scope' : ''}${playbackStep ? ' is-ai-playback' : ''}`} tabIndex={0} inert={!active || undefined} aria-label="自由画布编辑器" aria-busy={imageImporting || undefined} onPaste={handleEditorPaste}>
       <div ref={surfaceRef} className="freeform-surface">
         <input
           ref={imageInputRef}
@@ -3079,45 +3195,47 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
               <button type="button" onClick={() => setLayersOpen(false)}>关闭</button>
             </div>
             <input value={layerQuery} onChange={(event) => setLayerQuery(event.target.value)} placeholder="搜索节点、标签、源码" aria-label="搜索画布节点" />
-            {(scene.groups ?? []).length ? (
-              <section>
-                <span>边界</span>
-                {(scene.groups ?? [])
-                  .filter((group) => !layerNeedle || [group.id, group.label, group.description, group.c4Type].some((value) => value?.toLocaleLowerCase().includes(layerNeedle)))
-                  .map((group) => (
-                    <button key={group.id} type="button" className={selectedGroupId === group.id ? 'is-active' : ''} style={{ paddingLeft: 8 + groupDepth(group.id, scene.groups ?? []) * 12 }} onClick={() => selectGroup(group.id)}>
-                      <span>{group.collapsed ? '▸' : '▾'}</span>
-                      <strong>{group.label || group.id}</strong>
-                      <small>{group.c4Type ? c4Label(group.c4Type) : group.kind === 'boundary' ? 'Boundary' : 'Group'}</small>
+            <div className="freeform-layer-body">
+              {(scene.groups ?? []).length ? (
+                <section>
+                  <span>边界 · {(scene.groups ?? []).length}</span>
+                  {(scene.groups ?? [])
+                    .filter((group) => !layerNeedle || [group.id, group.label, group.description, group.c4Type].some((value) => value?.toLocaleLowerCase().includes(layerNeedle)))
+                    .map((group) => (
+                      <button key={group.id} type="button" title={group.label || group.id} className={`freeform-layer-group${selectedGroupId === group.id ? ' is-active' : ''}`} style={{ paddingLeft: 8 + groupDepth(group.id, scene.groups ?? []) * 12 }} onClick={() => selectGroup(group.id)}>
+                        <span>{group.collapsed ? '▸' : '▾'}</span>
+                        <strong>{group.label || group.id}</strong>
+                        <small>{group.c4Type ? c4Label(group.c4Type) : group.kind === 'boundary' ? '边界' : '分组'}</small>
+                      </button>
+                    ))}
+                </section>
+              ) : null}
+              {(scene.lanes ?? []).length ? (
+                <section>
+                  <span>泳道 · {(scene.lanes ?? []).length}</span>
+                  {(scene.lanes ?? []).filter((lane) => !layerNeedle || lane.label.toLocaleLowerCase().includes(layerNeedle)).map((lane) => (
+                    <button key={lane.id} type="button" className="freeform-layer-node" title={lane.label} onClick={() => {
+                      const ids = boxes.filter((item) => item.laneId === lane.id).map((item) => item.id)
+                      setSelectedGroupTarget(null)
+                      setSelectedIds(ids)
+                      focusBoxes(ids)
+                    }}>
+                      <strong>{lane.label}</strong><small>{lane.axis === 'horizontal' ? '横向' : '纵向'}</small>
                     </button>
                   ))}
-              </section>
-            ) : null}
-            {(scene.lanes ?? []).length ? (
+                </section>
+              ) : null}
               <section>
-                <span>泳道</span>
-                {(scene.lanes ?? []).filter((lane) => !layerNeedle || lane.label.toLocaleLowerCase().includes(layerNeedle)).map((lane) => (
-                  <button key={lane.id} type="button" onClick={() => {
-                    const ids = boxes.filter((item) => item.laneId === lane.id).map((item) => item.id)
-                    setSelectedGroupTarget(null)
-                    setSelectedIds(ids)
-                    focusBoxes(ids)
-                  }}>
-                    <strong>{lane.label}</strong><small>{lane.axis === 'horizontal' ? 'Horizontal' : 'Vertical'}</small>
+                <span>节点 · {layerBoxes.length}</span>
+                {layerBoxes.slice(0, 120).map((item) => (
+                  <button key={item.id} type="button" title={item.text} className={`freeform-layer-node${selectedIds.includes(item.id) ? ' is-active' : ''}`} onClick={() => revealAndFocus([item.id])}>
+                    <strong>{item.text}</strong>
+                    <small>{item.c4Type ? c4Label(item.c4Type) : item.stencil ? canvasStencilLabel(item.stencil) : item.icon ? canvasIconLabel(item.icon) : item.type}</small>
                   </button>
                 ))}
+                {layerBoxes.length > 120 ? <em>只显示前 120 个结果，请继续缩小搜索范围。</em> : null}
               </section>
-            ) : null}
-            <section>
-              <span>节点 · {layerBoxes.length}</span>
-              {layerBoxes.slice(0, 120).map((item) => (
-                <button key={item.id} type="button" className={selectedIds.includes(item.id) ? 'is-active' : ''} onClick={() => revealAndFocus([item.id])}>
-                  <strong>{item.text}</strong>
-                  <small>{item.c4Type ? c4Label(item.c4Type) : item.stencil ? canvasStencilLabel(item.stencil) : item.icon ? canvasIconLabel(item.icon) : item.type}</small>
-                </button>
-              ))}
-              {layerBoxes.length > 120 ? <em>只显示前 120 个结果，请继续缩小搜索范围。</em> : null}
-            </section>
+            </div>
           </aside>
         ) : null}
 
@@ -3152,7 +3270,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
               <path d="M0,0 L0,8 L10,4 z" fill="context-stroke" />
             </marker>
           </defs>
-          <rect width={scene.width} height={scene.height} className="freeform-background" style={visualSkin ? { fill: visualSkin.background } : undefined} pointerEvents="none" />
+          <rect width={scene.width} height={scene.height} className="freeform-background" style={scene.background ? { fill: scene.background } : visualSkin ? { fill: visualSkin.background } : undefined} pointerEvents="none" />
           <rect width={scene.width} height={scene.height} fill="url(#canvas-grid)" pointerEvents="none" />
           {draggedArchitectureTemplate && architectureTemplateDrag?.point ? (() => {
             const width = draggedArchitectureTemplate.width ?? 188
@@ -3246,7 +3364,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
           )).map((group) => (
             <g
               key={group.id}
-              className={`freeform-group-frame kind-${group.kind ?? 'group'} c4-${group.c4Type ?? 'none'}${group.parentId ? ' has-parent' : ''}${group.collapsed ? ' is-collapsed' : ''}${autoCollapsedGroupIds.has(group.id) ? ' is-lod-summary' : ''} tone-${group.tone ?? 'muted'}${selectedGroupId === group.id || selectedGroupIds.includes(group.id) ? ' is-selected' : ''}${traceResult ? group.memberIds.some((id) => tracedNodeIds.has(id)) ? ' is-traced' : ' is-trace-dimmed' : ''}`}
+              className={`freeform-group-frame kind-${group.kind ?? 'group'} c4-${group.c4Type ?? 'none'}${scene.groupBorderStyle === 'solid' ? ' has-solid-frame' : ''}${group.parentId ? ' has-parent' : ''}${group.collapsed ? ' is-collapsed' : ''}${autoCollapsedGroupIds.has(group.id) ? ' is-lod-summary' : ''} tone-${group.tone ?? 'muted'}${selectedGroupId === group.id || selectedGroupIds.includes(group.id) ? ' is-selected' : ''}${traceResult ? group.memberIds.some((id) => tracedNodeIds.has(id)) ? ' is-traced' : ' is-trace-dimmed' : ''}`}
               pointerEvents="none"
             >
               {group.description ? <title>{group.description}</title> : null}
@@ -3256,6 +3374,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                 width={group.width}
                 height={group.height}
                 rx={scene.architecture ? group.c4Type === 'software-system' ? 10 : 8 : 20}
+                style={group.fillColor ? { fill: group.fillColor, fillOpacity: 0.86 } : undefined}
                 pointerEvents={group.collapsed ? 'all' : 'none'}
                 onClick={group.collapsed ? (event) => {
                   event.stopPropagation()
@@ -3296,7 +3415,9 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                   <text x={group.x + 16} y={group.y + 35}>{truncate(group.label, 12)}</text>
                   <text className="freeform-group-member-count" x={group.x + group.width - 14} y={group.y + 35} textAnchor="end">{group.memberIds.length} 个组件</text>
                 </>
-              ) : <text x={group.x + 14} y={group.y + 22}>{truncate(group.label, 28)}{autoCollapsedGroupIds.has(group.id) ? ` · ${group.memberIds.length} 节点` : !scene.architecture && group.c4Type ? ` · ${c4Label(group.c4Type)}` : ''}{group.collapsed ? scene.architecture ? ' · 双击下钻' : autoCollapsedGroupIds.has(group.id) ? ' · 双击进入' : ' · 双击展开' : ''}</text> : null}
+              ) : group.labelSide === 'left' ? (
+                <text x={group.x - 12} y={group.y + group.height / 2} textAnchor="end" dominantBaseline="middle" className="freeform-group-left-label" style={{ fontSize: group.labelFontSize, fill: group.labelColor }}>{fitCanvasText(group.label, Math.max(60, group.x - 20), group.labelFontSize ?? 17, 730)}</text>
+              ) : <text x={group.x + 32} y={group.y + (group.labelFontSize ?? 11.5) + 6} style={{ fontSize: group.labelFontSize, fill: group.labelColor }}>{fitCanvasText(`${group.label}${autoCollapsedGroupIds.has(group.id) ? ` · ${group.memberIds.length} 节点` : !scene.architecture && group.c4Type ? ` · ${c4Label(group.c4Type)}` : ''}${group.collapsed ? scene.architecture ? ' · 双击下钻' : autoCollapsedGroupIds.has(group.id) ? ' · 双击进入' : ' · 双击展开' : ''}`, Math.max(60, group.width - 34), group.labelFontSize ?? 11.5, 650)}</text> : null}
             </g>
           ))}
           {relationBundleTrunks.map((bundle) => (
@@ -3549,6 +3670,13 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
             const rect = normalizeRect(selectionRect)
             return <rect className="freeform-marquee" x={rect.x} y={rect.y} width={rect.width} height={rect.height} />
           })() : null}
+          {playbackStep ? (
+            <g className="freeform-ai-trace" style={{ transform: `translate(${playbackStep.target.x}px, ${playbackStep.target.y}px)` }} pointerEvents="none" aria-hidden="true">
+              <circle className="freeform-ai-trace-halo" r="22" />
+              <circle className="freeform-ai-trace-dot" r="6" />
+              <path d="M 12 12 L 24 24" />
+            </g>
+          ) : null}
         </svg>
 
         {multiSelectionToolbarPosition ? (
@@ -3587,6 +3715,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
 
         <div className="freeform-status">
           <span>{scene.elements.length} 个元素</span>
+          {playbackStep ? <span className="freeform-ai-trace-status" role="status">{playbackRequest?.label ?? '正在展示画板变更'} · {playbackStep.label} · {playbackStep.index}/{playbackStep.total}</span> : null}
           {selected.length > 0 && inspectorCollapsed ? <button type="button" onClick={() => setInspectorCollapsed(false)}>属性</button> : null}
           {insertTarget ? <span className="is-action">释放后插入关系</span>
             : arrowEndpointPreview?.targetId ? <span className="is-action">释放后重挂到 {truncate(boxes.find((item) => item.id === arrowEndpointPreview.targetId)?.text ?? arrowEndpointPreview.targetId, 18)}</span>
@@ -3719,6 +3848,14 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                   />
                 </label>
                 {architectureWorkbench ? <label><span>副标题</span><input aria-label="节点副标题" disabled={selectedBox.locked} value={selectedBox.subtitle ?? ''} placeholder="例如：Spring Boot 4" onChange={(event) => updateElement(selectedBox.id, (item) => item.type === 'arrow' || item.locked ? item : { ...item, subtitle: event.target.value || undefined })} /></label> : null}
+                {selectedBox.type === 'node' ? <>
+                  <div className="freeform-section-caption">文字样式</div>
+                  <StyleColorControl label="文字颜色" value={selectedBox.textColor} onChange={(value) => updateSelectedBoxes((item) => ({ ...item, textColor: value }))} />
+                  <div className="freeform-property-row">
+                    <label><span>标题字号</span><input aria-label="节点标题字号" type="number" min="8" max="48" placeholder="自动" disabled={selectedBox.locked} value={selectedBox.fontSize ?? ''} onChange={(event) => { const value = event.target.value === '' ? undefined : Math.max(8, Math.min(48, Number(event.target.value) || 14)); updateSelectedBoxes((item) => ({ ...item, fontSize: value })) }} /></label>
+                    <label><span>字重</span><select aria-label="节点标题字重" disabled={selectedBox.locked} value={selectedBox.fontWeight ?? ''} onChange={(event) => updateSelectedBoxes((item) => ({ ...item, fontWeight: event.target.value ? Number(event.target.value) as 400 | 500 | 600 | 700 : undefined }))}><option value="">自动</option><option value={400}>常规</option><option value={500}>中等</option><option value={600}>半粗</option><option value={700}>粗体</option></select></label>
+                  </div>
+                </> : null}
                 {architectureWorkbench ? <>
                   <div className="freeform-section-caption">架构</div>
 
@@ -3918,6 +4055,11 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                   <span>名称</span>
                   <input aria-label="组合名称" value={selectedGroup.label ?? ''} placeholder="例如：订单域" onChange={(event) => updateSelectedGroup({ label: event.target.value || undefined })} />
                 </label>
+                <div className="freeform-property-row">
+                  <label><span>标签字号</span><input aria-label="边界标签字号" type="number" min="10" max="32" placeholder="自动 17" value={selectedGroup.labelFontSize ?? ''} onChange={(event) => updateSelectedGroup({ labelFontSize: event.target.value === '' ? undefined : Math.max(10, Math.min(32, Number(event.target.value) || 17)) })} /></label>
+                  <label><span>标签</span><select aria-label="边界标签位置" value={selectedGroup.labelSide ?? 'inside'} onChange={(event) => updateSelectedGroup({ labelSide: event.target.value as 'inside' | 'left' })}><option value="inside">内部</option><option value="left">左侧</option></select></label>
+                </div>
+                <StyleColorControl label="标签颜色" value={selectedGroup.labelColor} onChange={(value) => updateSelectedGroup({ labelColor: value })} />
                 <div className="freeform-property-row">
                   <label>
                     <span>类型</span>

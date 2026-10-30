@@ -790,6 +790,32 @@ test('auto density compacts large architecture layouts without changing canvas p
   assert.ok(nodes.every((item) => item.height <= 68))
 })
 
+test('美化保留 compose 已写入的分区归属', () => {
+  const scene: CanvasScene = {
+    type: 'diagram-plugin-canvas', version: 1, title: 'Partition ownership', width: 1500, height: 900,
+    groups: [
+      { id: 'arch-external', label: '外部与参与方', kind: 'boundary' },
+      { id: 'arch-application', label: '核心应用', kind: 'boundary' },
+      { id: 'arch-processing', label: '处理与异步', kind: 'boundary' },
+    ],
+    elements: [
+      { id: 'api', type: 'node', x: 400, y: 120, width: 204, height: 84, text: 'API', icon: 'api', groupId: 'arch-application' },
+      { id: 'x_mcp', type: 'node', x: 80, y: 120, width: 204, height: 84, text: '外部 MCP 客户端', icon: 'mcp', groupId: 'arch-external' },
+      { id: 'x_models', type: 'node', x: 80, y: 360, width: 204, height: 84, text: '模型与解析服务', icon: 'ai', groupId: 'arch-external' },
+      { id: 'runtime', type: 'node', x: 720, y: 120, width: 204, height: 84, text: 'Agent Runtime', icon: 'worker', groupId: 'arch-processing' },
+      { id: 'a1', type: 'arrow', from: 'x_mcp', to: 'api' },
+      { id: 'a2', type: 'arrow', from: 'x_models', to: 'api' },
+      { id: 'a3', type: 'arrow', from: 'api', to: 'runtime' },
+    ],
+  }
+  const result = beautifyArchitectureScene(scene, { view: 'detail' }).scene
+  const nodes = new Map(result.elements.filter((item) => item.type !== 'arrow').map((item) => [item.id, item]))
+  assert.equal(nodes.get('x_mcp')?.groupId, 'arch-external')
+  assert.equal(nodes.get('x_models')?.groupId, 'arch-external')
+  assert.equal(nodes.get('runtime')?.groupId, 'arch-processing')
+  assert.equal(nodes.get('api')?.groupId, 'arch-application')
+})
+
 function segmentCutsBox(a: { x: number; y: number }, b: { x: number; y: number }, box: { x: number; y: number; width: number; height: number }): boolean {
   const left = box.x - 1
   const right = box.x + box.width + 1

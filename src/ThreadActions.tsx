@@ -96,7 +96,7 @@ export function ThreadActions({
         title={!follow.enabled ? '已暂停跟随当前对话' : follow.paused ? '有未保存修改，跟随已暂停切换' : '正在跟随当前对话中的图表'}
         onClick={follow.onToggle}
       >
-        跟随
+        {follow.enabled ? '跟随中' : '已暂停'}
       </button>
       {hasDocument && modes.visible && modes.options.length > 1 ? (
         <span className="compact-mode-switch" role="group" aria-label="视图模式">

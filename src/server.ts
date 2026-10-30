@@ -11,6 +11,8 @@ import type { OpenAIUiToolMetadata } from '@openai/mcp-extensions/server'
 import { z } from 'zod/v4'
 import { beautifyArchitectureScene, inferArchitectureComposition, routeArchitectureEdges } from './architectureDesign.js'
 import { composeArchitectureGraph } from './architectureComposer.js'
+import { composeEnterpriseArchitecture } from './enterpriseArchitecture.js'
+import { architectureStyleQuestion } from './architectureStyle.js'
 import { architectureLayoutContract, assertArchitectureLayoutTransition } from './architectureLayoutContract.js'
 import { assessArchitecturePresentation } from './architecturePresentationQuality.js'
 import { assessArchitectureRouteDiagnostics } from './architectureRouteDiagnostics.js'
@@ -73,6 +75,7 @@ const server = new McpServer(
       'diagram.thread is only the UI-open action. Call it when the user explicitly asks to open/show the right-side Diagram panel, or once before the first diagram operation in a conversation when no prior diagram.thread call exists.',
       'If diagram.thread has already been called in this conversation, NEVER call it again for later create/get/update/proposal/beautify requests. The existing panel follows thread state automatically; use data tools directly.',
       'A software/system/module/service architecture request is NOT a flowchart request. For architecture, system architecture, module architecture, service topology, dependency architecture, deployment-style views, or C4 views, create type=canvas with canvasWorkbench=architecture. Use canvasWorkbench=flowchart for manually editable process/decision boards and canvasWorkbench=freeform for general drawing. Ordinary architecture diagrams should use tight named boundaries and role/technology semantics without automatically adding C4 metadata. Use C4 person/software-system/container/component only when the user explicitly asks for C4 or the source/current diagram already establishes that hierarchy.',
+      'When the user asks to draw an architecture diagram without choosing a style, STOP and ask whether they want 国内企业方案风格 (layered/grouped functional proposal) or 国际工程架构风格 (C4/dependency-focused engineering). Do not infer the choice from their industry or tech stack. Once confirmed pass architectureStyle=enterprise or engineering to diagram.designGuide and diagram.composeArchitecture. Do not call the compose tool without a confirmed style.',
       'Use type=flowchart only for an explicit process/workflow/control-flow/decision-flow request, or when the user explicitly asks for Mermaid/flowchart. Do not represent a software architecture as a Mermaid flowchart merely because it has arrows.',
       ...diagramIntentRoutingGuide(),
       'Before a non-trivial diagram creation or whole-diagram redesign, call diagram.designGuide once for the chosen type. It returns only that type’s composition archetypes, evidence rules, visual grammar and quality loop so the model does not need every diagram skill in context.',
@@ -171,13 +174,27 @@ server.registerTool('diagram.designGuide', {
     type: z.enum(diagramTypes.map((item) => item.type) as [DiagramType, ...DiagramType[]]),
     intent: z.string().max(1_000).optional().describe('Short user intent. For canvas this is used to distinguish architecture/C4 from a generic freeform board.'),
     architectureTheme: z.enum(['enterprise', 'technical', 'presentation', 'cloud', 'editorial', 'sketch']).default('enterprise'),
+    architectureStyle: z.enum(['enterprise', 'engineering']).optional().describe('User-confirmed visual architecture family, not a color theme. Ask the user when ambiguous.'),
   }),
   annotations: readonly,
-}, async ({ type, intent, architectureTheme }) => {
+}, async ({ type, intent, architectureTheme, architectureStyle }) => {
   const routing = diagramIntentRoutingGuide()
+  if (type === 'canvas' && isArchitectureIntent(intent ?? '') && !architectureStyle) {
+    return {
+      content: [{ type: 'text', text: architectureStyleQuestion }],
+      structuredContent: { kind: 'architecture-style-required', question: architectureStyleQuestion },
+    }
+  }
   const rules = type === 'canvas'
     ? (isArchitectureIntent(intent ?? '')
-        ? ['内置 Architecture Diagram Skill：', ...architectureDesignSkill(architectureTheme), ...diagramVisualStyleGuide()]
+        ? architectureStyle === 'enterprise'
+          ? ['国内企业方案风格：仅用已确认的分层和模块构图，不得伪造依赖。',
+              '每个节点的 layer 使用用户或源码确认的实际层名，也可使用已确认的 partition；层数至少两个。',
+              '图面采用横向分层、左侧层名、模块矩阵与实际方向的正交关系，模块数量多时自动换行。',
+              '调用 diagram.composeArchitecture，architectureStyle=enterprise，不手工写节点坐标。',
+              '不自动为功能模块生成虚构箭头；没有关系证据时只表达已有的真实关系。', ...diagramVisualStyleGuide()]
+          : ['国际工程架构风格：系统边界与真实组件依赖；只有明确要求 C4 时才使用其层级语义。',
+              ...architectureDesignSkill(architectureTheme), ...diagramVisualStyleGuide()]
         : [
             '内置 Canvas Design Guide：',
             ...diagramVisualStyleGuide(),
@@ -189,7 +206,7 @@ server.registerTool('diagram.designGuide', {
     : skillPromptLines(diagramSkill(type), 'generation')
   return {
     content: [{ type: 'text', text: [...routing, '', ...rules].join('\n') }],
-    structuredContent: { kind: 'diagram-design-guide', type, architectureTheme: type === 'canvas' ? architectureTheme : undefined, routing, rules },
+    structuredContent: { kind: 'diagram-design-guide', type, architectureTheme: type === 'canvas' ? architectureTheme : undefined, architectureStyle, routing, rules },
   }
 })
 
@@ -858,13 +875,14 @@ server.registerTool('diagram.create', {
     workspacePath: z.string().optional(),
     type: z.enum(diagramTypes.map((item) => item.type) as [DiagramType, ...DiagramType[]]).describe('Diagram kind. Choose canvas for architecture/system/module/service/C4/topology diagrams; otherwise choose the dedicated semantic or data visualization type rather than forcing the request into flowchart.'),
     canvasWorkbench: z.enum(['freeform', 'architecture', 'flowchart']).optional().describe('Canvas-only workbench profile. architecture exposes architecture/component tools, flowchart exposes process drawing/layout tools, freeform exposes general drawing tools.'),
+    canvasTemplate: z.enum(['layered', 'cards']).optional().describe('Canvas-only visual template: layered for left-labeled layer bands, cards for grouped card boards.'),
     title: z.string().min(1).max(120),
     animate: z.boolean().optional(),
   }),
   annotations: write,
-}, async ({ workspacePath, type, canvasWorkbench, title, animate }, extra) => {
+}, async ({ workspacePath, type, canvasWorkbench, canvasTemplate, title, animate }, extra) => {
   const store = await resolveStore(workspacePath, toolThreadId(extra._meta))
-  const diagram = await store.create(type, title, type === 'canvas' ? canvasWorkbench : undefined)
+  const diagram = await store.create(type, title, type === 'canvas' ? canvasWorkbench : undefined, type === 'canvas' ? canvasTemplate : undefined)
   markThreadDiagram(extra._meta, diagram.path, undefined, undefined, animate === false ? undefined : 'create', diagram.modifiedAt)
   return {
     content: [{ type: 'text', text: `Created ${diagram.path}\n\n${diagram.source}` }],
@@ -874,10 +892,11 @@ server.registerTool('diagram.create', {
 
 server.registerTool('diagram.composeArchitecture', {
   title: 'Compose system architecture from semantic graph',
-  description: 'Preferred one-call NEW professional architecture generation: supply verified semantic nodes and relationships, optional functional partitions and an evidence-backed primaryPath, never pixel coordinates. Deterministically creates an editable Canvas with quality diagnostics. No invented dependencies. Use diagram.create + diagram.update for faithful reference-image tracing.',
+  description: 'Generate editable architecture from verified semantic nodes and relationships. Requires user-confirmed architectureStyle: enterprise for evidence-based layered proposal diagrams, engineering for component/C4/dependency topology. Ask the user first if unspecified. Never invent dependencies or layer names.',
   inputSchema: z.object({
     workspacePath: z.string().optional(),
     title: z.string().trim().min(1).max(120),
+    architectureStyle: z.enum(['enterprise', 'engineering']).describe('Required user-confirmed architecture family. Ask the user to select if unclear.'),
     theme: z.enum(['enterprise', 'technical', 'presentation', 'cloud', 'editorial', 'sketch']).default('enterprise'),
     density: z.enum(['auto', 'comfortable', 'compact', 'dense']).default('auto'),
     visualScenario: z.enum(['enterprise-system', 'microservices', 'data-platform', 'ai-agent', 'deployment'])
@@ -896,17 +915,19 @@ server.registerTool('diagram.composeArchitecture', {
         .describe('Real workspace source paths already inspected; never fabricated.'),
       partition: z.enum(['external', 'experience', 'application', 'processing', 'data']).optional()
         .describe('Functional region confirmed by source or user. Omit unknown instead of guessing.'),
+      layer: z.string().trim().min(1).max(32).optional().describe('Actual verified layer name for enterprise proposal style, e.g. 业务应用层. Do not invent fixed layers.'),
     })).min(2).max(80),
     relations: z.array(z.object({
       from: z.string().min(1),
       to: z.string().min(1),
       label: z.string().max(64).optional().describe('Meaningful verified relationship/protocol, not a repeated node name.'),
       asynchronous: z.boolean().optional(),
-    })).min(1).max(160).describe('Real dependencies between nodes. Do not invent edges merely to make a picture connected.'),
+    })).max(160).describe('Only real dependencies between nodes. An empty array is valid for a functional architecture without verified cross-module calls; never invent edges.'),
   }),
   annotations: write,
-}, async ({ workspacePath, title, theme, density, visualScenario, primaryPath, style, nodes, relations }, extra) => {
-  const composed = composeArchitectureGraph({ title, theme, density, visualScenario, primaryPath, style: style as typeof diagramVisualStyles[number]['id'] | undefined, nodes, relations })
+}, async ({ workspacePath, title, architectureStyle, theme, density, visualScenario, primaryPath, style, nodes, relations }, extra) => {
+  const intent = { title, theme, density, visualScenario, primaryPath, style: style as typeof diagramVisualStyles[number]['id'] | undefined, nodes, relations }
+  const composed = architectureStyle === 'enterprise' ? composeEnterpriseArchitecture(intent) : composeArchitectureGraph(intent)
   assertArchitectureLayoutTransition(undefined, composed.scene, architectureLayoutContract('generate'))
   const store = await resolveStore(workspacePath, toolThreadId(extra._meta))
   const diagram = await store.createComposedArchitecture(title, serializeCanvasScene(composed.scene))
@@ -923,6 +944,7 @@ server.registerTool('diagram.composeArchitecture', {
       kind: 'diagram', workspacePath: store.workspacePath, diagram,
       architectureDesign: composed.summary,
       quality: composed.quality,
+      architectureStyle,
       architectureEvaluation: { semanticComposition: composed.semanticComposition, selected: composed.evaluation, inputOrderStrategy: composed.inputOrderStrategy, layoutOrderingStrategy: composed.layoutOrderingStrategy, routeDiagnostics: composed.routeDiagnostics, candidates: composed.candidates, reroutedEdges: composed.reroutedEdges, reorderedPairs: composed.reorderedPairs, note: 'Structural/layout heuristic only, not a visual aesthetic score. The selected layout can differ from the semantic composition when geometry improves.' },
       presentationQuality: composed.presentation,
       visualPlan: composed.visualPlan,

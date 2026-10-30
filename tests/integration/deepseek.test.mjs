@@ -67,6 +67,7 @@ test('架构语义图通过真实 MCP 一次生成、保存和质量评估', asy
     assert.ok(visible.some((tool) => tool.name === 'diagram.composeArchitecture'))
     const intent = {
       title: '后端系统架构',
+      architectureStyle: 'engineering',
       nodes: [
         { id: 'user', text: '客户端', icon: 'user' },
         { id: 'web', text: 'Web', icon: 'web' },
@@ -84,6 +85,7 @@ test('架构语义图通过真实 MCP 一次生成、保存和质量评估', asy
     const created = await call(client, root, 'architecture-session', 'diagram.composeArchitecture', intent)
     assert.equal(created.isError, undefined)
     assert.equal(created.structuredContent.diagram.canvasWorkbench, 'architecture')
+    assert.equal(created.structuredContent.architectureStyle, 'engineering')
     assert.equal(created.structuredContent.quality.metrics.nodeOverlaps, 0)
     assert.ok(created.structuredContent.architectureEvaluation.candidates.length >= 2)
     assert.ok(['layered', 'hub-spoke', 'event-driven', 'data-platform', 'agent-runtime', 'cloud-native']
@@ -112,11 +114,29 @@ test('架构语义图通过真实 MCP 一次生成、保存和质量评估', asy
       created.structuredContent.visualPlan.review.blockers)
     assert.equal((await readFile(path.join(root, created.structuredContent.diagram.path), 'utf8')).includes('arch-application'), true)
     assert.ok(JSON.stringify(await call(client, root, 'architecture-session', 'diagram.threadState')).includes(created.structuredContent.diagram.path))
+    const noChoice = await call(client, root, 'architecture-session', 'diagram.composeArchitecture', {
+      title: '未选风格', nodes: intent.nodes, relations: intent.relations,
+    })
+    assert.equal(noChoice.isError, true)
     const wrong = await call(client, root, 'architecture-session', 'diagram.composeArchitecture', {
       ...intent, title: '未保存错误图', relations: [{ from: 'missing', to: 'api' }],
     })
     assert.equal(wrong.isError, true)
     assert.equal((await call(client, root, 'architecture-session', 'diagram.list')).structuredContent.diagrams.length, 1)
+    const proposal = await call(client, root, 'architecture-session', 'diagram.composeArchitecture', {
+      ...intent, architectureStyle: 'enterprise', title: '企业方案分层图',
+      nodes: intent.nodes.map((node, index) => ({ ...node, layer: index < 2 ? '体验接入层' : index < 4 ? '业务服务层' : '数据基础层' })),
+      relations: [],
+    })
+    assert.equal(proposal.isError, undefined)
+    assert.equal(proposal.structuredContent.architectureStyle, 'enterprise')
+    assert.equal(proposal.structuredContent.diagram.canvasWorkbench, 'architecture')
+    assert.equal(proposal.structuredContent.quality.metrics.nodeOverlaps, 0)
+    assert.equal(proposal.structuredContent.architectureDesign.partitions, 3)
+    const savedProposal = JSON.parse(await readFile(path.join(root, proposal.structuredContent.diagram.path), 'utf8'))
+    assert.equal(savedProposal.architecture.diagramStyle, 'enterprise')
+    assert.deepEqual(savedProposal.groups.map((group) => group.label), ['体验接入层', '业务服务层', '数据基础层'])
+    assert.equal(savedProposal.elements.filter((element) => element.type === 'arrow').length, 0)
   } finally { await client.close(); await rm(root, { recursive: true, force: true }) }
 })
 

@@ -8,6 +8,7 @@ import { IconButton } from '@/components/diagram/icon-button'
 import { createTemplate } from './templates.js'
 import { createSafeSvgElement, renderMermaidSvg } from './mermaidRender.js'
 import type { CanvasWorkbenchMode } from './canvas.js'
+import { canvasTemplateChoices, type CanvasTemplateId } from './canvasTemplates.js'
 import { diagramTypeGroups, type DiagramType, type MermaidDiagramType } from './types.js'
 
 export type NewDiagramChoice = {
@@ -16,12 +17,21 @@ export type NewDiagramChoice = {
   meta: string
   type: DiagramType
   canvasWorkbench?: CanvasWorkbenchMode
+  canvasTemplate?: CanvasTemplateId
 }
 
 const canvasWorkbenchChoices: NewDiagramChoice[] = [
   { key: 'canvas:architecture', label: '系统架构', meta: '组件 · 边界 · 依赖', type: 'canvas', canvasWorkbench: 'architecture' },
   { key: 'canvas:flowchart', label: '流程画布', meta: '流程 · 连线 · 泳道', type: 'canvas', canvasWorkbench: 'flowchart' },
   { key: 'canvas:freeform', label: '自由画布', meta: '通用绘图', type: 'canvas', canvasWorkbench: 'freeform' },
+  ...canvasTemplateChoices.map((item) => ({
+    key: `canvas:template:${item.id}`,
+    label: item.label,
+    meta: item.detail,
+    type: 'canvas' as const,
+    canvasWorkbench: 'architecture' as const,
+    canvasTemplate: item.id,
+  })),
 ]
 
 const newDiagramChoiceGroups = [
@@ -38,7 +48,7 @@ const newDiagramChoiceGroups = [
   })),
 ]
 
-export function NewDiagramForm({ onCancel, onCreate }: { onCancel: () => void; onCreate: (type: DiagramType, title: string, canvasWorkbench?: CanvasWorkbenchMode) => Promise<void> }) {
+export function NewDiagramForm({ onCancel, onCreate }: { onCancel: () => void; onCreate: (type: DiagramType, title: string, canvasWorkbench?: CanvasWorkbenchMode, canvasTemplate?: CanvasTemplateId) => Promise<void> }) {
   const [choice, setChoice] = useState<NewDiagramChoice | null>(null)
   const [previewChoice, setPreviewChoice] = useState<NewDiagramChoice | null>(null)
   const [title, setTitle] = useState('')
@@ -56,7 +66,7 @@ export function NewDiagramForm({ onCancel, onCreate }: { onCancel: () => void; o
     event.preventDefault()
     if (!choice || !title.trim()) return
     setSubmitting(true)
-    void onCreate(choice.type, title, choice.canvasWorkbench).finally(() => setSubmitting(false))
+    void onCreate(choice.type, title, choice.canvasWorkbench, choice.canvasTemplate).finally(() => setSubmitting(false))
   }
 
   return (
@@ -128,7 +138,7 @@ function DiagramChoicePreview({ choice }: { choice: NewDiagramChoice | null }) {
         <div key={choice.key} className="new-diagram-preview-content">
           <div className="new-diagram-preview-stage">
             {choice.type === 'canvas'
-              ? <CanvasChoicePreview workbench={choice.canvasWorkbench ?? 'freeform'} />
+              ? <CanvasChoicePreview workbench={choice.canvasWorkbench ?? 'freeform'} template={choice.canvasTemplate} />
               : <MermaidChoicePreview type={choice.type} label={choice.label} />}
           </div>
           <div className="new-diagram-preview-caption">
@@ -147,7 +157,43 @@ function DiagramChoicePreview({ choice }: { choice: NewDiagramChoice | null }) {
   )
 }
 
-function CanvasChoicePreview({ workbench }: { workbench: CanvasWorkbenchMode }) {
+function CanvasChoicePreview({ workbench, template }: { workbench: CanvasWorkbenchMode; template?: CanvasTemplateId }) {
+  if (template === 'layered') {
+    const rows = [
+      ['#fde8ea', 28], ['#e8f1fb', 58], ['#fff5d9', 88], ['#ede7fb', 118], ['#e6f5e9', 148],
+    ] as const
+    return (
+      <svg className="new-diagram-preview-svg is-canvas" viewBox="0 0 280 180" aria-hidden="true">
+        {rows.map(([fill, y], index) => (
+          <g key={fill}>
+            <rect x="52" y={y} width="210" height="22" rx="6" fill={fill} stroke="#cfd8e3" />
+            <rect x="58" y={y + 6} width="46" height="10" rx="3" className="preview-node" />
+            <rect x="112" y={y + 6} width="46" height="10" rx="3" className="preview-node" />
+            <rect x="166" y={y + 6} width="46" height="10" rx="3" className="preview-node" />
+            <text x="46" y={y + 14} textAnchor="end" className="preview-caption">{['接入', '接口', '业务', '运行', '数据'][index]}</text>
+          </g>
+        ))}
+      </svg>
+    )
+  }
+  if (template === 'cards') {
+    return (
+      <svg className="new-diagram-preview-svg is-canvas" viewBox="0 0 280 180" aria-hidden="true">
+        <rect x="14" y="18" width="76" height="70" rx="8" fill="#eaf6e9" stroke="#cfd8e3" />
+        <rect x="22" y="30" width="60" height="18" rx="4" className="preview-node" />
+        <rect x="22" y="54" width="60" height="18" rx="4" className="preview-node" />
+        <rect x="98" y="18" width="104" height="92" rx="8" fill="#e8f1fb" stroke="#cfd8e3" />
+        <rect x="106" y="30" width="42" height="18" rx="4" className="preview-node" />
+        <rect x="154" y="30" width="42" height="18" rx="4" className="preview-node" />
+        <rect x="106" y="54" width="42" height="18" rx="4" className="preview-node" />
+        <rect x="154" y="54" width="42" height="18" rx="4" className="preview-node" />
+        <rect x="210" y="18" width="58" height="92" rx="8" fill="#f0e9fb" stroke="#cfd8e3" />
+        <rect x="218" y="30" width="42" height="18" rx="4" className="preview-node" />
+        <rect x="218" y="54" width="42" height="18" rx="4" className="preview-node" />
+        <rect x="98" y="120" width="170" height="36" rx="8" fill="#fff4e5" stroke="#cfd8e3" />
+      </svg>
+    )
+  }
   if (workbench === 'architecture') {
     return (
       <svg className="new-diagram-preview-svg is-canvas" viewBox="0 0 280 180" aria-hidden="true">
@@ -227,7 +273,7 @@ export interface NewDiagramDialogProps {
   openKey: number
   onOpenChange: (open: boolean) => void
   onCancel: () => void
-  onCreate: (type: DiagramType, title: string, canvasWorkbench?: CanvasWorkbenchMode) => Promise<void>
+  onCreate: (type: DiagramType, title: string, canvasWorkbench?: CanvasWorkbenchMode, canvasTemplate?: CanvasTemplateId) => Promise<void>
 }
 
 /** The panel's full-screen new-diagram picker, with the live preview beside the type list. */

@@ -173,6 +173,7 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .new-diagram-preview { min-height: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; background: color-mix(in srgb, var(--surface-muted) 72%, var(--surface-panel)); }
 .new-diagram-preview-content { height: 100%; min-height: 230px; display: grid; grid-template-rows: minmax(0, 1fr) auto; animation: new-diagram-preview-in 180ms cubic-bezier(.2,.8,.2,1); }
 .new-diagram-preview-stage { min-height: 0; display: grid; place-items: center; padding: 14px; overflow: hidden; }
+.new-diagram-preview-svg .preview-caption { fill: var(--text-secondary); font-size: 8px; font-weight: 600; }
 .new-diagram-preview-caption { min-height: 46px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; border-top: 1px solid var(--border); background: var(--surface-panel); }
 .new-diagram-preview-caption strong { min-width: 0; overflow: hidden; font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .new-diagram-preview-caption span { flex: 0 0 auto; color: var(--text-tertiary); font-size: 12px; white-space: nowrap; }
@@ -305,8 +306,9 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .freeform-toolbar-chevron { margin-left: 4px; color: var(--text-tertiary); font-size: 12px; }
 .freeform-floating-toolbar button.is-active .freeform-toolbar-chevron { color: currentColor; opacity: .72; }
 .freeform-toolbar-menu-wrap { position: relative; display: flex; align-items: center; }
-.freeform-toolbar-menu { width: 274px; max-width: calc(100vw - 24px); max-height: min(520px, var(--radix-popover-content-available-height)); overflow: auto; padding: 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-panel); box-shadow: 0 6px 22px rgba(0,0,0,.1); }
-.freeform-toolbar-menu.is-architecture { max-height: min(470px, var(--radix-popover-content-available-height)); }
+.freeform-toolbar-menu { width: 274px; max-width: calc(100vw - 24px); max-height: min(520px, var(--radix-popover-content-available-height)); overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-panel); box-shadow: 0 6px 22px rgba(0,0,0,.1); }
+.freeform-toolbar-menu.is-architecture { width: 302px; max-height: min(700px, var(--radix-popover-content-available-height)); }
+.freeform-toolbar-menu.is-style { width: 312px; }
 .freeform-toolbar-menu.is-flowchart { width: 226px; }
 .freeform-toolbar-menu.is-analysis { width: 244px; }
 .freeform-toolbar-overflow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
@@ -320,8 +322,6 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .freeform-toolbar-menu button { width: 100%; height: 28px; padding: 0 7px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 12px; text-align: left; white-space: nowrap; }
 .freeform-toolbar-menu button:hover:not(:disabled) { border-color: var(--border); background: var(--surface-hover); }
 .freeform-toolbar-menu button.is-selected { position: relative; border-color: color-mix(in srgb, var(--accent) 46%, var(--border)); background: color-mix(in srgb, var(--accent) 10%, var(--surface-panel)); color: var(--text-primary); font-weight: 650; }
-.freeform-toolbar-menu button.is-selected::after { content: '✓'; margin-left: 5px; color: var(--accent); font-size: 12px; }
-.freeform-menu-grid button.is-selected::after { position: absolute; top: 3px; right: 4px; margin: 0; }
 .freeform-toolbar-menu button.is-primary { border-color: color-mix(in srgb, var(--accent) 42%, var(--border)); background: color-mix(in srgb, var(--accent) 12%, var(--surface-panel)); color: var(--text-primary); font-weight: 650; text-align: center; }
 .freeform-architecture-entry p { margin: 0 0 2px; }
 .freeform-menu-more { margin: 4px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
@@ -336,27 +336,35 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .freeform-menu-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .freeform-menu-grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .freeform-menu-grid button { text-align: center; padding: 0 6px; }
-.freeform-toolbar-menu.is-architecture .freeform-compact-control-row { grid-template-columns: 42px minmax(0, 1fr); align-items: center; gap: 6px; padding-top: 5px; padding-bottom: 5px; }
-.freeform-toolbar-menu.is-architecture .freeform-compact-control-row > span { align-self: center; }
+.freeform-toolbar-menu.is-architecture .freeform-compact-control-row { grid-template-columns: 54px minmax(0, 1fr); align-items: center; gap: 8px; padding-top: 5px; padding-bottom: 5px; }
+.freeform-toolbar-menu.is-architecture .freeform-compact-control-row > span { align-self: center; white-space: nowrap; }
 .freeform-toolbar-menu.is-architecture .freeform-theme-section { gap: 5px; padding-top: 6px; padding-bottom: 6px; }
 .freeform-architecture-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 6px 4px 4px; }
 .freeform-architecture-actions button { text-align: center !important; border-color: var(--border) !important; }
-.freeform-theme-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
-.freeform-theme-option { height: 48px !important; display: grid; grid-template-rows: 25px 13px; place-items: center; gap: 2px; padding: 4px !important; text-align: center !important; }
-.freeform-theme-option > i { width: 34px; height: 23px; position: relative; display: block; border: 1px solid var(--border); border-radius: 4px; background: var(--app-bg); overflow: hidden; }
+.freeform-theme-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.freeform-theme-option { position: relative; height: 56px !important; display: grid; grid-template-rows: 30px 14px; place-items: center; gap: 3px; padding: 5px 4px !important; border: 1px solid transparent !important; border-radius: 8px; text-align: center !important; }
+.freeform-theme-option > i { width: 40px; height: 26px; position: relative; display: block; border: 1px solid var(--border); border-radius: 5px; background: var(--app-bg); overflow: hidden; }
 .freeform-theme-option > i b { position: absolute; display: block; height: 5px; border-radius: 2px; background: var(--text-tertiary); opacity: .5; }
-.freeform-theme-option > i b:nth-child(1) { left: 4px; top: 4px; width: 11px; }
-.freeform-theme-option > i b:nth-child(2) { right: 4px; top: 10px; width: 14px; }
-.freeform-theme-option > i b:nth-child(3) { left: 6px; bottom: 3px; width: 20px; }
-.freeform-theme-option strong { color: var(--text-primary); font-size: 12px; font-weight: 680; line-height: 1; }
-.freeform-theme-option.theme-cloud > i { background: color-mix(in srgb, #60a5fa 9%, var(--app-bg)); }
+.freeform-theme-option > i b:nth-child(1) { left: 5px; top: 5px; width: 13px; }
+.freeform-theme-option > i b:nth-child(2) { right: 5px; top: 12px; width: 16px; }
+.freeform-theme-option > i b:nth-child(3) { left: 7px; bottom: 4px; width: 23px; }
+.freeform-theme-option strong { color: var(--text-primary); font-size: 12px; font-weight: 650; line-height: 1; }
+.freeform-theme-option:hover:not(:disabled) { background: var(--surface-hover); }
+.freeform-theme-option.is-selected { border-color: color-mix(in srgb, var(--accent) 52%, var(--border)) !important; background: color-mix(in srgb, var(--accent) 7%, var(--surface-panel)) !important; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent); }
+.freeform-theme-option.theme-enterprise > i { background: color-mix(in srgb, #3b82f6 10%, var(--app-bg)); }
+.freeform-theme-option.theme-enterprise > i b { background: #3b82f6; }
+.freeform-theme-option.theme-cloud > i { background: color-mix(in srgb, #60a5fa 10%, var(--app-bg)); }
 .freeform-theme-option.theme-cloud > i b { background: #60a5fa; }
-.freeform-theme-option.theme-presentation > i { background: color-mix(in srgb, #10b981 8%, var(--app-bg)); }
-.freeform-theme-option.theme-presentation > i b:first-child { width: 24px; background: #10b981; }
+.freeform-theme-option.theme-technical > i { background: color-mix(in srgb, #64748b 9%, var(--app-bg)); }
+.freeform-theme-option.theme-technical > i b { background: #64748b; }
+.freeform-theme-option.theme-presentation > i { background: color-mix(in srgb, #10b981 9%, var(--app-bg)); }
+.freeform-theme-option.theme-presentation > i b { background: #10b981; }
+.freeform-theme-option.theme-editorial > i { background: color-mix(in srgb, #f59e0b 8%, var(--app-bg)); }
+.freeform-theme-option.theme-editorial > i b { background: #d97706; }
 .freeform-theme-option.theme-editorial > i b:nth-child(1) { width: 24px; height: 3px; opacity: .85; }
 .freeform-theme-option.theme-editorial > i b:nth-child(2) { width: 9px; right: 5px; }
-.freeform-theme-option.theme-sketch > i { transform: rotate(-1deg); border-style: dashed; }
-.freeform-theme-option.theme-sketch > i b { transform: rotate(1.5deg); border-radius: 0; }
+.freeform-theme-option.theme-sketch > i { background: color-mix(in srgb, #a855f7 8%, var(--app-bg)); transform: rotate(-1deg); border-style: dashed; }
+.freeform-theme-option.theme-sketch > i b { background: #9333ea; transform: rotate(1.5deg); border-radius: 0; }
 .freeform-asset-library-head { height: 34px; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 5px; padding: 0 2px 6px; border-bottom: 1px solid var(--border); }
 .freeform-asset-library-head button { width: 28px !important; height: 28px !important; padding: 0 !important; text-align: center !important; font-size: 18px; }
 .freeform-asset-library-head strong { font-size: 12px; font-weight: 700; }
@@ -416,8 +424,8 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .freeform-shape-drop-preview > path { fill: color-mix(in srgb, var(--surface-raised) 70%, transparent); stroke: color-mix(in srgb, var(--accent) 72%, var(--border)); stroke-width: 1.8; stroke-dasharray: 6 5; }
 .freeform-shape-drop-preview > path.is-detail { fill: none; stroke-width: 1.3; }
 .freeform-menu-stack { display: grid; gap: 3px; }
-.freeform-architecture-dependency-navigation .freeform-menu-stack { max-height: 184px; overflow-y: auto; overscroll-behavior: contain; }
-.freeform-toolbar-menu .freeform-architecture-dependency-navigation .freeform-menu-stack > button { display: flex; height: auto; min-height: 43px; padding: 5px 9px; align-items: center; justify-content: space-between; gap: 8px; text-align: left; }
+.freeform-architecture-dependency-navigation .freeform-menu-stack { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; max-height: none; overflow: visible; }
+.freeform-toolbar-menu .freeform-architecture-dependency-navigation .freeform-menu-stack > button { display: flex; height: auto; min-height: 40px; padding: 4px 7px; align-items: center; justify-content: space-between; gap: 4px; text-align: left; }
 .freeform-architecture-dependency-navigation .freeform-menu-stack > button > span { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
 .freeform-architecture-dependency-navigation .freeform-menu-stack strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .freeform-architecture-dependency-navigation .freeform-menu-stack small { font-size: 10px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
@@ -433,11 +441,11 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 }
 .freeform-architecture-relation-explorer > input:focus-visible { border-color: var(--accent); }
 .freeform-relation-explorer-list { display: grid; max-height: 178px; gap: 2px; overflow: auto; overscroll-behavior: contain; }
-.freeform-toolbar-menu .freeform-relation-explorer-list > button { height: auto; min-height: 40px; padding: 5px 8px; white-space: normal; }
+.freeform-toolbar-menu .freeform-relation-explorer-list > button { height: auto; min-height: 54px; padding: 6px 8px; align-content: start; white-space: normal; }
 .freeform-relation-endpoints { display: grid; min-width: 0; gap: 1px; line-height: 1.3; }
 .freeform-relation-endpoints > span { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .freeform-relation-endpoints > span + span { color: var(--text-tertiary); }
-.freeform-relation-explorer-list > button small { display: block; font-size: 10px; color: var(--text-tertiary); }
+.freeform-relation-explorer-list > button small { display: block; margin-top: 2px; font-size: 10px; line-height: 1.25; color: var(--text-tertiary); }
 .freeform-menu-depth { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 6px; color: var(--text-tertiary); font-size: 12px; }
 .freeform-menu-depth select { height: 27px; min-width: 0; padding: 0 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--app-bg); color: var(--text-secondary); font-size: 12px; }
 .freeform-layout-select { height: 28px; max-width: 94px; padding: 0 22px 0 7px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 10px; }
@@ -511,15 +519,20 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .freeform-size-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .freeform-size-row label { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: center; gap: 4px; }
 .freeform-property-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.freeform-style-color { display: grid; gap: 4px; color: var(--text-tertiary); font-size: 12px; }
+.freeform-style-color { display: grid; gap: 6px; color: var(--text-tertiary); font-size: 12px; }
 .freeform-style-color > span { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .freeform-style-color > span em { color: var(--text-tertiary); font: 9px var(--font-mono); font-style: normal; }
-.freeform-style-color > div { display: flex; align-items: center; gap: 5px; }
+.freeform-style-color > div { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
 .freeform-inspector .freeform-style-color button:not(.freeform-style-auto) { width: 20px; min-width: 20px; height: 20px; padding: 0; border-radius: 5px; border-color: color-mix(in srgb, var(--border-strong) 72%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--surface-panel) 55%, transparent); }
 .freeform-inspector .freeform-style-color button.is-selected { outline: 2px solid color-mix(in srgb, var(--accent) 58%, transparent); outline-offset: 1px; }
-.freeform-style-native-color { width: 22px; height: 22px; display: grid !important; place-items: center; overflow: hidden; border: 1px solid var(--border); border-radius: 5px; background: conic-gradient(#ef4444, #f59e0b, #22c55e, #3b82f6, #8b5cf6, #ef4444); cursor: pointer; }
-.freeform-style-native-color input { width: 28px; height: 28px; padding: 0; border: 0; opacity: 0; cursor: pointer; }
+.freeform-toolbar-menu .freeform-style-color button:not(.freeform-style-auto) { width: 22px; min-width: 22px; height: 22px; padding: 0; border-radius: 5px; border-color: color-mix(in srgb, var(--border-strong) 72%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--surface-panel) 55%, transparent); }
+.freeform-toolbar-menu .freeform-style-color button.is-selected { outline: 2px solid color-mix(in srgb, var(--accent) 58%, transparent); outline-offset: 1px; }
+.freeform-style-native-color { width: 24px; height: 24px; display: grid !important; place-items: center; overflow: hidden; border: 1px solid var(--border); border-radius: 6px; background: conic-gradient(#ef4444, #f59e0b, #22c55e, #3b82f6, #8b5cf6, #ef4444); cursor: pointer; }
+.freeform-style-native-color input { width: 100%; height: 100%; padding: 0; border: 0; opacity: 0; cursor: pointer; }
 .freeform-inspector .freeform-style-auto { margin-left: auto; height: 22px; padding: 0 6px; font-size: 12px; }
+.freeform-toolbar-menu .freeform-style-auto { margin-left: auto; height: 24px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; }
+.freeform-inspector .freeform-style-none { flex: 0 0 auto; width: auto !important; min-width: 36px !important; height: 22px; padding: 0 6px; border: 1px solid var(--border); border-radius: 6px; font-size: 11px; color: var(--text-secondary); }
+.freeform-toolbar-menu .freeform-style-none { flex: 0 0 auto; width: auto !important; min-width: 40px !important; height: 24px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; color: var(--text-secondary); }
 .freeform-style-range { grid-template-columns: 44px minmax(0, 1fr) 28px !important; align-items: center; gap: 6px !important; }
 .freeform-inspector .freeform-style-range input[type='range'] { height: 20px; padding: 0; border: 0; background: transparent; }
 .freeform-style-range b { color: var(--text-tertiary); font: 9px var(--font-mono); text-align: right; }
@@ -538,20 +551,26 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .freeform-source-options { position: absolute; z-index: 14; top: calc(100% + 4px); left: 0; right: 0; max-height: 170px; overflow: auto; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-panel); box-shadow: 0 12px 30px rgba(0,0,0,.12); }
 .freeform-source-options > span { display: block; padding: 6px 8px; color: var(--text-tertiary); font-size: 12px; }
 .freeform-source-options button { width: 100%; display: block; overflow: hidden; border: 0; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
-.freeform-layer-panel { position: absolute; z-index: 8; top: 48px; left: 8px; width: min(250px, calc(100% - 16px)); max-height: calc(100% - 104px); display: flex; flex-direction: column; gap: 8px; padding: 10px; overflow: hidden; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-panel); box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+.freeform-layer-panel { position: absolute; z-index: 8; top: 48px; left: 8px; width: min(300px, calc(100% - 16px)); max-height: calc(100% - 104px); display: flex; flex-direction: column; gap: 6px; padding: 8px; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-panel); box-shadow: 0 10px 30px rgba(0,0,0,.12); }
 .freeform-editor.has-architecture-scope .freeform-layer-panel { top: 90px; max-height: calc(100% - 150px); }
-.freeform-layer-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.freeform-layer-head strong { font-size: 12px; }
-.freeform-layer-head button { height: 24px; padding: 0 7px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 12px; }
-.freeform-layer-panel > input { height: 29px; padding: 0 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--app-bg); color: var(--text-primary); font-size: 12px; }
-.freeform-layer-panel section { min-height: 0; display: grid; gap: 2px; overflow: auto; }
-.freeform-layer-panel section > span { padding: 5px 4px 3px; color: var(--text-tertiary); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.freeform-layer-panel section > button { min-height: 29px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 4px 7px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); text-align: left; }
+.freeform-layer-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 1px 2px 0; }
+.freeform-layer-head strong { font-size: 13px; font-weight: 700; }
+.freeform-layer-head button { height: 26px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 12px; }
+.freeform-layer-panel > input { height: 31px; padding: 0 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-muted); color: var(--text-primary); font-size: 12px; }
+.freeform-layer-body { min-height: 0; display: grid; gap: 8px; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-gutter: stable; padding-right: 2px; }
+.freeform-layer-panel section { min-height: 0; display: grid; gap: 2px; overflow: visible; }
+.freeform-layer-panel section > span { position: sticky; top: 0; z-index: 1; padding: 8px 4px 4px; background: var(--surface-panel); color: var(--text-tertiary); font-size: 11px; font-weight: 700; letter-spacing: .06em; }
+.freeform-layer-panel section > button { min-height: 34px; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: 1fr; align-items: center; column-gap: 8px; padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); text-align: left; }
 .freeform-layer-panel section > button:hover, .freeform-layer-panel section > button.is-active { background: var(--surface-hover); color: var(--text-primary); }
-.freeform-layer-panel section > button > span { grid-row: 1 / 3; font-size: 12px; }
-.freeform-layer-panel section > button strong { min-width: 0; overflow: hidden; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.freeform-layer-panel section > button small { color: var(--text-tertiary); font-size: 12px; white-space: nowrap; }
+.freeform-layer-panel section > button strong { min-width: 0; overflow: hidden; font-size: 12px; font-weight: 600; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.freeform-layer-panel section > button small { max-width: 82px; overflow: hidden; padding: 2px 5px; border-radius: 4px; background: var(--surface-muted); color: var(--text-tertiary); font-size: 10px; font-weight: 600; letter-spacing: .02em; text-overflow: ellipsis; white-space: nowrap; }
 .freeform-layer-panel section > em { padding: 6px; color: var(--text-tertiary); font-size: 12px; font-style: normal; }
+.freeform-layer-panel .freeform-layer-group { grid-template-columns: 14px minmax(0, 1fr) auto; min-height: 36px; }
+.freeform-layer-panel .freeform-layer-group > span { grid-column: 1; grid-row: 1; align-self: center; font-size: 10px; color: var(--text-tertiary); }
+.freeform-layer-panel .freeform-layer-group > strong { grid-column: 2; grid-row: 1; }
+.freeform-layer-panel .freeform-layer-group > small { grid-column: 3; grid-row: 1; }
+.freeform-layer-panel .freeform-layer-node > strong { grid-column: 1; grid-row: 1; }
+.freeform-layer-panel .freeform-layer-node > small { grid-column: 2; grid-row: 1; }
 .freeform-group-inspector, .freeform-lane-inspector { display: grid; gap: 7px; padding-top: 7px; border-top: 1px solid var(--border); }
 .freeform-group-inspector { display: grid; gap: 7px; padding-top: 8px; border-top: 1px solid var(--border); }
 .freeform-section-caption { display: flex; align-items: center; gap: 7px; color: var(--text-secondary); font-size: 12px; font-weight: 600; }
@@ -741,6 +760,7 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .freeform-group-outline { fill: color-mix(in srgb, var(--accent) 4%, transparent); stroke: color-mix(in srgb, var(--accent) 65%, transparent); stroke-width: 1.5; stroke-dasharray: 10 7; pointer-events: none; vector-effect: non-scaling-stroke; }
 .freeform-group-frame rect { fill: color-mix(in srgb, var(--surface-muted) 30%, transparent); stroke: color-mix(in srgb, var(--text-tertiary) 42%, transparent); stroke-width: 1.3; stroke-dasharray: 9 6; vector-effect: non-scaling-stroke; }
 .freeform-group-frame text { fill: var(--text-tertiary); font-size: 12px; font-weight: 650; font-family: var(--font-sans); }
+.freeform-group-frame .freeform-group-left-label { fill: var(--text-secondary); font-size: 17px; font-weight: 730; }
 .freeform-group-frame.tone-accent rect { stroke: #818cf8; fill: color-mix(in srgb, #818cf8 5%, transparent); }
 .freeform-group-frame.tone-success rect { stroke: #34d399; fill: color-mix(in srgb, #34d399 5%, transparent); }
 .freeform-group-frame.is-lod-summary rect { fill: color-mix(in srgb, var(--surface-panel) 88%, var(--surface-muted)); stroke-dasharray: none; stroke-width: 1.8; }
@@ -757,6 +777,7 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .freeform-group-frame.is-traced rect { stroke: color-mix(in srgb, var(--accent) 70%, var(--border-strong)); stroke-width: 2.2; }
 .freeform-group-frame.is-trace-dimmed { opacity: .2; }
 .freeform-group-frame.kind-boundary rect { stroke-dasharray: 14 7; stroke-width: 1.8; }
+.freeform-group-frame.has-solid-frame rect { stroke-dasharray: none; }
 .freeform-group-frame.c4-software-system rect { stroke-width: 2.4; stroke-dasharray: none; fill-opacity: .72; }
 .freeform-group-frame.c4-software-system .freeform-group-header { stroke: none; fill: color-mix(in srgb, var(--accent) 10%, var(--surface-raised)); fill-opacity: .88; }
 .freeform-group-frame.c4-software-system text { font-size: 13px; font-weight: 760; fill: var(--text-secondary); }
@@ -768,6 +789,8 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .freeform-editor.is-architecture-mode .freeform-group-frame.c4-software-system text { font-size: 11px; font-weight: 650; fill: var(--text-tertiary); }
 .freeform-editor.is-architecture-mode .freeform-group-frame.c4-container > rect:first-of-type { fill: transparent; stroke-width: 1.05; stroke-dasharray: 7 5; opacity: .68; }
 .freeform-editor.is-architecture-mode .freeform-group-frame.c4-container.has-parent text { font-size: 10px; font-weight: 620; }
+.freeform-editor .freeform-group-frame.has-solid-frame > rect:first-of-type { stroke-dasharray: none; }
+.freeform-editor[class*="architecture-theme-"] .freeform-group-frame.has-solid-frame > rect:first-of-type { stroke-dasharray: none; }
 .freeform-group-frame.is-collapsed { cursor: pointer; }
 .freeform-group-frame.is-collapsed rect { fill: color-mix(in srgb, var(--surface-raised) 88%, transparent); }
 .freeform-group-frame .freeform-group-navigation-hit { fill: transparent !important; stroke: none !important; stroke-dasharray: none !important; cursor: pointer; }
@@ -851,7 +874,7 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .freeform-editor.is-architecture-mode .freeform-arrow.is-group-bundle .freeform-arrow-line { opacity: .5; }
 .freeform-editor.is-architecture-mode .freeform-arrow.is-group-bundle.emphasis-primary .freeform-arrow-line { opacity: .78; }
 .freeform-editor.is-architecture-mode .freeform-arrow.is-group-bundle.emphasis-muted .freeform-arrow-line { opacity: .22; }
-.freeform-editor.is-architecture-mode .freeform-arrow .freeform-arrow-label text { font-size: 12px; font-weight: 600; }
+.freeform-editor.is-architecture-mode .freeform-arrow .freeform-arrow-label text { font-size: 14px; font-weight: 600; }
 :root[data-theme='dark'] .freeform-editor.is-architecture-mode .freeform-bundle-trunk.is-group-bus { opacity: .30; }
 :root[data-theme='dark'] .freeform-editor.is-architecture-mode .freeform-bundle-trunk.is-group-bus.emphasis-primary { opacity: .40; }
 :root[data-theme='dark'] .freeform-editor.is-architecture-mode .freeform-bundle-trunk.is-group-bus.emphasis-muted { opacity: .18; }
@@ -1193,9 +1216,10 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 @media (max-width: 900px) {
   .diagram-shell { grid-template-columns: 205px minmax(0, 1fr); }
   .diagram-shell.sidebar-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
-  .editor-workspace.mode-split { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(230px, 0.8fr) minmax(280px, 1.2fr); overflow: auto; }
+  .editor-workspace.mode-split { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(280px, 1.2fr) minmax(230px, 0.8fr); overflow: auto; }
   .editor-workspace.mode-split .split-resizer { display: none; }
-  .editor-workspace.mode-split .source-pane { border-right: 0; border-bottom: 1px solid var(--border); }
+  .editor-workspace.mode-split .preview-pane { grid-row: 1; }
+  .editor-workspace.mode-split .source-pane { grid-row: 2; border-right: 0; border-top: 1px solid var(--border); border-bottom: 0; }
   .editor-toolbar { align-items: flex-start; flex-direction: column; gap: 6px; }
   .toolbar-actions { width: 100%; justify-content: flex-end; }
 }
@@ -1247,6 +1271,16 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .freeform-box.is-updated .freeform-shape-body,
 .freeform-box.is-updated > rect:first-of-type { animation: canvas-change-highlight 700ms ease-out; }
 .freeform-arrow.is-updated .freeform-arrow-line { animation: canvas-change-highlight 700ms ease-out; }
+.freeform-ai-trace { color: var(--accent); transition: transform 480ms cubic-bezier(.2,.8,.2,1); }
+.freeform-ai-trace-halo { fill: color-mix(in srgb, var(--accent) 13%, transparent); stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 4; }
+.freeform-ai-trace-dot { fill: var(--accent); stroke: var(--surface-panel); stroke-width: 2; }
+.freeform-ai-trace > path { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; }
+.freeform-ai-trace-status { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent); }
+.freeform-editor.is-ai-playback .freeform-arrow.is-updated .freeform-arrow-line { stroke-dasharray: 1; animation: canvas-ai-connection 600ms ease-out both; }
+@keyframes canvas-ai-connection {
+  from { stroke-dashoffset: 1; stroke: var(--accent); stroke-width: 3; }
+  to { stroke-dashoffset: 0; }
+}
 @keyframes canvas-change-highlight {
   from { stroke: var(--accent); stroke-width: 2.5; }
 }
@@ -1259,8 +1293,8 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .freeform-tools > button, .freeform-tools > div > button { flex-shrink: 0; }
 .freeform-tool-history { flex: 0 0 auto; margin-left: auto; display: flex; align-items: center; gap: 2px; }
 .freeform-tool-history .freeform-toolbar-separator { margin-right: 2px; }
-.freeform-style-preset { display: grid; gap: 8px; padding: 5px 4px 10px; color: var(--text-secondary); font-size: 12px; }
-.freeform-style-preset select { max-width: none; width: 100%; }
+.freeform-style-preset { display: grid; gap: 6px; padding: 4px 4px 8px; color: var(--text-secondary); font-size: 12px; }
+.freeform-style-preset select { width: 100%; max-width: none; height: 32px; padding: 0 30px 0 9px; border: 1px solid var(--border); border-radius: 7px; background-color: var(--app-bg); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' fill='none' stroke='%2371717a' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 9px center; color: var(--text-primary); font-size: 12px; appearance: none; }
 .freeform-toolbar-menu.is-style .freeform-theme-options { padding-top: 8px; }
 .freeform-optional-field { min-width: 0; color: var(--text-secondary); font-size: 12px; }
 .freeform-optional-field > summary { display: flex; justify-content: space-between; gap: 8px; padding-block: 7px; cursor: pointer; }
@@ -1327,9 +1361,10 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 }
 
 @container diagram-panel (max-width: 720px) {
-  .editor-workspace.mode-split { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(150px, 0.85fr) minmax(190px, 1.15fr); overflow: auto; }
+  .editor-workspace.mode-split { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(190px, 1.15fr) minmax(150px, 0.85fr); overflow: auto; }
   .editor-workspace.mode-split .split-resizer { display: none; }
-  .editor-workspace.mode-split .source-pane { border-right: 0; border-bottom: 1px solid var(--border); }
+  .editor-workspace.mode-split .preview-pane { grid-row: 1; }
+  .editor-workspace.mode-split .source-pane { grid-row: 2; border-right: 0; border-top: 1px solid var(--border); border-bottom: 0; }
   .thread-companion-head { grid-template-columns: auto minmax(0, 1fr); row-gap: 3px; }
   .thread-document-actions { grid-column: 1 / -1; justify-content: flex-end; padding-top: 3px; border-top: 1px solid var(--border); }
   .thread-diagram-tab-main span { max-width: 120px; }
@@ -1409,3 +1444,19 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .freeform-editor.is-architecture-mode .freeform-arrow.is-group-bundle .freeform-arrow-line { opacity: .82; }
 .freeform-editor.is-architecture-mode .freeform-arrow.is-group-bundle.emphasis-muted .freeform-arrow-line { opacity: .62; }
 .freeform-editor.is-architecture-mode .freeform-arrow:not(.emphasis-muted):hover .freeform-arrow-line { stroke-width: 2.9; }
+
+@keyframes diagram-preview-reveal {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.preview-surface {
+  animation: diagram-preview-reveal 180ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview-surface { animation: none; }
+}
+
+/* Solid frame toggle must beat architecture-mode group styling. */
+.freeform-editor.is-architecture-mode .freeform-group-frame.has-solid-frame > rect:first-of-type { stroke-dasharray: none; }

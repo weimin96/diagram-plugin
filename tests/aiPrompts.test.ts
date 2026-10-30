@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { buildGenerationPrompt, buildModificationPrompt, buildSubgraphModificationPrompt } from '../src/aiPrompts.js'
+import { detectArchitectureStyle } from '../src/architectureStyle.js'
+import { composeEnterpriseArchitecture } from '../src/enterpriseArchitecture.js'
+import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import type { DiagramDocument } from '../src/types.js'
 
 test('builds a Canvas-specific generation contract without Mermaid instructions', () => {
@@ -19,13 +22,14 @@ test('builds a Canvas-specific generation contract without Mermaid instructions'
 
 test('keeps Canvas workbench intent explicit for architecture and flowchart boards', () => {
   const architecture = buildGenerationPrompt('/workspace', {
-    type: 'canvas', canvasWorkbench: 'architecture', title: 'Platform', scope: '', instructions: '',
+    type: 'canvas', canvasWorkbench: 'architecture', architectureStyle: 'engineering', title: 'Platform', scope: '', instructions: '',
   })
   assert.match(architecture, /diagram\.composeArchitecture/)
   assert.match(architecture, /diagram\.designGuide/)
   assert.match(architecture, /primaryPath/)
   assert.match(architecture, /sourcePaths/)
   assert.match(architecture, /partition/)
+  assert.match(architecture, /architectureStyle=engineering/)
   assert.doesNotMatch(architecture, /diagram\.update/)
 
   const flowchart = buildGenerationPrompt('/workspace', {
@@ -36,6 +40,12 @@ test('keeps Canvas workbench intent explicit for architecture and flowchart boar
   assert.match(flowchart, /flowchart:decision/)
   assert.match(flowchart, /shapeRef/)
   assert.doesNotMatch(flowchart, /Architecture Diagram Skill/)
+  const c4 = buildGenerationPrompt('/workspace', {
+    type: 'canvas', canvasWorkbench: 'architecture', title: 'C4 Container', scope: '', instructions: '展示容器边界',
+  })
+  assert.match(c4, /diagram\.create/)
+  assert.match(c4, /c4Type 和 parentId/)
+  assert.doesNotMatch(c4, /diagram\.composeArchitecture/)
 })
 
 test('keeps Mermaid generation instructions for structured diagrams', () => {
@@ -72,6 +82,7 @@ test('injects the matching professional skill for each primary Mermaid type', ()
 test('architecture generation uses topology archetypes and a bounded quality loop', () => {
   const prompt = buildGenerationPrompt('/workspace', {
     type: 'canvas',
+    architectureStyle: 'engineering',
     title: 'System Architecture',
     scope: 'src/',
     instructions: '展示核心服务、数据层和外部依赖',
@@ -81,11 +92,47 @@ test('architecture generation uses topology archetypes and a bounded quality loo
   assert.match(prompt, /x\/y\/width\/height/)
   assert.match(prompt, /diagram\.inspectQuality/)
   assert.match(prompt, /quality/)
+
+  const unspecified = buildGenerationPrompt('/workspace', {
+    type: 'canvas', canvasWorkbench: 'architecture', title: '系统架构', scope: '', instructions: '',
+  })
+  assert.match(unspecified, /国内企业方案风格.*国际工程架构风格/)
+  assert.doesNotMatch(unspecified, /diagram\.composeArchitecture/)
+  assert.equal(detectArchitectureStyle('C4 Container 架构'), 'engineering')
+  assert.equal(detectArchitectureStyle('总体功能架构图'), 'enterprise')
+  assert.equal(detectArchitectureStyle('企业知识库系统架构'), undefined)
+
+  const proposal = buildGenerationPrompt('/workspace', {
+    type: 'canvas', architectureStyle: 'enterprise', title: '总体架构', scope: '', instructions: '',
+  })
+  assert.match(proposal, /architectureStyle=enterprise/)
+  assert.match(proposal, /layer 层名/)
+  assert.doesNotMatch(proposal, /不要默认把所有组件排成等权卡片矩阵/)
+
+  const intent = {
+    title: 'Enterprise vs Engineering',
+    nodes: [
+      { id: 'Web', text: 'Web 客户端', icon: 'web' as const, layer: '接入层' },
+      { id: 'API', text: '应用服务', icon: 'service' as const, layer: '应用层' },
+      { id: 'DB', text: '数据库', icon: 'database' as const, layer: '数据层' },
+    ],
+    relations: [{ from: 'Web', to: 'API', label: 'HTTP' }, { from: 'API', to: 'DB', label: 'SQL' }],
+  }
+  const enterprise = composeEnterpriseArchitecture(intent)
+  const engineering = composeArchitectureGraph(intent)
+  for (const result of [enterprise, engineering]) {
+    assert.deepEqual(result.scene.elements.filter((item) => item.type === 'node').map((item) => item.id).sort(), ['API', 'DB', 'Web'])
+    assert.deepEqual(result.scene.elements.filter((item) => item.type === 'arrow').map((item) => [item.from, item.to]), [['Web', 'API'], ['API', 'DB']])
+  }
+  assert.deepEqual(enterprise.scene.groups?.map((group) => group.label), ['接入层', '应用层', '数据层'])
+  assert.equal(enterprise.scene.groups?.every((group) => group.labelSide === 'left'), true)
+  assert.notEqual(engineering.scene.groups?.[0]?.labelSide, 'left')
+  assert.throws(() => composeEnterpriseArchitecture({ ...intent, nodes: intent.nodes.map((node) => ({ ...node, layer: '应用层' })) }), /至少需要两个/)
 })
 
 test('参考图片忠实重绘不强制走语义自动布局', () => {
   const prompt = buildGenerationPrompt('/workspace', {
-    type: 'canvas', canvasWorkbench: 'architecture', title: '原有架构复刻',
+    type: 'canvas', canvasWorkbench: 'architecture', architectureStyle: 'enterprise', title: '原有架构复刻',
     scope: '', instructions: '参考图片，忠实保留原有分组和布局',
   })
   assert.match(prompt, /diagram\.create/)

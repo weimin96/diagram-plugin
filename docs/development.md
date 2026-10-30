@@ -20,6 +20,10 @@ R2 隔离的逻辑走廊优先排列实验覆盖 4 个不同真实源码子图�
 - 构图：`architectureComposer.ts` 协调完整候选；`architectureDesign.ts` 负责场景/节点/分区；`architectureRouting.ts` 与 `architectureOrthogonalSolver.ts` 负责端口、线段和可见通道；`architectureRouteRepair.ts` 仅提出局部几何候选。
 - 质量：`canvasQuality.ts`、`architectureRouteDiagnostics.ts`、`architecturePresentationQuality.ts` 和 `architectureVisualPlan.ts` 检查**最终** Canvas。`visualPlan.review.blockers` 是机器审查阻断的唯一输出，不得以未阻断的几何指标代替交付批准。
 - 编辑与持久化：Canvas 使用 `.diagram.json`，Mermaid 使用 `.mmd` / `.mermaid`；`CanvasEditor.tsx` 与 `canvas.ts` 共用节点、箭头与端口语义。保存/重开、revision 冲突、提案审批、文件原子写入和人工作图不得被自动重排破坏。
+- Canvas 文档支持 `background`（#RGB/#RRGGBB/#RRGGBBAA，或 `transparent`/`none`）作为画布底色，样式菜单提供「画布底色」色板与「无色」按钮；未设置时由视觉样式决定，导出 SVG 与编辑器共用同一优先级。
+- 新建模板：`diagram.create` 支持 `canvasTemplate=layered|cards`；`layered` 生成左侧层名、每层独立底色的分层画布，`cards` 生成分区卡片画布；模板与新建空白画布默认无视觉样式、底色为 `transparent`，用户再按需选择配色。模板只提供可编辑结构与视觉骨架，不替代 `composeArchitecture` 的真实语义输入、关系路由或质量门禁。
+- Canvas 支持一键切换分区框线：样式菜单提供「虚线 / 实线」，工具栏显示当前「虚线框 / 实线框」按钮；`CanvasScene.groupBorderStyle` 持久化，单个分组也可用 `CanvasGroup.borderStyle` 覆盖。
+- Canvas 选中节点/备注后支持方向键微调：方向键 1px、Shift+方向键 10px；架构画布同步做增量关系路由并记录本地撤销。节点标题支持字号、字重、文字颜色，边界标签支持字号、标签位置与颜色，均随 SVG 导出。
 - 密集架构图的节点属性面板会按实际有向关系列出入边（谁引用当前节点）与出边（当前节点引用谁），点击单条关系进入精准高亮；所有真实关系保持不变。`arch-*` 语义边界不会把单节点选择扩展为整组选中。Chrome 真实交互回归：`pnpm benchmark:architecture:relation-lens`。
 - **全图依赖定位**：架构工具的「定位依赖」提供按真实来源、目标、关系文字与 ID 的搜索；基于实际目标入度排列拥挤关系，平行关系按箭头 ID 分别列出。点选任何结果会聚焦准确关系并将视口移动到其真实两端节点，不重排节点或改写文档；局部视图和追踪模式下先解除临时过滤。实际 Chrome 回归验证检索、精确选中、全部箭头保留和切回完整关系。架构图的静态 PNG 几何与旧版不变，该入口改善交互可追踪性，**不代表自动布局的主观评分改善**。
 - **高汇聚关系逐条阅读**：选择至少具有 2 条真实关系的架构节点后，浮层可依次检查全部真实入边与出边（例如 11 条导向 canvas 的依赖），逐条突出实际箭头、准确来源和目标，并把视口定位到当前关系的实际两端节点；支持上一条、下一条及退出。其余关系只作阅读弱化，仍可编辑和持久保存。该阅读模式不参与自动布局、不制造关系，也不覆盖显式上下游追踪，切换节点会退出；真实 Chrome 对高汇聚节点执行了逐条前进、镜头定位、保留全部箭头及退出恢复验证。之前单纯最小化节点间曼哈顿距离的全局重排虽让理论长度下降，但使真实交叉/重叠急剧上升，因此并未合入正式布局。
@@ -69,12 +73,12 @@ pnpm check:hosts
 `visual:smoke` / `visual:regression` 只渲染图表本身，不覆盖承载图表的面板与编辑器。面板层的行为由 `scripts/panel-baseline.mjs` 单独守住：
 
 ```sh
-pnpm baseline:panel            # 9 个形态：像素 + 宿主调用预算 + 交互断言
+pnpm baseline:panel            # 13 个形态：像素 + 宿主调用预算 + 交互断言
 node scripts/panel-baseline.mjs --only=thread-canvas --update
 ```
 
 - 脚本用 `package/dist/app.js` 与 `app.css` 的真实产物，在 node:http 临时页里以桩宿主（`diagram.ready` / `diagram.connect` / MessagePort）驱动面板，并通过 CDP `Emulation.setDeviceMetricsOverride` 设定真实视口——Chrome 会把 `--window-size=420` 夹到约 500px 再裁剪，直接用窗口参数会得到假布局。
-- 形态：workspace 1440×900、thread 1100×900、thread 420×900、thread-canvas（点击画布标签后编辑器真实渲染）、canvas-undo（重新整理后撤销，要求所有 `data-element-id` 变换逐字还原且重做可用）、canvas-layer-select（从层级面板点击节点，断言恰好一个节点被选中且属性面板出现）、thread-proposal-review，以及 proposal-reject / proposal-accept（点击 拒绝 / 全部接受，断言评审面关闭、对应工具被调用、文档回到已保存）。
+- 形态：workspace 1440×900、thread 1100×900、thread 420×900、thread-follow（`diagramOpenMode=fresh` 下先返回空对话状态，再返回一张新图，断言面板自动切换且 `Element.prototype.animate` 被调用，覆盖“首次创建被恢复跳过吞掉”与“无跟随动画”两类跟随缺陷）、thread-canvas（点击画布标签后编辑器真实渲染）、canvas-undo（重新整理后撤销，要求所有 `data-element-id` 变换逐字还原且重做可用）、canvas-layer-select（从层级面板点击节点，断言恰好一个节点被选中且属性面板出现）、canvas-style（打开样式 Popover，断言 6 个主题与 8 个画布底色控件，含「无色」）、canvas-layers（打开层级面板，断言单一滚动容器与 5 个边界分组）、canvas-architecture-menu（打开布局·总览，断言依赖分区按钮 ≥4 且列表不嵌套滚动）、thread-proposal-review，以及 proposal-reject / proposal-accept（点击 拒绝 / 全部接受，断言评审面关闭、对应工具被调用、文档回到已保存）。
 - 比较用 8×8 块平均而不是 sha256：Chrome 每次重新栅格化文字会产生轻微抗锯齿差异，精确哈希会让门禁永远为红并被忽略。块平均消除亚像素文字噪声，控件移动或改色仍会命中。渲染统一加 `--disable-lcd-text` 与 `--force-color-profile=srgb` 保持字形边缘稳定。
 - 每个形态记录宿主调用次数并受预算约束（默认 24）。轮询风暴在像素上不可见：跟随 effect 曾因 `callTool`/`selectDiagram` 进入依赖而每次渲染重建，3 秒发出约 500 次 `diagram.threadState`，正是这条预算抓到的。
 - 基线存于 `tests/fixtures/panel-baseline/`（PNG + `manifest.json` 含 bytes、sha256、toolCalls）。`--only=<id> --update` 只更新单个形态并与已存 manifest 合并；默认不带 `--strict` 时漂移只报告，`--strict` 才非零退出。

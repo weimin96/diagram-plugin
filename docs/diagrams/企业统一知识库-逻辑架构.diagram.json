@@ -1,0 +1,1330 @@
+{
+  "type": "diagram-plugin-canvas",
+  "version": 1,
+  "title": "企业统一知识库 · 逻辑架构",
+  "width": 1726,
+  "height": 1442,
+  "elements": [
+    {
+      "id": "u_staff",
+      "type": "node",
+      "x": 615,
+      "y": 114,
+      "width": 188,
+      "height": 80,
+      "text": "员工 / 管理员",
+      "tone": "muted",
+      "shape": "rounded",
+      "groupId": "arch-external",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ],
+      "icon": "user",
+      "subtitle": "知识管理与平台管理",
+      "description": "员工使用知识空间、项目、编辑器、检索与 AI 工作台；管理员负责采集、处理、授权与系统设置。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "x_mcp",
+      "type": "node",
+      "x": 615,
+      "y": 334,
+      "width": 188,
+      "height": 80,
+      "text": "外部 MCP 客户端",
+      "tone": "muted",
+      "shape": "rounded",
+      "groupId": "arch-external",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ],
+      "icon": "mcp",
+      "stencil": "mcp",
+      "subtitle": "MCP JSON-RPC",
+      "description": "独立部署的外部 AI 客户端，通过固定 issuer/subject 映射与短期 Token 访问 MCP。",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "x_sources",
+      "type": "node",
+      "x": 615,
+      "y": 224,
+      "width": 188,
+      "height": 80,
+      "text": "外部文件源",
+      "tone": "muted",
+      "shape": "rounded",
+      "groupId": "arch-external",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ],
+      "icon": "external",
+      "subtitle": "统一文件资产接入",
+      "description": "LOCAL / FTP / SFTP / SMB / S3 / WebDAV / Website 等统一接入；源端不可达不判定删除。",
+      "emphasis": "muted"
+    },
+    {
+      "id": "x_models",
+      "type": "node",
+      "x": 615,
+      "y": 444,
+      "width": 188,
+      "height": 80,
+      "text": "模型与解析服务",
+      "tone": "muted",
+      "shape": "rounded",
+      "groupId": "arch-external",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ],
+      "icon": "ai",
+      "subtitle": "Embedding / Rerank / OCR / Agent",
+      "description": "Embedding、Rerank、语义与 Agent 推理；MinerU 负责复杂版面与 OCR（可选）。",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "s_web",
+      "type": "node",
+      "x": 923,
+      "y": 114,
+      "width": 188,
+      "height": 80,
+      "text": "React Web",
+      "tone": "accent",
+      "shape": "rounded",
+      "groupId": "arch-experience",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ],
+      "icon": "web",
+      "stencil": "react",
+      "subtitle": "React 单页应用",
+      "description": "知识空间、项目、编辑器、检索、AI 工作台与管理中心；统一 HTTP 传输与会话续期。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "b_api",
+      "type": "node",
+      "x": 300,
+      "y": 668,
+      "width": 188,
+      "height": 80,
+      "text": "REST / SSE API",
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "arch-application",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ],
+      "icon": "api",
+      "stencil": "spring",
+      "subtitle": "Spring Boot",
+      "description": "Web 与内部服务的统一业务入口，校验身份后进入领域服务。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "b_mcp",
+      "type": "node",
+      "x": 510,
+      "y": 778,
+      "width": 188,
+      "height": 80,
+      "text": "MCP 网关",
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "arch-application",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ],
+      "icon": "mcp",
+      "stencil": "mcp",
+      "subtitle": "工具 / 资源 / 引用 / 审计",
+      "description": "工具、资源、引用与审计；复用后端知识服务和权限规则。",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "b_acl",
+      "type": "node",
+      "x": 90,
+      "y": 772,
+      "width": 188,
+      "height": 80,
+      "text": "认证与授权",
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "arch-application",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ],
+      "icon": "auth",
+      "subtitle": "用户 / 组织 / 项目 / Grant",
+      "description": "用户、组织、项目角色、知识库 Grant 与资源限制；PostgreSQL 为授权权威。",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "b_content",
+      "type": "node",
+      "x": 300,
+      "y": 888,
+      "width": 188,
+      "height": 80,
+      "text": "知识与内容",
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "arch-application",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ],
+      "icon": "service",
+      "subtitle": "知识库 / 文件版本 / 在线文档",
+      "description": "知识库、文件版本、在线文档与正式版本。",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "b_search",
+      "type": "node",
+      "x": 300,
+      "y": 992,
+      "width": 188,
+      "height": 80,
+      "text": "检索与证据",
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "arch-application",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ],
+      "icon": "search",
+      "subtitle": "召回 / 融合 / 重排 / 引用",
+      "description": "混合召回、RRF 融合、Rerank、权限复核与证据上下文。",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "b_pipeline",
+      "type": "node",
+      "x": 90,
+      "y": 1096,
+      "width": 188,
+      "height": 80,
+      "text": "文档处理与索引",
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "arch-application",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ],
+      "icon": "worker",
+      "subtitle": "Scan / Capture / Parse / Index / Semantic / Graph",
+      "description": "Scan / Capture / Parse / Index / Semantic / Graph Worker 与 Stage Binding 控制面同属一个应用进程。",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "b_agent",
+      "type": "node",
+      "x": 510,
+      "y": 1096,
+      "width": 188,
+      "height": 80,
+      "text": "Agent 会话代理",
+      "tone": "default",
+      "shape": "rounded",
+      "groupId": "arch-application",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ],
+      "icon": "service",
+      "subtitle": "会话 / 知识范围 / Runtime 代理",
+      "description": "Java 侧校验会话归属与知识范围，注入内部凭据与已认证 userId 后代理到 Runtime。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "r_runtime",
+      "type": "node",
+      "x": 300,
+      "y": 1200,
+      "width": 188,
+      "height": 80,
+      "text": "Agent Runtime",
+      "tone": "warning",
+      "shape": "rounded",
+      "groupId": "arch-processing",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ],
+      "icon": "ai",
+      "subtitle": "DeerFlow Harness",
+      "description": "独立部署，使用锁定版本 DeerFlow Harness SDK 与 CompanyDocsMiddleware 约束企业知识工具。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "r_collab",
+      "type": "node",
+      "x": 510,
+      "y": 1304,
+      "width": 188,
+      "height": 80,
+      "text": "协作服务",
+      "tone": "warning",
+      "shape": "rounded",
+      "groupId": "arch-processing",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ],
+      "icon": "service",
+      "subtitle": "Hocuspocus / Yjs",
+      "description": "Hocuspocus / Yjs 实时协作；正式保存经 checkpoint barrier 由 Java 后端建版本。",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "r_office",
+      "type": "node",
+      "x": 90,
+      "y": 1304,
+      "width": 188,
+      "height": 80,
+      "text": "Office 服务",
+      "tone": "warning",
+      "shape": "rounded",
+      "groupId": "arch-processing",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ],
+      "icon": "service",
+      "subtitle": "ONLYOFFICE",
+      "description": "ONLYOFFICE DocumentServer，经前端 /office/ 同源代理；保存回调由后端写 Blob 并建版本。",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "d_pg",
+      "type": "node",
+      "x": 1238,
+      "y": 668,
+      "width": 188,
+      "height": 80,
+      "text": "PostgreSQL",
+      "tone": "success",
+      "shape": "rounded",
+      "groupId": "arch-data",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ],
+      "icon": "database",
+      "stencil": "postgres",
+      "subtitle": "业务 / ACL / Chunk / 证据",
+      "description": "业务与授权权威：用户、组织、Grant、文件版本、Chunk、任务、控制面与图谱证据。",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "d_redis",
+      "type": "node",
+      "x": 818,
+      "y": 668,
+      "width": 188,
+      "height": 80,
+      "text": "Redis",
+      "tone": "success",
+      "shape": "rounded",
+      "groupId": "arch-data",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ],
+      "icon": "cache",
+      "stencil": "redis",
+      "subtitle": "限流 / 防重放 / StreamBridge",
+      "description": "限流、防重放、Runtime 短期 Token 与 StreamBridge；不保存知识正文。",
+      "emphasis": "primary"
+    },
+    {
+      "id": "d_store",
+      "type": "node",
+      "x": 1448,
+      "y": 772,
+      "width": 188,
+      "height": 80,
+      "text": "对象存储",
+      "tone": "success",
+      "shape": "rounded",
+      "groupId": "arch-data",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ],
+      "icon": "file",
+      "stencil": "minio",
+      "subtitle": "本地 / MinIO / S3",
+      "description": "不可变原始 Blob、解析产物与图像资源；数据库保存引用与内容身份。",
+      "emphasis": "muted"
+    },
+    {
+      "id": "d_index",
+      "type": "node",
+      "x": 1028,
+      "y": 772,
+      "width": 188,
+      "height": 80,
+      "text": "检索投影",
+      "tone": "success",
+      "shape": "rounded",
+      "groupId": "arch-data",
+      "sourcePaths": [
+        "docs/architecture.md"
+      ],
+      "icon": "search",
+      "stencil": "opensearch",
+      "subtitle": "OpenSearch / Qdrant",
+      "description": "OpenSearch 与 Qdrant 两路可重建投影，默认关闭，按 knowledge_base_id 过滤。",
+      "emphasis": "secondary"
+    },
+    {
+      "id": "__relation-1",
+      "type": "arrow",
+      "from": "u_staff",
+      "to": "s_web",
+      "label": "知识管理 / 检索 / AI 会话",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "left",
+      "emphasis": "primary"
+    },
+    {
+      "id": "__relation-2",
+      "type": "arrow",
+      "from": "x_mcp",
+      "to": "b_mcp",
+      "label": "MCP JSON-RPC",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "points": [
+        {
+          "x": 845,
+          "y": 414
+        },
+        {
+          "x": 845,
+          "y": 592
+        },
+        {
+          "x": 760,
+          "y": 592
+        },
+        {
+          "x": 760,
+          "y": 778
+        }
+      ],
+      "emphasis": "muted"
+    },
+    {
+      "id": "__relation-3",
+      "type": "arrow",
+      "from": "s_web",
+      "to": "b_api",
+      "label": "REST / SSE",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "left",
+      "toAnchor": "right",
+      "points": [
+        {
+          "x": 923,
+          "y": 582
+        },
+        {
+          "x": 706,
+          "y": 582
+        },
+        {
+          "x": 706,
+          "y": 708
+        }
+      ],
+      "emphasis": "primary"
+    },
+    {
+      "id": "__relation-4",
+      "type": "arrow",
+      "from": "b_api",
+      "to": "b_acl",
+      "label": "身份校验",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "left",
+      "points": [
+        {
+          "x": 394,
+          "y": 846
+        },
+        {
+          "x": 258,
+          "y": 846
+        },
+        {
+          "x": 258,
+          "y": 796
+        },
+        {
+          "x": 90,
+          "y": 796
+        }
+      ],
+      "emphasis": "secondary"
+    },
+    {
+      "id": "__relation-5",
+      "type": "arrow",
+      "from": "b_mcp",
+      "to": "b_acl",
+      "label": "工具鉴权",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "points": [
+        {
+          "x": 258,
+          "y": 858
+        },
+        {
+          "x": 258,
+          "y": 772
+        }
+      ],
+      "emphasis": "muted"
+    },
+    {
+      "id": "__relation-6",
+      "type": "arrow",
+      "from": "b_api",
+      "to": "b_content",
+      "label": "知识库 / 文档",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "points": [
+        {
+          "x": 450,
+          "y": 748
+        },
+        {
+          "x": 450,
+          "y": 888
+        }
+      ],
+      "emphasis": "secondary"
+    },
+    {
+      "id": "__relation-7",
+      "type": "arrow",
+      "from": "b_api",
+      "to": "b_search",
+      "label": "检索请求",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "points": [
+        {
+          "x": 394,
+          "y": 870
+        },
+        {
+          "x": 258,
+          "y": 870
+        },
+        {
+          "x": 258,
+          "y": 992
+        }
+      ],
+      "emphasis": "secondary"
+    },
+    {
+      "id": "__relation-8",
+      "type": "arrow",
+      "from": "b_mcp",
+      "to": "b_search",
+      "label": "search_chunks / context",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "left",
+      "points": [
+        {
+          "x": 604,
+          "y": 984
+        },
+        {
+          "x": 548,
+          "y": 984
+        },
+        {
+          "x": 548,
+          "y": 1054
+        },
+        {
+          "x": 300,
+          "y": 1054
+        }
+      ],
+      "emphasis": "muted"
+    },
+    {
+      "id": "__relation-9",
+      "type": "arrow",
+      "from": "b_search",
+      "to": "b_acl",
+      "label": "权限与版本复核",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "left",
+      "points": [
+        {
+          "x": 242,
+          "y": 1072
+        },
+        {
+          "x": 242,
+          "y": 1024
+        },
+        {
+          "x": 90,
+          "y": 1024
+        }
+      ],
+      "emphasis": "muted"
+    },
+    {
+      "id": "__relation-10",
+      "type": "arrow",
+      "from": "b_search",
+      "to": "b_content",
+      "label": "serving 版本",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "left",
+      "points": [
+        {
+          "x": 488,
+          "y": 980
+        },
+        {
+          "x": 300,
+          "y": 980
+        }
+      ],
+      "emphasis": "muted"
+    },
+    {
+      "id": "__relation-11",
+      "type": "arrow",
+      "from": "b_api",
+      "to": "b_pipeline",
+      "label": "处理操作",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "left",
+      "points": [
+        {
+          "x": 48,
+          "y": 748
+        },
+        {
+          "x": 48,
+          "y": 1088
+        },
+        {
+          "x": 32,
+          "y": 1088
+        },
+        {
+          "x": 32,
+          "y": 1136
+        }
+      ],
+      "emphasis": "secondary"
+    },
+    {
+      "id": "__relation-12",
+      "type": "arrow",
+      "from": "b_pipeline",
+      "to": "d_pg",
+      "label": "任务与状态",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "left",
+      "points": [
+        {
+          "x": 278,
+          "y": 1106
+        },
+        {
+          "x": 32,
+          "y": 1106
+        },
+        {
+          "x": 32,
+          "y": 1442
+        },
+        {
+          "x": 744,
+          "y": 1442
+        },
+        {
+          "x": 744,
+          "y": 832
+        },
+        {
+          "x": 772,
+          "y": 832
+        },
+        {
+          "x": 772,
+          "y": 886
+        },
+        {
+          "x": 1238,
+          "y": 886
+        }
+      ],
+      "emphasis": "muted",
+      "bundleKey": "group:arch-application->arch-data"
+    },
+    {
+      "id": "__relation-13",
+      "type": "arrow",
+      "from": "b_pipeline",
+      "to": "d_store",
+      "label": "原始 Blob / 产物",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "left",
+      "points": [
+        {
+          "x": 278,
+          "y": 1106
+        },
+        {
+          "x": 32,
+          "y": 1106
+        },
+        {
+          "x": 32,
+          "y": 1442
+        },
+        {
+          "x": 744,
+          "y": 1442
+        },
+        {
+          "x": 744,
+          "y": 832
+        },
+        {
+          "x": 772,
+          "y": 832
+        },
+        {
+          "x": 772,
+          "y": 886
+        },
+        {
+          "x": 1448,
+          "y": 886
+        }
+      ],
+      "emphasis": "muted",
+      "bundleKey": "group:arch-application->arch-data"
+    },
+    {
+      "id": "__relation-14",
+      "type": "arrow",
+      "from": "b_pipeline",
+      "to": "d_index",
+      "label": "索引投影",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "left",
+      "points": [
+        {
+          "x": 278,
+          "y": 1088
+        },
+        {
+          "x": 32,
+          "y": 1088
+        },
+        {
+          "x": 32,
+          "y": 1442
+        },
+        {
+          "x": 744,
+          "y": 1442
+        },
+        {
+          "x": 744,
+          "y": 832
+        },
+        {
+          "x": 772,
+          "y": 832
+        },
+        {
+          "x": 772,
+          "y": 812
+        }
+      ],
+      "emphasis": "muted",
+      "bundleKey": "group:arch-application->arch-data"
+    },
+    {
+      "id": "__relation-15",
+      "type": "arrow",
+      "from": "b_pipeline",
+      "to": "x_sources",
+      "label": "扫描 / 采集",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "top",
+      "toAnchor": "bottom",
+      "points": [
+        {
+          "x": 32,
+          "y": 1096
+        },
+        {
+          "x": 32,
+          "y": 604
+        },
+        {
+          "x": 552,
+          "y": 604
+        },
+        {
+          "x": 552,
+          "y": 304
+        }
+      ],
+      "emphasis": "muted",
+      "bundleKey": "group:arch-application->arch-external"
+    },
+    {
+      "id": "__relation-16",
+      "type": "arrow",
+      "from": "b_pipeline",
+      "to": "x_models",
+      "label": "Embedding / OCR",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "top",
+      "toAnchor": "bottom",
+      "points": [
+        {
+          "x": 32,
+          "y": 1096
+        },
+        {
+          "x": 32,
+          "y": 604
+        },
+        {
+          "x": 552,
+          "y": 604
+        },
+        {
+          "x": 552,
+          "y": 570
+        },
+        {
+          "x": 709,
+          "y": 570
+        }
+      ],
+      "emphasis": "muted",
+      "bundleKey": "group:arch-application->arch-external"
+    },
+    {
+      "id": "__relation-17",
+      "type": "arrow",
+      "from": "b_search",
+      "to": "d_index",
+      "label": "召回候选",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "left",
+      "points": [
+        {
+          "x": 732,
+          "y": 1032
+        },
+        {
+          "x": 732,
+          "y": 832
+        },
+        {
+          "x": 1028,
+          "y": 832
+        }
+      ],
+      "emphasis": "muted",
+      "bundleKey": "group:arch-application->arch-data"
+    },
+    {
+      "id": "__relation-18",
+      "type": "arrow",
+      "from": "b_search",
+      "to": "d_pg",
+      "label": "最终授权与证据",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "left",
+      "points": [
+        {
+          "x": 488,
+          "y": 984
+        },
+        {
+          "x": 732,
+          "y": 984
+        },
+        {
+          "x": 732,
+          "y": 832
+        },
+        {
+          "x": 772,
+          "y": 832
+        },
+        {
+          "x": 772,
+          "y": 634
+        },
+        {
+          "x": 1238,
+          "y": 634
+        }
+      ],
+      "emphasis": "muted",
+      "bundleKey": "group:arch-application->arch-data"
+    },
+    {
+      "id": "__relation-19",
+      "type": "arrow",
+      "from": "b_search",
+      "to": "x_models",
+      "label": "Embedding / Rerank",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "top",
+      "toAnchor": "bottom",
+      "points": [
+        {
+          "x": 56,
+          "y": 992
+        },
+        {
+          "x": 56,
+          "y": 604
+        },
+        {
+          "x": 552,
+          "y": 604
+        },
+        {
+          "x": 552,
+          "y": 524
+        }
+      ],
+      "emphasis": "muted",
+      "bundleKey": "group:arch-application->arch-external"
+    },
+    {
+      "id": "__relation-20",
+      "type": "arrow",
+      "from": "b_mcp",
+      "to": "d_redis",
+      "label": "限流 / 短期 Token",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "left",
+      "points": [
+        {
+          "x": 744,
+          "y": 818
+        },
+        {
+          "x": 744,
+          "y": 832
+        },
+        {
+          "x": 818,
+          "y": 832
+        }
+      ],
+      "emphasis": "secondary",
+      "bundleKey": "group:arch-application->arch-data"
+    },
+    {
+      "id": "__relation-21",
+      "type": "arrow",
+      "from": "b_api",
+      "to": "b_agent",
+      "label": "会话与运行请求",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "top",
+      "points": [
+        {
+          "x": 488,
+          "y": 756
+        },
+        {
+          "x": 740,
+          "y": 756
+        },
+        {
+          "x": 740,
+          "y": 1096
+        }
+      ],
+      "emphasis": "primary"
+    },
+    {
+      "id": "__relation-22",
+      "type": "arrow",
+      "from": "b_agent",
+      "to": "r_runtime",
+      "label": "HTTP / SSE",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "top",
+      "points": [
+        {
+          "x": 394,
+          "y": 1176
+        }
+      ],
+      "emphasis": "primary"
+    },
+    {
+      "id": "__relation-23",
+      "type": "arrow",
+      "from": "r_runtime",
+      "to": "b_mcp",
+      "label": "短期用户 Token",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "top",
+      "toAnchor": "bottom",
+      "points": [
+        {
+          "x": 394,
+          "y": 1222
+        },
+        {
+          "x": 732,
+          "y": 1222
+        },
+        {
+          "x": 732,
+          "y": 858
+        }
+      ],
+      "emphasis": "secondary",
+      "bundleKey": "group:arch-processing->arch-application"
+    },
+    {
+      "id": "__relation-24",
+      "type": "arrow",
+      "from": "r_runtime",
+      "to": "d_pg",
+      "label": "Thread / Run",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "bottom",
+      "points": [
+        {
+          "x": 881,
+          "y": 1240
+        },
+        {
+          "x": 881,
+          "y": 1426
+        },
+        {
+          "x": 1678,
+          "y": 1426
+        },
+        {
+          "x": 1678,
+          "y": 748
+        }
+      ],
+      "emphasis": "secondary"
+    },
+    {
+      "id": "__relation-25",
+      "type": "arrow",
+      "from": "r_runtime",
+      "to": "d_redis",
+      "label": "StreamBridge",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "bottom",
+      "points": [
+        {
+          "x": 488,
+          "y": 1426
+        },
+        {
+          "x": 912,
+          "y": 1426
+        }
+      ],
+      "emphasis": "primary"
+    },
+    {
+      "id": "__relation-26",
+      "type": "arrow",
+      "from": "s_web",
+      "to": "r_collab",
+      "label": "WebSocket",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "right",
+      "points": [
+        {
+          "x": 1694,
+          "y": 194
+        },
+        {
+          "x": 1694,
+          "y": 1344
+        }
+      ],
+      "emphasis": "secondary"
+    },
+    {
+      "id": "__relation-27",
+      "type": "arrow",
+      "from": "r_collab",
+      "to": "b_content",
+      "label": "内部业务 API",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "top",
+      "toAnchor": "bottom",
+      "points": [
+        {
+          "x": 740,
+          "y": 1304
+        },
+        {
+          "x": 740,
+          "y": 1054
+        },
+        {
+          "x": 530,
+          "y": 1054
+        },
+        {
+          "x": 530,
+          "y": 968
+        }
+      ],
+      "emphasis": "muted"
+    },
+    {
+      "id": "__relation-28",
+      "type": "arrow",
+      "from": "s_web",
+      "to": "r_office",
+      "label": "同源 /office/",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "bottom",
+      "toAnchor": "right",
+      "points": [
+        {
+          "x": 1017,
+          "y": 592
+        },
+        {
+          "x": 32,
+          "y": 592
+        },
+        {
+          "x": 32,
+          "y": 1322
+        },
+        {
+          "x": 278,
+          "y": 1322
+        }
+      ],
+      "emphasis": "secondary"
+    },
+    {
+      "id": "__relation-29",
+      "type": "arrow",
+      "from": "r_office",
+      "to": "b_content",
+      "label": "下载 / 保存回调",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "top",
+      "toAnchor": "left",
+      "points": [
+        {
+          "x": 48,
+          "y": 1304
+        },
+        {
+          "x": 48,
+          "y": 1054
+        },
+        {
+          "x": 242,
+          "y": 1054
+        },
+        {
+          "x": 242,
+          "y": 928
+        }
+      ],
+      "emphasis": "muted"
+    },
+    {
+      "id": "__relation-30",
+      "type": "arrow",
+      "from": "b_content",
+      "to": "d_pg",
+      "label": "业务与版本",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "left",
+      "points": [
+        {
+          "x": 744,
+          "y": 928
+        },
+        {
+          "x": 744,
+          "y": 832
+        },
+        {
+          "x": 1005,
+          "y": 832
+        },
+        {
+          "x": 1005,
+          "y": 886
+        },
+        {
+          "x": 1238,
+          "y": 886
+        }
+      ],
+      "emphasis": "muted",
+      "bundleKey": "group:arch-application->arch-data"
+    },
+    {
+      "id": "__relation-31",
+      "type": "arrow",
+      "from": "b_acl",
+      "to": "d_pg",
+      "label": "Grant / 主体",
+      "lineStyle": "solid",
+      "routing": "orthogonal",
+      "fromAnchor": "right",
+      "toAnchor": "left",
+      "points": [
+        {
+          "x": 278,
+          "y": 634
+        },
+        {
+          "x": 744,
+          "y": 634
+        },
+        {
+          "x": 744,
+          "y": 832
+        },
+        {
+          "x": 772,
+          "y": 832
+        },
+        {
+          "x": 772,
+          "y": 634
+        },
+        {
+          "x": 1238,
+          "y": 634
+        }
+      ],
+      "emphasis": "muted",
+      "bundleKey": "group:arch-application->arch-data"
+    }
+  ],
+  "workbench": "architecture",
+  "style": "blueprint",
+  "groups": [
+    {
+      "id": "arch-external",
+      "label": "外部与参与方",
+      "kind": "boundary",
+      "tone": "muted"
+    },
+    {
+      "id": "arch-experience",
+      "label": "体验与入口",
+      "kind": "boundary",
+      "tone": "accent"
+    },
+    {
+      "id": "arch-application",
+      "label": "核心应用",
+      "kind": "boundary",
+      "tone": "default"
+    },
+    {
+      "id": "arch-processing",
+      "label": "处理与异步",
+      "kind": "boundary",
+      "tone": "warning"
+    },
+    {
+      "id": "arch-data",
+      "label": "数据与检索",
+      "kind": "boundary",
+      "tone": "success"
+    }
+  ],
+  "architecture": {
+    "theme": "enterprise",
+    "view": "detail",
+    "density": "comfortable",
+    "scenario": "microservices"
+  }
+}

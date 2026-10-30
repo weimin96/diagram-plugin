@@ -4,10 +4,12 @@ import type { CanvasWorkbenchMode } from './canvas.js'
 import { architectureDesignSkill, isArchitectureIntent } from './architectureSkill.js'
 import { diagramIntentRoutingGuide, diagramSkill } from './diagramSkills/registry.js'
 import { skillPromptLines } from './diagramSkills/types.js'
+import { architectureStyleQuestion, detectArchitectureStyle, type ArchitectureDiagramStyle } from './architectureStyle.js'
 
 export interface DiagramGenerationRequest {
   type: DiagramType
   canvasWorkbench?: CanvasWorkbenchMode
+  architectureStyle?: ArchitectureDiagramStyle
   title: string
   scope: string
   instructions: string
@@ -19,8 +21,11 @@ export function buildGenerationPrompt(workspacePath: string, request: DiagramGen
   if (request.type === 'canvas') {
     const architecture = request.canvasWorkbench === 'architecture' || (!request.canvasWorkbench && isArchitectureIntent(`${request.title} ${instructions}`))
     const workbench = request.canvasWorkbench ?? (architecture ? 'architecture' : 'freeform')
+    const architectureStyle = request.architectureStyle ?? detectArchitectureStyle(`${request.title} ${instructions}`)
     const faithfulReference = /(参考(?:图片|图)|根据(?:图片|原图)|按原图|照原图|忠实复刻|还原原图|一比一|保持.{0,8}布局)/.test(`${request.title} ${instructions}`)
-    if (architecture && !faithfulReference) {
+    const explicitC4Level = /C4\s*(?:Context|Container|Component|系统上下文|容器架构|组件架构)/i.test(`${request.title} ${instructions}`)
+    if (architecture && !architectureStyle) return architectureStyleQuestion
+    if (architecture && !faithfulReference && !explicitC4Level) {
       return [
         '为当前项目绘制一张专业且可编辑的系统架构图。先确定语义，再由 Diagram 引擎自动布局。',
         `工作空间：${workspacePath}`,
@@ -30,11 +35,13 @@ export function buildGenerationPrompt(workspacePath: string, request: DiagramGen
         '',
         '执行要求：',
         '1. 阅读真实代码、配置或用户提供的资料，整理节点 id/text/职责/角色、sourcePaths 与已确认的依赖关系。仅在事实明确时填写 partition（功能区）；未知依赖和分区不要猜测。',
-        '2. 调用 diagram.designGuide（type=canvas，intent=系统架构）选择构图方式；优先主业务路径、系统边界、关键依赖，避免等权矩阵和装饰性泳道。',
-        '3. 只调用一次 diagram.composeArchitecture：传入 title、nodes、relations 和必要 theme；如果可以从真实有向依赖确认主要业务链路，按入口到结果填写 primaryPath，必须逐段对应已有关系，不要为凑主链造边。无需再额外创建文件或整图更新，也不要手动编写 x/y/width/height、line routing、重复颜色或整份 Canvas JSON。',
-        '4. 由插件自动处理 layered、hub-spoke、event-driven 等架构布局、语义分区与正交连线，提供设计质量检查。节点标签使用短标题，技术栈只有确认后才使用 stencil。',
+        `2. 当前架构风格已确定为${architectureStyle === 'enterprise' ? '国内企业方案风格' : '国际工程架构风格'}。调用 diagram.designGuide（type=canvas，intent=系统架构，architectureStyle=${architectureStyle}）。`,
+        `3. 只调用一次 diagram.composeArchitecture：明确传 architectureStyle=${architectureStyle}、title、nodes、relations 和必要 theme；如果可以从真实有向依赖确认主要业务链路，按入口到结果填写 primaryPath，必须逐段对应已有关系。无需额外创建文件或整图更新，也不要手动编写 x/y/width/height、line routing 或整份 Canvas JSON。`,
+        architectureStyle === 'enterprise'
+          ? '4. 根据用户资料或真实代码确定业务层/能力域，每个节点填写证据支持的 layer 层名，或已确认的 partition；至少两个实际层次。生成彩色横向分层、左侧层标签、内部紧凑模块矩阵；保留全部真实依赖，不能为了图好看编造层次、模块或连线。'
+          : '4. 由插件自动处理 layered、hub-spoke、event-driven 等工程拓扑、语义分区与正交连线；保留实际系统边界、关键依赖和全部真实关系。只有明确要求 C4 时才添加 C4 元数据。',
         '5. 同时检查 quality（已执行 diagram.inspectQuality 同级检查）和 visualPlan.review.readyForVisualReview：基础几何检查合格不代表视觉合格，review=false 表示布局仍存在阻断问题，只能称为待整改草稿；review=true 也只代表待人工视觉审查。诚实说明具体缺陷，不得为过关发明跨域边、降低检查阈值或反复全量重画。',
-      '6. 编辑已有 Canvas 时，保留真实箭头的 fromPortRatio/toPortRatio（指定边界侧沿边界 0..1 的位置）；只在已有精确几何证据时使用，不为普通自动生成编造端口比例。重新连接节点应清除已失效的端口位置。',
+        '6. 编辑已有 Canvas 时，保留真实箭头的 fromPortRatio/toPortRatio（指定边界侧沿边界 0..1 的位置）；只在已有精确几何证据时使用，不为普通自动生成编造端口比例。重新连接节点应清除已失效的端口位置。',
       '7. 给用户图表路径和极简结果摘要，不输出冗长 JSON。',
       ].filter(Boolean).join('\n')
     }
@@ -60,6 +67,7 @@ export function buildGenerationPrompt(workspacePath: string, request: DiagramGen
       '5. 只在视觉语义明确时使用 tone：主路径可 accent，成功/完成可 success，风险可 warning/danger，次要信息可 muted；不要把每个节点都染色。架构/流程图优先用 orthogonal 路由，简单关系可以 straight。',
       ...(!architecture ? diagramVisualStyleGuide() : []),
       `6. ${workbenchRule}`,
+      ...(explicitC4Level ? ['C4 层级已经明确：用 c4Type 和 parentId 表达对应系统、容器或组件层级；只根据用户或源码事实建立边界和关系，不把普通功能模块冒充独立运行容器。'] : []),
       '7. 初次新建图使用 diagram.update 写回完整 JSON；不要写 Mermaid 语法。完成后简要说明分析范围和图表路径。',
       ...(architecture ? ['', '内置 Architecture Diagram Skill：', ...architectureDesignSkill('enterprise'), ...diagramVisualStyleGuide()] : []),
     ].filter(Boolean).join('\n')

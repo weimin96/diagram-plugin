@@ -4,6 +4,7 @@ import { Dialog, DialogTitle } from '@/components/ui/dialog'
 import { diagramTypeGroups, type DiagramDocument, type DiagramType } from './types.js'
 import type { DiagramGenerationRequest } from './aiPrompts.js'
 import type { CanvasWorkbenchMode } from './canvas.js'
+import { architectureStyleChoices, detectArchitectureStyle, type ArchitectureDiagramStyle } from './architectureStyle.js'
 import { Button } from '@/components/ui/button'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
@@ -30,8 +31,8 @@ const quickModifications = [
   '优化图的阅读顺序和分组，让主路径更清晰，但不要改变业务语义。',
 ]
 
-const generationTemplates: Array<{ label: string; type: DiagramType; canvasWorkbench?: CanvasWorkbenchMode; title: string; instructions: string }> = [
-  { label: '系统架构', type: 'canvas', canvasWorkbench: 'architecture', title: '系统架构', instructions: '按专业工程架构图表达，不要退化成流程图。识别 Web/客户端、API/网关、核心服务、Worker、数据库、缓存、消息/检索/文件存储和外部系统；默认使用紧贴内容的命名 boundary、技术 stencil 与正交依赖连线，不主动添加 C4 Software System / Container 元数据。只有用户明确要求 C4，或源码/已有图明确存在 C4 层级时才使用 C4。' },
+const generationTemplates: Array<{ label: string; type: DiagramType; canvasWorkbench?: CanvasWorkbenchMode; architectureStyle?: ArchitectureDiagramStyle; title: string; instructions: string }> = [
+  { label: '系统架构', type: 'canvas', canvasWorkbench: 'architecture', title: '系统架构', instructions: '从真实代码、配置或用户提供的资料提炼系统能力、组件和依赖，不虚构。' },
   { label: '业务流程', type: 'flowchart', title: '核心业务流程', instructions: '从真实入口、关键决策、成功路径和异常/补偿路径还原流程；决策节点只表达一个条件，主路径保持连续阅读方向。' },
   { label: '调用链', type: 'sequence', title: '核心调用链', instructions: '沿真实调用顺序展示入口、服务、存储和外部依赖，并保留关键失败分支。' },
   { label: '数据模型', type: 'er', title: '数据模型', instructions: '从实体、表结构或模型定义提取核心实体、主外键和主要关系，不展开无关字段。' },
@@ -44,9 +45,11 @@ const generationTemplates: Array<{ label: string; type: DiagramType; canvasWorkb
   { label: '流量去向', type: 'sankey', title: '流量去向', instructions: '只使用可加总且同量纲的真实流量、资金、容量或转化数据；保持主流向清晰，不为凑比例编造数值。' },
   { label: '根因分析', type: 'ishikawa', title: '根因分析', instructions: '围绕一个明确问题，从日志、缺陷、复盘或上下文事实提炼原因类别和可验证具体原因；区分候选原因与已证实根因。' },
   { label: '架构画布', type: 'canvas', canvasWorkbench: 'architecture', title: '架构画布', instructions: '用自由画布组织核心模块、外部系统、数据存储和关键说明，保持留白和清晰的空间分组。' },
-  { label: 'C4 Context', type: 'canvas', canvasWorkbench: 'architecture', title: 'C4 系统上下文', instructions: '按 C4 Context 层级只展示 Person、当前 Software System 和关键外部 Software System。使用 c4Type 明确语义；当前系统用 software-system boundary，外部系统保持独立节点，连线写明关系，不展开内部容器。' },
-  { label: 'C4 Container', type: 'canvas', canvasWorkbench: 'architecture', title: 'C4 容器架构', instructions: '按 C4 Container 层级识别 Web/客户端、API/网关、应用服务、数据库、缓存、消息队列和关键外部系统。使用 software-system 父边界 + container 子边界或 container 节点，保留 parentId 层级，节点绑定最相关源码路径，主要关系使用正交连线。' },
-  { label: 'C4 Component', type: 'canvas', canvasWorkbench: 'architecture', title: 'C4 组件架构', instructions: '聚焦一个 Container，按 C4 Component 层级提炼内部主要组件、职责与依赖。节点使用 c4Type=component，外层边界使用 c4Type=container；只画有架构意义的组件，不展开每个类和方法。' },
+  { label: '企业方案架构', type: 'canvas', canvasWorkbench: 'architecture', architectureStyle: 'enterprise', title: '总体技术架构', instructions: '按已确认的业务能力、功能分层和依赖生成企业方案总览，保持各层模块紧凑、标签清晰。' },
+  { label: '工程架构', type: 'canvas', canvasWorkbench: 'architecture', architectureStyle: 'engineering', title: '系统技术架构', instructions: '从真实源码与配置提取组件边界和有向依赖，采用工程架构表达。' },
+  { label: 'C4 Context', type: 'canvas', canvasWorkbench: 'architecture', architectureStyle: 'engineering', title: 'C4 系统上下文', instructions: '按 C4 Context 层级只展示 Person、当前 Software System 和关键外部 Software System。使用 c4Type 明确语义；当前系统用 software-system boundary，外部系统保持独立节点，连线写明关系，不展开内部容器。' },
+  { label: 'C4 Container', type: 'canvas', canvasWorkbench: 'architecture', architectureStyle: 'engineering', title: 'C4 容器架构', instructions: '按 C4 Container 层级识别 Web/客户端、API/网关、应用服务、数据库、缓存、消息队列和关键外部系统。使用 software-system 父边界 + container 子边界或 container 节点，保留 parentId 层级，节点绑定最相关源码路径，主要关系使用正交连线。' },
+  { label: 'C4 Component', type: 'canvas', canvasWorkbench: 'architecture', architectureStyle: 'engineering', title: 'C4 组件架构', instructions: '聚焦一个 Container，按 C4 Component 层级提炼内部主要组件、职责与依赖。节点使用 c4Type=component，外层边界使用 c4Type=container；只画有架构意义的组件，不展开每个类和方法。' },
   { label: '服务拓扑', type: 'canvas', canvasWorkbench: 'architecture', title: '服务拓扑', instructions: '从部署配置、服务注册、HTTP/RPC/MQ 调用关系提取真实服务拓扑。使用 service/api/database/cache/queue/cloud/external 节点角色，按边界分组，并区分同步调用和异步消息。' },
   { label: '事件/数据流', type: 'canvas', canvasWorkbench: 'architecture', title: '事件与数据流', instructions: '展示事件产生者、Topic/Queue、消费者、数据存储和下游系统，优先从 Kafka/MQ/任务代码和配置还原真实流向；用 queue/database/service 角色和正交连线。' },
 ]
@@ -58,16 +61,18 @@ export function AiPanel({ open, returnFocusElement, selected, initialMode = 'gen
   const [sourceError, setSourceError] = useState<string | null>(null)
   const [type, setType] = useState<DiagramType>('canvas')
   const [canvasWorkbench, setCanvasWorkbench] = useState<CanvasWorkbenchMode>('architecture')
+  const [architectureStyle, setArchitectureStyle] = useState<ArchitectureDiagramStyle | ''>('')
   const [title, setTitle] = useState('')
   const [scope, setScope] = useState('')
   const [generationInstructions, setGenerationInstructions] = useState('')
+  const resolvedArchitectureStyle = architectureStyle || detectArchitectureStyle(`${title} ${activeTemplate?.instructions ?? ''} ${generationInstructions}`)
   const [modification, setModification] = useState('')
   const [scopeFocused, setScopeFocused] = useState(false)
   const [sourceOptions, setSourceOptions] = useState<string[]>([])
   const [sourceLoading, setSourceLoading] = useState(false)
   const [sourceOptionIndex, setSourceOptionIndex] = useState(-1)
   const sourceListOpen = scopeFocused && (sourceLoading || sourceOptions.length > 0)
-  const draft = { generation: [type, canvasWorkbench, title, scope, generationInstructions, activeTemplate], modification, path: selected?.path, mode }
+  const draft = { generation: [type, canvasWorkbench, architectureStyle, title, scope, generationInstructions, activeTemplate], modification, path: selected?.path, mode }
   const latestDraft = useRef(draft)
   latestDraft.current = draft
 
@@ -86,6 +91,7 @@ export function AiPanel({ open, returnFocusElement, selected, initialMode = 'gen
     if (!generationPreset) return
     setMode('generate')
     setActiveTemplate(null)
+    setArchitectureStyle('')
     if (generationPreset.scope !== undefined) setScope(generationPreset.scope)
     if (generationPreset.title !== undefined) setTitle(generationPreset.title)
     if (generationPreset.instructions !== undefined) setGenerationInstructions(generationPreset.instructions)
@@ -136,9 +142,11 @@ export function AiPanel({ open, returnFocusElement, selected, initialMode = 'gen
   }, [onSearchSources, open, scope, scopeFocused])
 
   async function generate() {
+    if (type === 'canvas' && canvasWorkbench === 'architecture' && !resolvedArchitectureStyle) return
     const submitted = latestDraft.current
     if (!await onGenerate({
       type, ...(type === 'canvas' ? { canvasWorkbench } : {}), title, scope,
+      ...(type === 'canvas' && canvasWorkbench === 'architecture' && resolvedArchitectureStyle ? { architectureStyle: resolvedArchitectureStyle } : {}),
       instructions: [activeTemplate?.instructions, generationInstructions].filter(Boolean).join('\n'),
     })) return
     const latest = latestDraft.current
@@ -186,6 +194,7 @@ export function AiPanel({ open, returnFocusElement, selected, initialMode = 'gen
     setActiveTemplate(template)
     setType(template.type)
     if (template.canvasWorkbench) setCanvasWorkbench(template.canvasWorkbench)
+    setArchitectureStyle(template.architectureStyle ?? '')
     setTitle(template.title)
   }
 
@@ -238,6 +247,13 @@ export function AiPanel({ open, returnFocusElement, selected, initialMode = 'gen
             <FieldLabel htmlFor="ai-diagram-title">标题</FieldLabel>
             <Input id="ai-diagram-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="图表名称" />
           </Field>
+          {type === 'canvas' && canvasWorkbench === 'architecture' ? <Field>
+            <FieldLabel>架构图风格</FieldLabel>
+            <Select value={resolvedArchitectureStyle ?? ''} onValueChange={(value) => setArchitectureStyle(value as ArchitectureDiagramStyle)}>
+              <SelectTrigger className="w-full" aria-label="架构图风格"><SelectValue placeholder="选择架构图风格" /></SelectTrigger>
+              <SelectContent><SelectGroup>{architectureStyleChoices.map((style) => <SelectItem key={style.id} value={style.id}>{style.label}</SelectItem>)}</SelectGroup></SelectContent>
+            </Select>
+          </Field> : null}
           <Field>
             <FieldLabel htmlFor="ai-diagram-instructions">要求</FieldLabel>
             <Textarea id="ai-diagram-instructions" value={generationInstructions} onChange={(event) => setGenerationInstructions(event.target.value)} placeholder="描述要表达的内容" />
@@ -293,7 +309,7 @@ export function AiPanel({ open, returnFocusElement, selected, initialMode = 'gen
             </Field> : null}
           </FieldGroup>
         </details>
-        <Button className="mt-3 w-full" type="button" disabled={sending || !title.trim()} onClick={() => void generate()}>{sending ? '发送中…' : '生成图表'}</Button>
+        <Button className="mt-3 w-full" type="button" disabled={sending || !title.trim() || (type === 'canvas' && canvasWorkbench === 'architecture' && !resolvedArchitectureStyle)} onClick={() => void generate()}>{sending ? '发送中…' : '生成图表'}</Button>
       </section> : null}
       {mode === 'modify' && selected ? <section className="ai-panel-section">
         <div className="ai-current-diagram">{selected.name}</div>

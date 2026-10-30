@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { parseCanvasScene } from '../src/canvas.js'
+import { parseCanvasScene, serializeCanvasScene } from '../src/canvas.js'
 import { DiagramStore } from '../src/store.js'
 
 test('图表列表按实际工作台标注系统架构、流程画布及自由画布', async () => {
@@ -23,6 +23,19 @@ test('图表列表按实际工作台标注系统架构、流程画布及自由�
     delete file.workbench
     await store.update(architecture.path, JSON.stringify(file))
     assert.equal((await store.list()).find((diagram) => diagram.path === architecture.path)?.canvasWorkbench, 'architecture')
+    const templated = await store.create('canvas', '分层模板', 'architecture', 'layered')
+    const templatedScene = parseCanvasScene(templated.source)
+    assert.equal(templatedScene.style, undefined)
+    assert.equal(templatedScene.background, 'transparent')
+    assert.equal(templatedScene.groups?.length, 5)
+    assert.equal(templatedScene.groups?.[0]?.labelSide, 'left')
+    assert.equal(templatedScene.elements.filter((item) => item.type === 'node').length, 19)
+    await store.update(templated.path, serializeCanvasScene({ ...templatedScene, style: 'ink', background: 'transparent', groupBorderStyle: 'solid' }), templated.modifiedAt)
+    const savedScene = parseCanvasScene((await store.get(templated.path)).source)
+    assert.equal(savedScene.style, 'ink')
+    assert.equal(savedScene.background, 'transparent')
+    assert.equal(savedScene.groupBorderStyle, 'solid')
+    assert.equal(savedScene.groups?.length, 5)
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 

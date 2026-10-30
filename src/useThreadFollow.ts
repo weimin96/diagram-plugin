@@ -107,6 +107,16 @@ export function useThreadFollow(deps: ThreadFollowDeps): ThreadFollowHandle {
   const pendingActivity = useRef<DiagramThreadStateResult['activity'] | undefined>(undefined)
   const threadStateInitialized = useRef(false)
   const skipRestored = useRef(deps.initialSkipRestored)
+  const previousFollowConversation = useRef(followConversation)
+  // `fresh` only protects against restoring a diagram that existed *before* the
+  // panel was opened. Activity newer than this instant belongs to the current
+  // conversation turn and must follow, even if the very first poll already sees
+  // a non-empty thread state.
+  const panelOpenedAt = useRef(Date.now())
+
+  useEffect(() => {
+    if (panelVisible) panelOpenedAt.current = Date.now()
+  }, [panelVisible])
 
   const { dirty, document: selected, setSelected, setSource } = session
 
@@ -117,6 +127,20 @@ export function useThreadFollow(deps: ThreadFollowDeps): ThreadFollowHandle {
     threadStateInitialized.current = false
     followPauseNotice.current = undefined
   }
+
+  // Turning 跟随 back on is a user request to catch up with the current diagram.
+  // The poll may have already consumed the latest revision while following was
+  // off, so drop the cursor and let the next tick re-evaluate it immediately.
+  useEffect(() => {
+    if (followConversation && !previousFollowConversation.current) {
+      lastThreadStateAt.current = undefined
+      skipRestored.current = false
+      // The polling effect below starts immediately with the new enabled value.
+      // Calling the previous tick here runs its stale "disabled" closure and
+      // can consume the revision before the enabled poll gets a chance.
+    }
+    previousFollowConversation.current = followConversation
+  }, [followConversation])
 
   // `callTool` / `selectDiagram` are plain functions from the parent, so their identity
   // changes on every render. Reading them through a ref keeps the poll interval stable
@@ -154,6 +178,20 @@ export function useThreadFollow(deps: ThreadFollowDeps): ThreadFollowHandle {
             }
           }
           const threadUpdatedAt = state.updatedAt
+          if (!threadUpdatedAt) {
+            // A freshly opened panel with no diagram activity has nothing to restore.
+            // Keeping `skipRestored` armed would swallow the first diagram created
+            // afterwards and look exactly like "跟随没有生效".
+            skipRestored.current = false
+            return
+          }
+          const threadUpdatedAtMs = Date.parse(threadUpdatedAt)
+          const liveThreadActivity = Number.isNaN(threadUpdatedAtMs) || threadUpdatedAtMs >= panelOpenedAt.current - 1_500
+          if (skipRestored.current && liveThreadActivity) {
+            // Activity is newer than the panel mount: it is the live turn, not
+            // a historical selection to restore. Drop the guard before deciding.
+            skipRestored.current = false
+          }
           const follow = decideThreadFollow({
             updatedAt: threadUpdatedAt,
             lastUpdatedAt: lastThreadStateAt.current,
@@ -169,6 +207,12 @@ export function useThreadFollow(deps: ThreadFollowDeps): ThreadFollowHandle {
           if (!threadStateInitialized.current) {
             threadStateInitialized.current = true
             lastPlaybackActivity.current = state.activity?.key
+            // The first meaningful activity after a fresh mount is still the live
+            // turn when its revision is newer than the panel. Keep it for playback
+            // so the canvas animates in instead of appearing without context.
+            if (liveThreadActivity && state.activity && state.activity.kind !== 'proposal' && state.activity.kind !== 'history-undo') {
+              pendingActivity.current = state.activity
+            }
           } else if (state.activity?.key && state.activity.key !== lastPlaybackActivity.current) {
             lastPlaybackActivity.current = state.activity.key
             const alreadyAppliedProposal = (state.activity.kind === 'proposal' || state.activity.kind === 'history-undo')

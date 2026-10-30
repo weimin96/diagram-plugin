@@ -1,13 +1,14 @@
 import { errorMessage } from './errors.js'
 import type { DiagramDeletedResult, DiagramResult } from './reviewTypes.js'
 import type { CanvasWorkbenchMode } from './canvas.js'
+import type { CanvasTemplateId } from './canvasTemplates.js'
 import type { DiagramDocument, DiagramType, WorkspaceSnapshot } from './types.js'
 
 export type DiscardTarget =
   | { kind: 'diagram'; path: string }
   | { kind: 'workspace' }
   | { kind: 'close-thread'; path: string }
-  | { kind: 'new-diagram'; type: DiagramType; title: string; canvasWorkbench?: CanvasWorkbenchMode }
+  | { kind: 'new-diagram'; type: DiagramType; title: string; canvasWorkbench?: CanvasWorkbenchMode; canvasTemplate?: CanvasTemplateId }
 
 export interface DocumentCommandsDeps {
   workspacePath: string
@@ -33,7 +34,7 @@ export interface DocumentCommandsDeps {
 }
 
 export interface DocumentCommands {
-  createDiagram: (type: DiagramType, title: string, canvasWorkbench?: CanvasWorkbenchMode) => Promise<void>
+  createDiagram: (type: DiagramType, title: string, canvasWorkbench?: CanvasWorkbenchMode, canvasTemplate?: CanvasTemplateId) => Promise<void>
   requestCreateDiagram: (type: DiagramType, title: string, canvasWorkbench?: CanvasWorkbenchMode) => Promise<void>
   renameDiagram: () => Promise<void>
   duplicateDiagram: () => Promise<void>
@@ -69,10 +70,10 @@ export function useDocumentCommands(deps: DocumentCommandsDeps): DocumentCommand
     selectDiagram,
   } = deps
 
-  async function createDiagram(type: DiagramType, title: string, canvasWorkbench?: CanvasWorkbenchMode) {
+  async function createDiagram(type: DiagramType, title: string, canvasWorkbench?: CanvasWorkbenchMode, canvasTemplate?: CanvasTemplateId) {
     setError(null)
     try {
-      const result = await callTool<DiagramResult>('diagram.create', { workspacePath, type, title, ...(type === 'canvas' && canvasWorkbench ? { canvasWorkbench } : {}), animate: false })
+      const result = await callTool<DiagramResult>('diagram.create', { workspacePath, type, title, ...(type === 'canvas' && canvasWorkbench ? { canvasWorkbench } : {}), ...(type === 'canvas' && canvasTemplate ? { canvasTemplate } : {}), animate: false })
       const next = [result.diagram, ...snapshot.diagrams.filter((item) => item.path !== result.diagram.path)]
       onSnapshot({ ...snapshot, diagrams: next })
       setSelected(result.diagram)
@@ -85,12 +86,12 @@ export function useDocumentCommands(deps: DocumentCommandsDeps): DocumentCommand
     }
   }
 
-  async function requestCreateDiagram(type: DiagramType, title: string, canvasWorkbench?: CanvasWorkbenchMode) {
+  async function requestCreateDiagram(type: DiagramType, title: string, canvasWorkbench?: CanvasWorkbenchMode, canvasTemplate?: CanvasTemplateId) {
     if (dirty) {
-      setDiscardTarget({ kind: 'new-diagram', type, title, canvasWorkbench })
+      setDiscardTarget({ kind: 'new-diagram', type, title, canvasWorkbench, canvasTemplate })
       return
     }
-    await createDiagram(type, title, canvasWorkbench)
+    await createDiagram(type, title, canvasWorkbench, canvasTemplate)
   }
 
   async function renameDiagram() {

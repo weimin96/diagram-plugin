@@ -187,7 +187,15 @@ export function beautifyArchitectureScene(scene: CanvasScene, options: Architect
   const originalBoxes = scene.elements.filter((item): item is CanvasNode | CanvasNote => item.type !== 'arrow')
   const originalById = new Map(originalBoxes.map((item) => [item.id, item]))
   const semanticBoxes = originalBoxes.map((item) => enrichArchitectureBox(item))
-  const partitionById = new Map(semanticBoxes.map((item) => [item.id, options.partitionOverrides?.get(item.id) ?? classifyArchitectureBox(item)]))
+  // A composed diagram already stores its author-declared partition as `arch-*`.
+  // Re-running beautify must not silently reclassify those nodes from icon heuristics
+  // (for example an external MCP gateway becoming an application node again).
+  const partitionById = new Map(semanticBoxes.map((item) => [
+    item.id,
+    options.partitionOverrides?.get(item.id)
+      ?? partitionFromGroupId(item.groupId)
+      ?? classifyArchitectureBox(item),
+  ]))
   const activePartitions = partitionOrder.filter((partition) => semanticBoxes.some((item) => partitionById.get(item.id) === partition))
   const composition = options.composition ?? detectArchitectureComposition(
     semanticBoxes,
@@ -1020,6 +1028,11 @@ function architectureSortKey(item: CanvasNode | CanvasNote): number {
 
 function partitionFromLaneId(laneId: string): ArchitecturePartition | undefined {
   return partitionOrder.find((partition) => laneId === `arch-${partition}`)
+}
+
+function partitionFromGroupId(groupId: string | undefined): ArchitecturePartition | undefined {
+  if (!groupId?.startsWith('arch-')) return undefined
+  return partitionOrder.find((partition) => groupId === `arch-${partition}`)
 }
 
 function dominantPartition(values: ArchitecturePartition[]): ArchitecturePartition | undefined {

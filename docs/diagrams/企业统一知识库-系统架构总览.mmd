@@ -1,0 +1,35 @@
+%% diagram-plugin:style=blueprint
+flowchart LR
+  staff["员工 / 管理员"]
+  mcpc["外部 MCP 客户端"]
+  web["React Web<br/>知识空间 / 项目 / AI 工作台 / 管理中心"]
+  backend["Spring Boot 后端<br/>同一应用进程<br/>REST / SSE · MCP 网关 · 认证授权<br/>知识内容 · 检索证据 · 处理控制 · Agent 代理"]
+  subgraph R["独立运行服务"]
+    runtime["Agent Runtime<br/>DeerFlow Harness"]
+    collab["协作服务<br/>Hocuspocus / Yjs"]
+    office["Office 服务<br/>ONLYOFFICE"]
+  end
+  subgraph D["数据与检索投影"]
+    pg[("PostgreSQL<br/>业务 / ACL / Chunk / 证据")]
+    redis[("Redis<br/>限流 / StreamBridge")]
+    store[("对象存储<br/>本地 / MinIO / S3")]
+    index[("OpenSearch / Qdrant<br/>可选投影")]
+  end
+  sources["外部文件源<br/>FTP / SMB / S3 / WebDAV …"]
+  models["模型与解析服务<br/>Embedding / Rerank / OCR"]
+
+  staff -->|使用| web
+  mcpc -->|MCP JSON-RPC| backend
+  web -->|REST / SSE| backend
+  web <-->|WebSocket| collab
+  web <-->|同源 /office/| office
+  backend <-->|HTTP / SSE| runtime
+  runtime -->|短期 Token| backend
+  collab -->|内部业务 API| backend
+  office -->|保存回调| backend
+  backend --> pg
+  backend --> redis
+  backend --> store
+  backend --> index
+  backend --> sources
+  backend --> models

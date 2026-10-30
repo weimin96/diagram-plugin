@@ -54,6 +54,48 @@ const cases = [
   { id: 'workspace', surface: 'workspace', width: 1440, height: 900 },
   { id: 'thread-wide', surface: 'thread', width: 1100, height: 900 },
   { id: 'thread-narrow', surface: 'thread', width: 420, height: 900 },
+  // A freshly opened panel has no diagram activity to restore. The first poll
+  // must disarm the one-shot restore skip so the next real diagram switches in.
+  {
+    id: 'thread-follow',
+    surface: 'thread',
+    width: 420,
+    height: 900,
+    follow: 'empty-then-active',
+    settleMs: 4200,
+    action: {
+      label: '首次创建自动跟随，暂停后恢复当前图',
+      prepare: `(async () => {
+        const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+        const active = () => document.querySelector('.thread-diagram-tab.is-active .thread-diagram-tab-main span')?.textContent
+        const trace = document.querySelector('.freeform-ai-trace-status')
+        if (active() !== 'diagram-plugin 运行时架构' || !trace || !trace.textContent.includes('/')) return 'initial follow/playback failed'
+        const stepBefore = trace.textContent
+        const cameraBefore = document.querySelector('.freeform-svg')?.getAttribute('viewBox')
+        await wait(850)
+        if (document.querySelector('.freeform-ai-trace-status')?.textContent === stepBefore) return 'AI operation trace did not advance'
+        if (document.querySelector('.freeform-svg')?.getAttribute('viewBox') === cameraBefore) return 'AI operation trace did not focus the next area'
+        window.__sawPlayback = true
+        const toggle = document.querySelector('.thread-follow-toggle')
+        const other = document.querySelector('.thread-diagram-tab:first-child .thread-diagram-tab-main')
+        if (!toggle || !other) return 'missing follow control or alternate diagram'
+        toggle.click()
+        other.click()
+        await wait(200)
+        if (active() === 'diagram-plugin 运行时架构') return 'did not switch while paused'
+        await wait(1400)
+        toggle.click()
+        for (let attempt = 0; attempt < 30 && active() !== 'diagram-plugin 运行时架构'; attempt += 1) await wait(100)
+        return active() === 'diagram-plugin 运行时架构' ? 'ok' : 're-enable did not catch up'
+      })()`,
+      click: 'body',
+      expectEval: [
+        { expression: `document.querySelector('.thread-diagram-tab.is-active .thread-diagram-tab-main span')?.textContent`, expected: 'diagram-plugin 运行时架构' },
+        { expression: `(window.__calls || []).filter((entry) => entry.includes('diagram.threadState')).length >= 2`, expected: true },
+        { expression: `window.__sawPlayback === true`, expected: true },
+      ],
+    },
+  },
   // The canvas editor is the largest component in the repo and had no pixel
   // coverage at all; this pins its panel rendering.
   {
@@ -139,9 +181,112 @@ const cases = [
         return document.querySelector('.freeform-layer-panel') ? 'ok' : 'layers panel did not open'
       })()`,
       click: '.freeform-layer-panel section:last-of-type button',
+      press: 'ArrowRight',
       expectEval: [
         { expression: `document.querySelectorAll('.freeform-box.is-selected').length`, expected: 1 },
         { expression: `Boolean(document.querySelector('.freeform-inspector'))`, expected: true },
+        { expression: `document.querySelectorAll('[aria-label="节点标题字号"], [aria-label="节点标题字重"]').length`, expected: 2 },
+        { expression: `Boolean(window.__nudgeBefore) && document.querySelector('.freeform-box.is-selected').getAttribute('transform') !== window.__nudgeBefore`, expected: true },
+      ],
+    },
+  },
+  // Style popover and layer rail are dense secondary surfaces; both must fit
+  // their real width without clipped swatches, overlapping rows or nested scrollbars.
+  {
+    id: 'canvas-style',
+    surface: 'thread',
+    width: 1100,
+    height: 900,
+    settleMs: 1600,
+    action: {
+      label: '打开画布样式设置',
+      prepare: `(async () => {
+        const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+        const canvasTab = document.querySelector('.thread-diagram-tab:nth-child(2) .thread-diagram-tab-main')
+        if (!canvasTab) return 'missing canvas tab'
+        canvasTab.click()
+        for (let attempt = 0; attempt < 60 && !document.querySelector('.freeform-svg'); attempt += 1) await wait(50)
+        if (!document.querySelector('.freeform-svg')) return 'canvas editor did not open'
+        const style = [...document.querySelectorAll('.freeform-floating-toolbar button')]
+          .find((item) => (item.textContent || '').trim() === '样式')
+        if (!style) return 'missing style button'
+        style.click()
+        for (let attempt = 0; attempt < 40 && !document.querySelector('.freeform-toolbar-menu.is-style'); attempt += 1) await wait(50)
+        if (!document.querySelector('.freeform-toolbar-menu.is-style')) return 'style popover did not open'
+        const solid = [...document.querySelectorAll('.freeform-frame-style button')]
+          .find((item) => (item.textContent || '').trim() === '实线')
+        if (!solid) return 'missing solid frame button'
+        solid.click()
+        await wait(180)
+        return 'ok'
+      })()`,
+      click: '.freeform-toolbar-menu.is-style .freeform-style-preset > span',
+      expectPresent: ['.freeform-toolbar-menu.is-style'],
+      expectEval: [
+        { expression: `document.querySelectorAll('.freeform-theme-option').length`, expected: 6 },
+        { expression: `document.querySelectorAll('.freeform-toolbar-menu.is-style .freeform-style-color button').length`, expected: 8 },
+        { expression: `document.querySelectorAll('.freeform-frame-style button').length`, expected: 2 },
+        { expression: `document.querySelectorAll('.freeform-group-frame.has-solid-frame').length > 0`, expected: true },
+      ],
+    },
+  },
+  {
+    id: 'canvas-layers',
+    surface: 'thread',
+    width: 1100,
+    height: 900,
+    settleMs: 1600,
+    action: {
+      label: '打开画布层级面板',
+      prepare: `(async () => {
+        const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+        const canvasTab = document.querySelector('.thread-diagram-tab:nth-child(2) .thread-diagram-tab-main')
+        if (!canvasTab) return 'missing canvas tab'
+        canvasTab.click()
+        for (let attempt = 0; attempt < 60 && !document.querySelector('.freeform-svg'); attempt += 1) await wait(50)
+        if (!document.querySelector('.freeform-svg')) return 'canvas editor did not open'
+        const layers = [...document.querySelectorAll('.freeform-floating-toolbar button')]
+          .find((item) => (item.textContent || '').trim() === '层级')
+        if (!layers) return 'missing layers button'
+        layers.click()
+        for (let attempt = 0; attempt < 40 && !document.querySelector('.freeform-layer-panel'); attempt += 1) await wait(50)
+        return document.querySelector('.freeform-layer-panel') ? 'ok' : 'layers panel did not open'
+      })()`,
+      click: '.freeform-layer-head strong',
+      expectPresent: ['.freeform-layer-panel', '.freeform-layer-body'],
+      expectEval: [
+        { expression: `document.querySelectorAll('.freeform-layer-group').length`, expected: 5 },
+        { expression: `document.querySelectorAll('.freeform-layer-body').length`, expected: 1 },
+      ],
+    },
+  },
+  {
+    id: 'canvas-architecture-menu',
+    surface: 'thread',
+    width: 1100,
+    height: 900,
+    settleMs: 1600,
+    action: {
+      label: '打开架构布局面板',
+      prepare: `(async () => {
+        const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+        const canvasTab = document.querySelector('.thread-diagram-tab:nth-child(2) .thread-diagram-tab-main')
+        if (!canvasTab) return 'missing canvas tab'
+        canvasTab.click()
+        for (let attempt = 0; attempt < 60 && !document.querySelector('.freeform-svg'); attempt += 1) await wait(50)
+        if (!document.querySelector('.freeform-svg')) return 'canvas editor did not open'
+        const layout = [...document.querySelectorAll('.freeform-floating-toolbar button')]
+          .find((item) => (item.textContent || '').trim().startsWith('布局'))
+        if (!layout) return 'missing layout button'
+        layout.click()
+        for (let attempt = 0; attempt < 40 && !document.querySelector('.freeform-toolbar-menu.is-architecture'); attempt += 1) await wait(50)
+        return document.querySelector('.freeform-toolbar-menu.is-architecture') ? 'ok' : 'architecture menu did not open'
+      })()`,
+      click: '.freeform-toolbar-menu.is-architecture .freeform-compact-control-row > span',
+      expectPresent: ['.freeform-toolbar-menu.is-architecture', '.freeform-architecture-dependency-navigation'],
+      expectEval: [
+        { expression: `document.querySelectorAll('.freeform-architecture-dependency-navigation .freeform-menu-stack > button').length >= 4`, expected: true },
+        { expression: `getComputedStyle(document.querySelector('.freeform-architecture-dependency-navigation .freeform-menu-stack')).overflowY`, expected: 'visible' },
       ],
     },
   },
@@ -217,7 +362,7 @@ const server = createServer(async (request, response) => {
   }
   const surface = url.searchParams.get('surface') === 'workspace' ? 'workspace' : 'thread'
   response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-  response.end(harnessHtml(surface, { proposal: url.searchParams.get('proposal') === '1' }))
+  response.end(harnessHtml(surface, { proposal: url.searchParams.get('proposal') === '1', follow: url.searchParams.get('follow') }))
 })
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
 const port = server.address().port
@@ -232,9 +377,10 @@ try {
   const dumpDom = process.argv.includes('--dump-dom')
   for (const testCase of selected()) {
     const file = path.join(resultDir, `${testCase.id}.png`)
-    const url = `http://127.0.0.1:${port}/?surface=${testCase.surface}${testCase.proposal ? '&proposal=1' : ''}`
+    const url = `http://127.0.0.1:${port}/?surface=${testCase.surface}${testCase.proposal ? '&proposal=1' : ''}${testCase.follow ? `&follow=${testCase.follow}` : ''}`
     await withPage(url, testCase, async (client) => {
       if (boxes) {
+        if (testCase.action) await runAction(client, testCase.action)
         console.log(`\n${testCase.id} (${testCase.width}x${testCase.height}):\n${await evaluate(client, boxProbe())}`)
         return
       }
@@ -248,6 +394,8 @@ try {
       if (testCase.action) {
         actionResult = await runAction(client, testCase.action)
         if (actionResult.ok) {
+          // Radix popovers fade in; let the settled frame land before the screenshot.
+          await new Promise((resolve) => setTimeout(resolve, 260))
           console.log(`${testCase.id}: ${testCase.action.label} → ok (${(actionResult.calls || []).length} host calls)`)
         } else {
           console.log(`${testCase.id}: ${testCase.action.label} → FAILED — ${actionResult.reason}`)
@@ -259,7 +407,7 @@ try {
       const calls = await evaluate(client, 'JSON.stringify(window.__calls || [])')
       const byTool = {}
       for (const entry of JSON.parse(calls)) {
-        const name = entry.split(':')[1] || entry
+        const name = (entry.split(':')[1] || entry).split('@')[0]
         byTool[name] = (byTool[name] || 0) + 1
       }
       const totalCalls = Object.values(byTool).reduce((sum, count) => sum + count, 0)
@@ -401,6 +549,17 @@ async function runAction(client, action) {
   if (clicked !== 'clicked') {
     return { ok: false, reason: `找不到可点击的「${action.label}」控件 (${action.click})` }
   }
+  if (action.press) {
+    const pressed = await evaluate(client, `new Promise((resolve) => {
+      const target = document.querySelector('.freeform-editor')
+      const selected = document.querySelector('.freeform-box.is-selected')
+      if (!target || !selected) return resolve('missing')
+      window.__nudgeBefore = selected.getAttribute('transform') || ''
+      target.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(action.press)}, code: ${JSON.stringify(action.press)}, bubbles: true, cancelable: true }))
+      setTimeout(() => resolve('ok'), 500)
+    })`)
+    if (pressed !== 'ok') return { ok: false, reason: `「${action.label}」无法在选中元素上按键 ${action.press}（${pressed}）` }
+  }
   const goneList = JSON.stringify(action.expectGone ?? [])
   const settled = await evaluate(client, `new Promise((resolve) => {
     const gone = ${goneList}
@@ -414,7 +573,7 @@ async function runAction(client, action) {
   })`)
   const wantedText = JSON.stringify(action.expectText ?? [])
   const state = JSON.parse(await evaluate(client, `JSON.stringify({
-    calls: (window.__calls || []).map((entry) => String(entry).split(':')[1] || ''),
+    calls: (window.__calls || []).map((entry) => (String(entry).split(':')[1] || '').split('@')[0]),
     texts: ${wantedText}.map((item) => {
       const node = document.querySelector(item.selector)
       return node ? node.textContent.trim() : null
@@ -569,8 +728,28 @@ function boxProbe() {
   box('actions', actions)
   if (actions) Array.from(actions.children).forEach((child, index) => box('child' + index + ' ' + (child.getAttribute('aria-label') || (child.className || '').split(' ')[0] || child.tagName), child))
   box('toolbar', document.querySelector('.editor-toolbar'))
+  const popover = document.querySelector('.freeform-toolbar-menu')
+  box('popover', popover)
+  if (popover) {
+    const style = getComputedStyle(popover)
+    lines.push('popover overflow=' + style.overflowY + ' scrollTop=' + Math.round(popover.scrollTop) + ' scrollHeight=' + Math.round(popover.scrollHeight) + ' clientHeight=' + Math.round(popover.clientHeight) + ' bg=' + style.backgroundColor + ' opacity=' + style.opacity)
+    Array.from(popover.children).forEach((child, index) => box('popover-child' + index + ' ' + (child.className || child.tagName), child))
+  }
+  const relationList = document.querySelector('.freeform-relation-explorer-list')
+  box('relationList', relationList)
+  if (relationList) {
+    const style = getComputedStyle(relationList)
+    lines.push('relationList overflow=' + style.overflowY + ' scrollHeight=' + Math.round(relationList.scrollHeight) + ' clientHeight=' + Math.round(relationList.clientHeight))
+    Array.from(relationList.children).slice(0, 3).forEach((child, index) => box('relationRow' + index, child))
+  }
   lines.push('calls=' + ((window.__calls || []).join(',')))
   lines.push('banners=' + Array.from(document.querySelectorAll('.feedback-banner,.feedback-overflow')).map((el) => el.getAttribute('data-feedback')).join(','))
+  const frames = Array.from(document.querySelectorAll('.freeform-group-frame'))
+  lines.push('frames=' + frames.length)
+  frames.slice(0, 3).forEach((frame, index) => {
+    const rect = frame.querySelector('rect')
+    lines.push('frame' + index + ' ' + (frame.getAttribute('class') || '') + ' dash=' + (rect ? getComputedStyle(rect).strokeDasharray : 'missing'))
+  })
   lines.push('doc scrollWidth=' + document.documentElement.scrollWidth + ' clientWidth=' + document.documentElement.clientWidth)
   return lines.join(String.fromCharCode(10))
 })()`
@@ -591,7 +770,17 @@ const SOURCES = new Map(${JSON.stringify([...sources])});
 const ACTIVE = ${JSON.stringify(testCase.active === 'canvas' ? canvasPath : mermaidPath)};
 const MODIFIED = ${JSON.stringify(modifiedAt)};
 const MODIFIED_ADVANCED = ${JSON.stringify(new Date(Date.parse(modifiedAt) + 1000).toISOString())};
+const THREAD_UPDATED = ${JSON.stringify(new Date().toISOString())};
 let proposalLive = true;
+const FOLLOW_MODE = ${JSON.stringify(testCase.follow ?? null)};
+if (FOLLOW_MODE && typeof Element.prototype.animate === 'function') {
+  window.__playbackAnimations = 0;
+  const originalAnimate = Element.prototype.animate;
+  Element.prototype.animate = function (...args) {
+    window.__playbackAnimations += 1;
+    return originalAnimate.apply(this, args);
+  };
+}
 const PROPOSAL = ${JSON.stringify(testCase.proposal ? {
   revision: 'proposal-7',
   path: mermaidPath,
@@ -638,11 +827,30 @@ function answer(method, params) {
     } };
   }
   if (name === 'diagram.threadState') {
+    const call = threadStateCalls++
+    if (FOLLOW_MODE === 'empty-then-active') {
+      if (call < 2) {
+        return { structuredContent: {
+          kind: 'diagram-thread-state',
+          diagramPaths: DIAGRAMS.map((diagram) => diagram.path),
+          activeDiagramPath: undefined,
+          updatedAt: undefined,
+          activity: null,
+        } };
+      }
+      return { structuredContent: {
+        kind: 'diagram-thread-state',
+        diagramPaths: DIAGRAMS.map((diagram) => diagram.path),
+        activeDiagramPath: ${JSON.stringify(canvasPath)},
+        updatedAt: THREAD_UPDATED,
+        activity: { kind: 'create', path: ${JSON.stringify(canvasPath)}, key: 'follow-create', modifiedAt: MODIFIED },
+      } };
+    }
     return { structuredContent: {
       kind: 'diagram-thread-state',
       diagramPaths: DIAGRAMS.map((diagram) => diagram.path),
       activeDiagramPath: ACTIVE,
-      updatedAt: threadStateCalls++ === 0 ? MODIFIED : MODIFIED_ADVANCED,
+      updatedAt: call === 0 ? MODIFIED : MODIFIED_ADVANCED,
       activity: null,
       ...(PROPOSAL && proposalLive ? { proposal: PROPOSAL } : {}),
     } };
@@ -680,7 +888,7 @@ window.addEventListener('message', (event) => {
   const channel = new MessageChannel();
   channel.port1.onmessage = ({ data }) => {
     window.__calls = window.__calls || [];
-    window.__calls.push(String(data.method) + ':' + String(data.params?.name || ''));
+    window.__calls.push(String(data.method) + ':' + String(data.params?.name || '') + (data.params?.arguments?.path ? '@' + String(data.params.arguments.path) : ''));
     try {
       channel.port1.postMessage({ id: data.id, result: answer(data.method, data.params) });
     } catch (error) {
@@ -689,7 +897,7 @@ window.addEventListener('message', (event) => {
   };
   event.source.postMessage({
     type: 'diagram.connect',
-    context: { theme: 'light', workspacePath: WORKSPACE, styles: { variables: {} } },
+    context: { theme: 'light', workspacePath: WORKSPACE, styles: { variables: {} }, ...(FOLLOW_MODE ? { diagramOpenMode: 'fresh' } : {}) },
   }, '*', [channel.port2]);
 });
 </script>

@@ -1,18 +1,44 @@
 let labelContext: CanvasRenderingContext2D | undefined
 const labelTextLayouts = new Map<string, { lines: string[]; width: number; height: number }>()
 
-function measureLabelText(text: string): number {
+function measureLabelText(text: string, fontSize = 12, fontWeight = 600): number {
   if (typeof document === 'undefined') {
     // 服务端无浏览器字体，按全角和半角估算；预览与导出使用实际字形宽度。
-    return Array.from(text).reduce((width, char) => width + (char.codePointAt(0)! > 255 ? 12 : 7), 0)
+    return Array.from(text).reduce((width, char) => {
+      const code = char.codePointAt(0)!
+      if (code > 255) return width + fontSize
+      if (char === ' ') return width + fontSize * 0.34
+      if (/[A-Z0-9]/.test(char)) return width + fontSize * 0.64
+      return width + fontSize * 0.56
+    }, 0)
   }
   if (!labelContext) {
     const context = document.createElement('canvas').getContext('2d')
     if (!context) throw new Error('无法测量图表关系标签。')
     labelContext = context
-    labelContext.font = '600 12px Arial, sans-serif'
   }
+  labelContext.font = `${fontWeight} ${fontSize}px Arial, sans-serif`
   return labelContext.measureText(text).width
+}
+
+/** Keep a node title or subtitle inside its card. Adds an ellipsis only when
+ * the measured text would leave the available width. */
+export function fitCanvasText(text: string, maxWidth: number, fontSize: number, fontWeight = 600): string {
+  if (!text) return text
+  if (measureLabelText(text, fontSize, fontWeight) <= maxWidth) return text
+  const chars = Array.from(text)
+  let low = 1
+  let high = chars.length - 1
+  let best = 0
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2)
+    const candidate = `${chars.slice(0, middle).join('').trimEnd()}…`
+    if (measureLabelText(candidate, fontSize, fontWeight) <= maxWidth) {
+      best = middle
+      low = middle + 1
+    } else high = middle - 1
+  }
+  return best > 0 ? `${chars.slice(0, best).join('').trimEnd()}…` : '…'
 }
 
 export function canvasArrowLabelText(label: string): { lines: string[]; width: number; height: number } {
@@ -42,7 +68,7 @@ export function canvasArrowLabelText(label: string): { lines: string[]; width: n
   if (!lines.length) lines.push('')
   const layout = {
     lines,
-    width: Math.max(48, Math.ceil(Math.max(...lines.map(measureLabelText))) + 18),
+    width: Math.max(48, Math.ceil(Math.max(...lines.map((line) => measureLabelText(line)))) + 18),
     height: lines.length * 16 + 8,
   }
   if (labelTextLayouts.size >= 512) labelTextLayouts.delete(labelTextLayouts.keys().next().value!)

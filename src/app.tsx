@@ -293,7 +293,7 @@ function DiagramWorkspace({ snapshot, onSnapshot, onSwitch }: {
   const shellWidth = useElementWidth(shellRef, threadSurface ? 420 : 1200)
   const capability = diagramCapability(selected?.type)
   const policy = resolveEditorPolicy({ surface, width: shellWidth, capability })
-  const [mode, setMode] = useState<ViewMode>(() => readViewPreferences(viewPreferenceStorage(), viewPreferenceScope(surface))?.mode ?? policy.defaultMode)
+  const [mode, setMode] = useState<ViewMode>(() => policy.defaultMode)
   const canvasActive = mode !== 'source' && (!loadingPath || loadingPath === selected?.path)
   const canvasWriteTarget = useRef({ workspacePath, path: selected?.path, active: canvasActive })
   canvasWriteTarget.current = { workspacePath, path: selected?.path, active: canvasActive }
@@ -315,18 +315,28 @@ function DiagramWorkspace({ snapshot, onSnapshot, onSwitch }: {
   } = panel.setters
   const aiReturnFocus = useRef<HTMLElement | null>(null)
   const threadMoreButton = useRef<HTMLButtonElement>(null)
-  const [followConversation, setFollowConversation] = useState(true)
+  // Following belongs to the conversation, not whichever document happens to be open.
+  const [followConversation, setFollowConversation] = useState(
+    () => readViewPreferences(viewPreferenceStorage(), viewPreferenceScope(surface))?.follow ?? true,
+  )
   const [followPaused, setFollowPaused] = useState(false)
   const preferenceScope = viewPreferenceScope(surface, selected?.path)
+  const [loadedPreferenceScope, setLoadedPreferenceScope] = useState(preferenceScope)
   useEffect(() => {
     const stored = readViewPreferences(viewPreferenceStorage(), preferenceScope)
-    if (!stored) return
-    setMode(stored.mode)
-    setFollowConversation(stored.follow)
-  }, [preferenceScope])
+    // A new document must not inherit the previous document's split layout.
+    // Only an explicit per-document preference may override the capability default.
+    setMode(stored?.mode ?? policy.defaultMode)
+    setLoadedPreferenceScope(preferenceScope)
+  }, [preferenceScope, policy.defaultMode])
   useEffect(() => {
-    writeViewPreferences(viewPreferenceStorage(), preferenceScope, { mode, follow: followConversation })
-  }, [followConversation, mode, preferenceScope])
+    if (loadedPreferenceScope === preferenceScope) {
+      writeViewPreferences(viewPreferenceStorage(), preferenceScope, { mode, follow: true })
+    }
+  }, [loadedPreferenceScope, mode, preferenceScope])
+  useEffect(() => {
+    writeViewPreferences(viewPreferenceStorage(), viewPreferenceScope(surface), { mode: 'preview', follow: followConversation })
+  }, [followConversation, surface])
   const threadTabsElement = useRef<HTMLDivElement>(null)
   const selectRequestSeq = useRef(0)
   const saveInFlight = useRef(false)
@@ -607,7 +617,7 @@ function DiagramWorkspace({ snapshot, onSnapshot, onSwitch }: {
       return
     }
     if (target.kind === 'new-diagram') {
-      void createDiagram(target.type, target.title, target.canvasWorkbench)
+      void createDiagram(target.type, target.title, target.canvasWorkbench, target.canvasTemplate)
       return
     }
     void selectDiagram(target.path, true)
@@ -1015,7 +1025,7 @@ function DiagramWorkspace({ snapshot, onSnapshot, onSwitch }: {
                           playbackRequest={canvasPlayback?.path === selected.path ? canvasPlayback : null}
                           onPlaybackComplete={(key) => setCanvasPlayback((current) => current?.key === key ? null : current)}
                         />
-                      : <MermaidPreview source={source} />}
+                      : <MermaidPreview key={selected.path} source={source} />}
               </PreviewPane>}
             />
           </>

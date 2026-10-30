@@ -1,0 +1,30 @@
+%% diagram-plugin:style=blueprint
+flowchart TB
+  subgraph B["Spring Boot 后端：同一应用进程"]
+    api["REST / SSE API<br/>对外业务入口"]
+    mcp["MCP 网关<br/>工具 / 资源 / 引用 / 审计"]
+    acl["认证与授权<br/>用户 / 组织 / 项目 / Grant"]
+    content["知识与内容<br/>知识库 / 文件版本 / 在线文档"]
+    search["检索与证据<br/>混合召回 / RRF / Rerank"]
+    pipeline["文档处理与索引<br/>Scan / Capture / Parse / Index / Semantic / Graph"]
+    agentp["Agent 会话代理<br/>知识范围 / Runtime 代理"]
+  end
+  pg[("PostgreSQL<br/>业务 / ACL / Chunk / 证据")]
+  index[("OpenSearch / Qdrant<br/>可选检索投影")]
+  store[("对象存储<br/>原始 Blob / 解析产物")]
+
+  api --> acl
+  api --> content
+  api --> search
+  api --> pipeline
+  api --> agentp
+  mcp --> acl
+  mcp --> search
+  search --> content
+  acl --> pg
+  content --> pg
+  search --> pg
+  pipeline --> pg
+  search --> index
+  pipeline --> index
+  pipeline --> store
