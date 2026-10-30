@@ -4,6 +4,7 @@ import { buildGenerationPrompt, buildModificationPrompt, buildSubgraphModificati
 import { detectArchitectureStyle } from '../src/architectureStyle.js'
 import { composeEnterpriseArchitecture } from '../src/enterpriseArchitecture.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
+import { canvasGroupFrames, canvasPresentationGroupFrames } from '../src/canvas.js'
 import type { DiagramDocument } from '../src/types.js'
 
 test('builds a Canvas-specific generation contract without Mermaid instructions', () => {
@@ -128,6 +129,34 @@ test('architecture generation uses topology archetypes and a bounded quality loo
   assert.equal(enterprise.scene.groups?.every((group) => group.labelSide === 'left'), true)
   assert.notEqual(engineering.scene.groups?.[0]?.labelSide, 'left')
   assert.throws(() => composeEnterpriseArchitecture({ ...intent, nodes: intent.nodes.map((node) => ({ ...node, layer: '应用层' })) }), /至少需要两个/)
+
+  const unequalLayers = composeEnterpriseArchitecture({
+    title: '企业分层视图', relations: [], nodes: [
+      ...Array.from({ length: 6 }, (_, i) => ({ id: `Access${i}`, text: `接入模块${i}`, layer: '接入层' })),
+      { id: 'Service', text: '核心服务', layer: '服务层' },
+      { id: 'Storage', text: '对象存储', layer: '存储层' },
+    ],
+  })
+  const originalFrames = canvasGroupFrames(unequalLayers.scene)
+  const visualFrames = canvasPresentationGroupFrames(unequalLayers.scene)
+  assert.notEqual(originalFrames[0].width, originalFrames[1].width, '路由组边界保持真实节点占地')
+  assert.equal(new Set(visualFrames.map((frame) => frame.width)).size, 1, '展示分层对齐宽度')
+  assert.equal(new Set(visualFrames.map((frame) => frame.x)).size, 1, '展示分层对齐左侧')
+  assert.equal(unequalLayers.scene.elements.filter((item) => item.type === 'node').length, 8)
+  assert.equal(unequalLayers.scene.elements.filter((item) => item.type === 'arrow').length, 0)
+
+  const denseNodes = Array.from({ length: 36 }, (_, index) => ({
+    id: `Module${index}`, text: `模块${index}`, layer: `第${Math.floor(index / 6) + 1}层`,
+  }))
+  const denseEdges = Array.from({ length: 48 }, (_, index) => ({
+    from: `Module${index % 30}`, to: `Module${6 + ((index * 3 + 11) % 30)}`,
+  }))
+  const dense = composeEnterpriseArchitecture({ title: '密集关系', nodes: denseNodes, relations: denseEdges })
+  assert.equal(dense.scene.elements.filter((item) => item.type === 'arrow').length, denseEdges.length)
+  assert.equal(dense.quality.metrics.nodeOverlaps, 0)
+  assert.equal(dense.quality.metrics.edgeNodeIntersections, 0)
+  assert.equal(dense.scene.groups?.length, 6)
+  assert.ok(dense.visualPlan.review && Array.isArray(dense.visualPlan.review.blockers))
 })
 
 test('参考图片忠实重绘不强制走语义自动布局', () => {

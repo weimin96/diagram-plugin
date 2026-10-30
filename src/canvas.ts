@@ -1328,7 +1328,15 @@ export function canvasPresentationGroupFrames(
   frames: readonly CanvasGroupFrame[] = canvasGroupFrames(scene),
 ): CanvasGroupFrame[] {
   if (!scene.architecture) return [...frames]
+  const enterpriseBands = scene.architecture.diagramStyle === 'enterprise'
+    ? frames.filter((frame) => frame.id.startsWith('__arch-layer-') && frame.labelSide === 'left' && !frame.collapsed)
+    : []
+  const bandLeft = Math.min(...enterpriseBands.map((frame) => frame.x))
+  const bandRight = Math.max(...enterpriseBands.map((frame) => frame.x + frame.width))
   return frames.map((frame) => {
+    // The proposal view needs aligned visual bands even when each layer has a
+    // different number of modules. Routing still uses exact member extents.
+    if (enterpriseBands.includes(frame)) return { ...frame, x: bandLeft, width: bandRight - bandLeft }
     const generatedRegion = /^arch-(external|experience|application|processing|data)$/.test(frame.id)
       && frame.kind === 'boundary' && !frame.c4Type && !frame.collapsed
     if (generatedRegion && frame.height >= 92) {
