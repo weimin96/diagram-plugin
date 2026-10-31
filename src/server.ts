@@ -922,6 +922,8 @@ server.registerTool('diagram.composeArchitecture', {
         .describe('Choose from verified visual semantics; gateway-band for a real single access gateway, resource-icon for real infrastructure, support-rail for cross-cutting capability. Do not assign by keyword or appearance alone.'),
       moduleGroup: z.string().trim().min(1).max(50).optional()
         .describe('Verified capability container within the same layer, e.g. an actual admin platform domain; children remain separately editable real nodes.'),
+      supportLayers: z.array(z.string().trim().min(1).max(32)).min(1).max(16).optional()
+        .describe('Only for confirmed cross-layer support-rail: list every actual supported layer, including its own. Do not invent scopes from names or technologies.'),
     })).min(2).max(80),
     relations: z.array(z.object({
       from: z.string().min(1),

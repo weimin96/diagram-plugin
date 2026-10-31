@@ -36,6 +36,8 @@ export interface ArchitectureIntentGraph {
     visualRole?: CanvasProposalRole
     /** Real capability domain, not a decorative container inferred from keywords. */
     moduleGroup?: string
+    /** Verified layer coverage of a cross-cutting support capability. */
+    supportLayers?: string[]
   }>
   relations: Array<{
     from: string

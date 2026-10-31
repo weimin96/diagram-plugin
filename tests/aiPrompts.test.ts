@@ -110,7 +110,7 @@ test('architecture generation uses topology archetypes and a bounded quality loo
   })
   assert.match(proposal, /architectureStyle=enterprise/)
   assert.match(proposal, /每个 layer/)
-  assert.match(proposal, /gateway-band.*capability-chip.*resource-icon.*support-rail/)
+  assert.match(proposal, /visualRole=support-rail.*supportLayers/)
   assert.doesNotMatch(proposal, /不要默认把所有组件排成等权卡片矩阵/)
 
   const intent = {
@@ -193,6 +193,85 @@ test('architecture generation uses topology archetypes and a bounded quality loo
     'dependency view renders regular modules but retains original roles in data')
   assert.equal(reopened.elements.find((item) => item.id === 'gateway')?.type, 'node')
   assert.equal((reopened.elements.find((item) => item.id === 'gateway') as CanvasNode).proposalRole, 'gateway-band')
+  const spanning = composeEnterpriseArchitecture({
+    title: '跨层支撑与自动组合', proposalMode: 'proposal',
+    nodes: [
+      { id: 'entry', text: '浏览器入口', layer: '入口层', icon: 'web' },
+      { id: 'api', text: 'API网关', layer: '接入层', icon: 'gateway' },
+      { id: 'auth', text: '身份校验', layer: '应用层', moduleGroup: '身份服务' },
+      { id: 'policy', text: '策略管理', layer: '应用层', moduleGroup: '身份服务' },
+      { id: 'worker', text: '工作流处理', layer: '能力层', icon: 'service' },
+      { id: 'db', text: '关系数据库', layer: '资源层', partition: 'data', icon: 'database' },
+      { id: 'ops', text: '运维管理', layer: '应用层', visualRole: 'support-rail',
+        supportLayers: ['接入层', '应用层', '能力层', '资源层'] },
+      { id: 'audit', text: '安全审计', layer: '能力层', visualRole: 'support-rail',
+        supportLayers: ['应用层', '能力层', '资源层'] },
+    ],
+    relations: [
+      { from: 'entry', to: 'api' }, { from: 'api', to: 'auth' },
+      { from: 'auth', to: 'worker' }, { from: 'worker', to: 'db' },
+    ],
+  })
+  const spanningNodes = new Map(spanning.scene.elements.filter((item): item is CanvasNode =>
+    item.type === 'node').map((node) => [node.id, node]))
+  const ops = spanningNodes.get('ops')!, audit = spanningNodes.get('audit')!
+  const api = spanningNodes.get('api')!, db = spanningNodes.get('db')!
+  assert.equal(api.proposalRole, 'gateway-band', 'single confirmed gateway icon selects a full-width bar')
+  assert.equal(db.proposalRole, 'resource-icon', 'verified data partition and database icon select a resource tile')
+  assert.equal(spanningNodes.get('auth')?.proposalRole, 'capability-chip')
+  assert.equal(spanningNodes.get('policy')?.proposalRole, 'capability-chip')
+  assert.ok(ops.y < spanningNodes.get('auth')!.y && ops.y + ops.height > db.y + db.height,
+    'cross-layer operations rail spans its confirmed layer range')
+  assert.ok(audit.y > ops.y && audit.y + audit.height <= ops.y + ops.height,
+    'second support rail has a narrower independently confirmed scope')
+  assert.ok(audit.x >= ops.x + ops.width + 10, 'multiple side rails have separate dedicated tracks')
+  assert.ok(ops.x > Math.max(...['api', 'auth', 'policy', 'worker', 'db']
+    .map((id) => spanningNodes.get(id)!.x + spanningNodes.get(id)!.width)),
+  'support rails remain outside all business layer content')
+  assert.ok(ops.x + ops.width <= spanning.scene.width && audit.x + audit.width <= spanning.scene.width)
+  assert.equal(spanning.quality.metrics.nodeOverlaps, 0)
+  assert.equal(spanning.quality.metrics.edgeNodeIntersections, 0)
+  assert.deepEqual(spanning.scene.elements.filter((item) => item.type === 'arrow')
+    .map((arrow) => [arrow.from, arrow.to]), [
+      ['entry', 'api'], ['api', 'auth'], ['auth', 'worker'], ['worker', 'db'],
+    ], 'cross-layer visuals never manufacture or drop actual relationships')
+  const restoredSpanning = parseCanvasScene(serializeCanvasScene(spanning.scene))
+  assert.deepEqual((restoredSpanning.elements.find((item) => item.id === 'ops') as CanvasNode).supportLayers,
+    ['接入层', '应用层', '能力层', '资源层'], 'cross-layer coverage survives reopening')
+  assert.equal(restoredSpanning.groups?.filter((group) => group.parentId).length, 1,
+    'automatic capability container is a real parent-child group')
+  const spanningFrames = canvasPresentationGroupFrames(spanning.scene)
+  const contained = spanningFrames.find((frame) => frame.label === '身份服务')!
+  const outer = spanningFrames.find((frame) => frame.label === '应用层')!
+  assert.ok(contained.x >= outer.x && contained.x + contained.width <= outer.x + outer.width
+    && contained.y >= outer.y && contained.y + contained.height <= outer.y + outer.height,
+  'the presentation layer fully encloses its real nested container')
+  assert.match(canvasSceneToSvg(spanning.scene), /proposal-support-rail/)
+  assert.throws(() => composeEnterpriseArchitecture({
+    ...spanning.scene, title: '非法范围',
+    nodes: [
+      { id: 'a', text: 'A', layer: 'A', visualRole: 'support-rail' as const, supportLayers: ['A', 'C'] },
+      { id: 'b', text: 'B', layer: 'B' }, { id: 'c', text: 'C', layer: 'C' },
+    ], relations: [],
+  }), /不能跨过未声明支持/, 'non-contiguous support coverage is rejected')
+  assert.throws(() => composeEnterpriseArchitecture({
+    title: '非法角色', nodes: [
+      { id: 'a', text: 'A', layer: 'A', visualRole: 'module' as const, supportLayers: ['A'] },
+      { id: 'b', text: 'B', layer: 'B' },
+    ], relations: [],
+  }), /只适用于/, 'regular modules cannot acquire a fake cross-layer scope')
+  assert.throws(() => composeEnterpriseArchitecture({
+    title: '未验证的支撑范围', nodes: [
+      { id: 'a', text: 'A', layer: 'A', visualRole: 'support-rail' as const, supportLayers: ['A', '不存在的层'] },
+      { id: 'b', text: 'B', layer: 'B' },
+    ], relations: [],
+  }), /必须引用已确认/, 'unknown coverage never fabricates a layer')
+  assert.throws(() => composeEnterpriseArchitecture({
+    title: '相互矛盾的角色', nodes: [
+      { id: 'a', text: 'A', layer: 'A', visualRole: 'support-rail' as const, moduleGroup: '平台' },
+      { id: 'b', text: 'B', layer: 'B' },
+    ], relations: [],
+  }), /不能同时声明/, 'a horizontal module group cannot swallow a cross-layer rail')
   const brandModule = canvasEnterpriseModuleSvg({
     id: 'redis', type: 'node', text: '缓存服务 Redis', subtitle: '热点数据 · 会话',
     x: 0, y: 0, width: 168, height: 82, icon: 'cache', stencil: 'redis',

@@ -127,6 +127,8 @@ export interface CanvasNode {
   locked?: boolean
   groupId?: string
   proposalRole?: CanvasProposalRole
+  /** Only the author-confirmed layer coverage for a cross-layer support rail. */
+  supportLayers?: string[]
   sourcePaths?: string[]
   icon?: CanvasIcon
   stencil?: CanvasStencil
@@ -1396,13 +1398,20 @@ export function canvasPresentationGroupFrames(
   return frames.map((frame) => {
     // The proposal view uses aligned bands with a dedicated label rail. These
     // are presentation bounds only: routing keeps exact member extents.
-    if (enterpriseBands.includes(frame)) return {
-      ...frame,
-      x: bandLeft - railWidth,
-      width: bandRight - bandLeft + railWidth,
-      y: frame.y + (mixedProposal ? 4 : 24),
-      height: mixedProposal ? Math.max(66, frame.height - 12) : bandHeight,
-      labelRailWidth: railWidth,
+    if (enterpriseBands.includes(frame)) {
+      // Only nested capability containers need the expanded envelope.
+      // Enlarging every layer would eliminate deliberate whitespace between
+      // entry/access/resource bands and make the scheme look like one table.
+      const hasNestedContainers = mixedProposal && scene.groups?.some((group) => group.parentId === frame.id)
+      return {
+        ...frame,
+        x: bandLeft - railWidth,
+        width: bandRight - bandLeft + railWidth,
+        y: frame.y + (hasNestedContainers ? -12 : mixedProposal ? 4 : 24),
+        height: hasNestedContainers ? Math.max(66, frame.height + 24)
+          : mixedProposal ? Math.max(66, frame.height - 12) : bandHeight,
+        labelRailWidth: railWidth,
+      }
     }
     const generatedRegion = /^arch-(external|experience|application|processing|data)$/.test(frame.id)
       && frame.kind === 'boundary' && !frame.c4Type && !frame.collapsed
@@ -2089,6 +2098,9 @@ function normalizeCanvasElement(item: CanvasElement): CanvasElement {
     ...(typeof item.groupId === 'string' && item.groupId.trim() ? { groupId: item.groupId.trim() } : {}),
     ...(item.type === 'node' && proposalRoles.includes(item.proposalRole as CanvasProposalRole)
       ? { proposalRole: item.proposalRole as CanvasProposalRole } : {}),
+    ...(item.type === 'node' && Array.isArray(item.supportLayers)
+      ? { supportLayers: item.supportLayers.filter((layer): layer is string =>
+        typeof layer === 'string' && Boolean(layer.trim())).map((layer) => layer.trim()).slice(0, 16) } : {}),
     ...(Array.isArray(item.sourcePaths) ? { sourcePaths: item.sourcePaths.filter((path) => typeof path === 'string' && path.trim()).map((path) => path.trim()).slice(0, 12) } : {}),
     ...(item.icon && icons.includes(item.icon) ? { icon: item.icon } : {}),
     ...(item.stencil && stencils.includes(item.stencil) ? { stencil: item.stencil } : {}),

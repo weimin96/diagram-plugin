@@ -7,7 +7,7 @@ import { assessArchitectureRouteDiagnostics } from './architectureRouteDiagnosti
 import { assessArchitecturePresentation } from './architecturePresentationQuality.js'
 import { planArchitectureVisual } from './architectureVisualPlan.js'
 import { canvasVisualSkin } from './diagramVisualStyles.js'
-import { canvasEnterpriseModuleTextLayout, resolveCanvasArchitectureDensity, type CanvasArrow, type CanvasNode, type CanvasScene } from './canvas.js'
+import { canvasEnterpriseModuleTextLayout, resolveCanvasArchitectureDensity, type CanvasArrow, type CanvasNode, type CanvasProposalRole, type CanvasScene } from './canvas.js'
 
 const regionNames: Record<NonNullable<ArchitectureIntentGraph['nodes'][number]['partition']>, string> = {
   external: '外部与参与方', experience: '访问与接入层', application: '业务应用层',
@@ -67,6 +67,27 @@ export function composeEnterpriseArchitecture(intent: ArchitectureIntentGraph) {
   for (const relation of intent.relations) {
     if (!ids.has(relation.from) || !ids.has(relation.to)) throw new Error(`架构关系引用不存在的节点：${relation.from} → ${relation.to}`)
   }
+  const layerNames = [...layers.keys()]
+  for (const node of intent.nodes) {
+    if (node.moduleGroup && node.visualRole
+      && node.visualRole !== 'module' && node.visualRole !== 'capability-chip') {
+      throw new Error(`节点「${node.text}」不能同时声明内部功能分组和独立横条、资源底座或支撑侧栏。`)
+    }
+    if (!node.supportLayers) continue
+    if (node.visualRole !== 'support-rail') {
+      throw new Error(`节点「${node.text}」的跨层范围只适用于已确认的侧向支撑能力。`)
+    }
+    const ownLayer = node.layer?.trim() || (node.partition ? regionNames[node.partition] : undefined)!
+    const coverage = new Set(node.supportLayers)
+    if (coverage.size !== node.supportLayers.length || !coverage.has(ownLayer)
+      || node.supportLayers.some((label) => !layers.has(label))) {
+      throw new Error(`节点「${node.text}」跨层范围必须引用已确认且互不重复的层，并包含自身所在层。`)
+    }
+    const indices = [...coverage].map((label) => layerNames.indexOf(label)).sort((a, b) => a - b)
+    if (indices.at(-1)! - indices[0] + 1 !== indices.length) {
+      throw new Error(`节点「${node.text}」的侧向支撑范围不能跨过未声明支持的业务层。`)
+    }
+  }
   if (intent.primaryPath) {
     if (new Set(intent.primaryPath).size !== intent.primaryPath.length || intent.primaryPath.some((id) => !ids.has(id))) {
       throw new Error('架构主链必须引用互不重复的已有节点。')
@@ -80,7 +101,8 @@ export function composeEnterpriseArchitecture(intent: ArchitectureIntentGraph) {
   const originalEntries = [...layers.entries()]
   // Explicit composition roles cannot be evaluated using the plain-card
   // permutations: a platform container and an access bar have real geometry.
-  if (intent.nodes.some((node) => node.visualRole || node.moduleGroup)) {
+  if (intent.nodes.some((node) => node.visualRole || node.moduleGroup || node.supportLayers)
+    || intent.proposalMode === 'proposal' || intent.proposalMode === 'capabilities' || intent.proposalMode === 'hybrid') {
     return composeLayeredCandidate(intent, originalEntries, bandGap)
   }
   if (intent.relations.length < 2) return composeLayeredCandidate(intent, originalEntries, bandGap)
@@ -192,6 +214,22 @@ export function composeEnterpriseArchitecture(intent: ArchitectureIntentGraph) {
 }
 
 function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array<[string, ArchitectureIntentGraph['nodes']]>, gap: number, requestedColumns?: number) {
+  const proposalReading = intent.proposalMode === 'proposal' || intent.proposalMode === 'capabilities'
+    || intent.proposalMode === 'hybrid'
+  // Only machine-readable, verified roles are inferred. No Chinese keyword matching.
+  const roleById = new Map<string, CanvasProposalRole>(entries.flatMap(([, members]) =>
+    members.map((node): [string, CanvasProposalRole] => [node.id, node.visualRole
+      ?? (node.moduleGroup ? 'capability-chip'
+        : proposalReading && node.partition === 'data'
+          && (node.icon === 'database' || node.icon === 'cache' || node.icon === 'queue')
+          ? 'resource-icon'
+          : proposalReading && members.filter((member) => member.visualRole !== 'support-rail').length === 1
+            && node.icon === 'gateway'
+            ? 'gateway-band' : 'module')])))
+  const supportRails = entries.flatMap(([layer, members]) => members
+    .filter((node) => roleById.get(node.id) === 'support-rail')
+    .map((node) => ({ node, layer })))
+  const layerRows = new Map<string, { top: number; bottom: number }>()
   const maxLayerSize = Math.max(...entries.map(([, nodes]) => nodes.length))
   const compact = maxLayerSize <= 4
   const tightMatrix = intent.relations.length === 0
@@ -214,14 +252,12 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
   const nestedGroups: NonNullable<CanvasScene['groups']> = []
   let y = topInset
   for (const [layerIndex, [, nodes]] of entries.entries()) {
-    const explicit = nodes.some((node) => node.visualRole || node.moduleGroup)
-      || (intent.proposalMode === 'proposal' || intent.proposalMode === 'capabilities'
-        || intent.proposalMode === 'hybrid')
+    const explicit = nodes.some((node) => roleById.get(node.id) !== 'module' || node.moduleGroup)
+      || proposalReading
     const layerId = `__arch-layer-${layerIndex + 1}`
     if (explicit) {
-      const railMembers = nodes.filter((node) => node.visualRole === 'support-rail')
-      const mainMembers = nodes.filter((node) => node.visualRole !== 'support-rail')
-      const available = 1100 - railMembers.length * 106
+      const mainMembers = nodes.filter((node) => roleById.get(node.id) !== 'support-rail')
+      const available = 1100
       const xStart = leftInset
       const sections = new Map<string, typeof nodes>()
       for (const node of mainMembers) {
@@ -254,10 +290,10 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
             const row = Math.floor(nodeIndex / inRow)
             const lastRowCount = Math.min(inRow, members.length - row * inRow)
             const rowWidth = Math.floor((sectionWidth - 40 - (lastRowCount - 1) * 10) / lastRowCount)
-            const { layer: _layer, partition: _partition, visualRole, moduleGroup: _moduleGroup, ...metadata } = node
+            const { layer: _layer, partition: _partition, visualRole: _role, moduleGroup: _moduleGroup, ...metadata } = node
             elements.push({
               ...metadata, id: node.id, type: 'node', groupId: sectionId,
-              proposalRole: visualRole ?? 'capability-chip', fontSize: 14,
+              proposalRole: roleById.get(node.id), fontSize: 14,
               x: sectionX + 20 + (nodeIndex % inRow) * (rowWidth + 10),
               y: sectionY + 32 + row * 68,
               width: rowWidth, height: 54,
@@ -268,18 +304,18 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
         rowY += groupRowHeight + 6
       }
       if (singles.length) {
-        const band = singles.length === 1 && singles[0].visualRole === 'gateway-band'
-        const infrastructure = singles.every((node) => node.visualRole === 'resource-icon')
+        const band = singles.length === 1 && roleById.get(singles[0].id) === 'gateway-band'
+        const infrastructure = singles.every((node) => roleById.get(node.id) === 'resource-icon')
         const perRow = band ? 1 : Math.min(infrastructure ? 5 : 4, singles.length)
         const spacing = 18
         const cardWidth = band ? available : infrastructure ? 174
           : Math.min(230, Math.floor((available - (perRow - 1) * spacing) / perRow))
         const cardHeight = band ? 62 : infrastructure ? 98 : 78
         singles.forEach((node, index) => {
-          const { layer: _layer, partition: _partition, visualRole, moduleGroup: _moduleGroup, ...metadata } = node
+          const { layer: _layer, partition: _partition, visualRole: _role, moduleGroup: _moduleGroup, ...metadata } = node
           elements.push({
             ...metadata, id: node.id, type: 'node', groupId: layerId,
-            proposalRole: visualRole ?? 'module', fontSize: 15,
+            proposalRole: roleById.get(node.id), fontSize: 15,
             x: band ? xStart : xStart + ((index % perRow) + .5) * (available / perRow) - cardWidth / 2,
             y: rowY + Math.floor(index / perRow) * (cardHeight + 16),
             width: cardWidth, height: cardHeight,
@@ -288,32 +324,40 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
         rowY += Math.ceil(singles.length / perRow) * (cardHeight + 16)
       }
       const layerHeight = Math.max(96, rowY - y + 8)
-      railMembers.forEach((node, index) => {
-        const { layer: _layer, partition: _partition, visualRole: _role, moduleGroup: _moduleGroup, ...metadata } = node
-        elements.push({
-          ...metadata, id: node.id, type: 'node', groupId: layerId,
-          proposalRole: 'support-rail', fontSize: 15,
-          x: xStart + available + index * 106 + 18, y,
-          width: 82, height: layerHeight,
-        })
-      })
+      layerRows.set(entries[layerIndex][0], { top: y, bottom: y + layerHeight })
       y += layerHeight + gap + 20
       continue
     }
     nodes.forEach((node, nodeIndex) => {
       const seed = templateNodes.get(`layer-${layerIndex + 1}-${nodeIndex + 1}`)!
-      const { layer: _layer, partition: _partition, visualRole, moduleGroup: _moduleGroup, ...metadata } = node
+      const { layer: _layer, partition: _partition, visualRole: _role, moduleGroup: _moduleGroup, ...metadata } = node
       elements.push({
         ...seed, ...metadata, id: node.id, groupId: `__arch-layer-${layerIndex + 1}`,
-        ...(visualRole ? { proposalRole: visualRole } : {}),
+        ...(roleById.get(node.id) !== 'module' ? { proposalRole: roleById.get(node.id) } : {}),
         fontSize: 15,
         ...(primaryNodes.has(node.id) ? { emphasis: 'primary' as const, strokeColor: primaryStroke, strokeWidth: 2 } : {}),
         x: leftInset + (nodeIndex % columns) * (nodeWidth + columnGap),
         y: y + Math.floor(nodeIndex / columns) * (nodeHeight + rowGap),
       })
     })
+    layerRows.set(entries[layerIndex][0], {
+      top: y, bottom: y + Math.ceil(nodes.length / columns) * (nodeHeight + rowGap),
+    })
     y += Math.ceil(nodes.length / columns) * (nodeHeight + rowGap) + gap + (compact ? 14 : 0)
   }
+  supportRails.forEach(({ node, layer }, index) => {
+    const covered = node.supportLayers ?? [layer]
+    const top = Math.min(...covered.map((name) => layerRows.get(name)!.top))
+    const bottom = Math.max(...covered.map((name) => layerRows.get(name)!.bottom))
+    const { layer: _layer, partition: _partition, visualRole: _role,
+      moduleGroup: _moduleGroup, ...metadata } = node
+    elements.push({
+      ...metadata, id: node.id, type: 'node',
+      proposalRole: 'support-rail', fontSize: 15,
+      x: leftInset + 1140 + index * 106,
+      y: top, width: 82, height: bottom - top,
+    })
+  })
   const primaryRelations = new Set((intent.primaryPath ?? []).slice(1).map((node, index) => `${intent.primaryPath![index]}\u0000${node}`))
   const arrows: CanvasArrow[] = intent.relations.map((relation, index) => ({
     id: `__relation-${index + 1}`, type: 'arrow', from: relation.from, to: relation.to,
@@ -326,7 +370,9 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
   const routed = routeArchitectureEdges({
     ...template,
     groups: [...(template.groups?.map((group, index) => ({ ...group, id: `__arch-layer-${index + 1}` })) ?? []), ...nestedGroups],
-    width: Math.max(tightMatrix ? 680 : compact ? 800 : 1500, leftInset + columns * (nodeWidth + columnGap) + (tightMatrix ? 36 : 48)),
+    width: Math.max(tightMatrix ? 680 : compact ? 800 : 1500,
+      leftInset + columns * (nodeWidth + columnGap) + (tightMatrix ? 36 : 48),
+      supportRails.length ? leftInset + 1140 + supportRails.length * 106 + 28 : 0),
     height: Math.max(tightMatrix ? 480 : compact ? 520 : 720, y + (tightMatrix ? 22 : compact ? 24 : 40)),
     style: intent.style ?? 'ocean',
     architecture: {
