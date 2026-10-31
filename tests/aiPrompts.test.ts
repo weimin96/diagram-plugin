@@ -6,7 +6,7 @@ import { composeEnterpriseArchitecture } from '../src/enterpriseArchitecture.js'
 import { normalizeGeneratedArchitectureTerminals } from '../src/architectureRouteRepair.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { beautifyArchitectureScene } from '../src/architectureDesign.js'
-import { canvasArchitectureGroupPresentation, canvasArrowLabelLayouts, canvasEnterpriseModuleSvg, canvasEnterpriseModuleTextLayout, canvasGroupFrames, canvasPresentationGroupFrames, canvasSceneToSvg, parseCanvasScene, serializeCanvasScene, type CanvasNode } from '../src/canvas.js'
+import { canvasArchitectureGroupPresentation, canvasArrowLabelLayouts, canvasEnterpriseModuleSvg, canvasEnterpriseModuleTextLayout, canvasGroupFrames, canvasPresentationGroupFrames, canvasProposalVisibleArrowIds, canvasSceneToSvg, parseCanvasScene, serializeCanvasScene, type CanvasNode } from '../src/canvas.js'
 import type { DiagramDocument } from '../src/types.js'
 
 test('builds a Canvas-specific generation contract without Mermaid instructions', () => {
@@ -109,7 +109,7 @@ test('architecture generation uses topology archetypes and a bounded quality loo
     type: 'canvas', architectureStyle: 'enterprise', title: '总体架构', scope: '', instructions: '',
   })
   assert.match(proposal, /architectureStyle=enterprise/)
-  assert.match(proposal, /每个 layer/)
+  assert.match(proposal, /layer、moduleGroup/)
   assert.match(proposal, /visualRole=support-rail.*supportLayers/)
   assert.doesNotMatch(proposal, /不要默认把所有组件排成等权卡片矩阵/)
 
@@ -166,9 +166,14 @@ test('architecture generation uses topology archetypes and a bounded quality loo
   assert.deepEqual(composedScene.elements.filter((item) => item.type === 'arrow')
     .map((item) => [item.from, item.to]), [['entry', 'gateway'], ['gateway', 'admin'], ['admin', 'mysql']])
   assert.equal(composedScene.architecture?.proposalMode, 'proposal')
+  assert.deepEqual([...canvasProposalVisibleArrowIds(composedScene)!], [],
+    'overview does not claim unverified calls are a primary path')
+  assert.equal(canvasProposalVisibleArrowIds({ ...composedScene, architecture: {
+    ...composedScene.architecture!, proposalMode: 'dependencies',
+  } }), null, 'dependency view restores all real arrows')
   assert.ok(composedScene.groups?.some((group) =>
     group.label === '运营平台' && Boolean(group.parentId)), 'capability blocks live in a real editable nested group')
-  for (const role of ['gateway-band', 'capability-chip', 'support-rail', 'resource-icon']) {
+  for (const role of ['gateway-band', 'capability-chip', 'support-item', 'resource-icon']) {
     assert.match(composedSvg, new RegExp(`proposal-${role}`))
   }
   assert.equal(composed.quality.metrics.nodeOverlaps, 0)
@@ -221,14 +226,17 @@ test('architecture generation uses topology archetypes and a bounded quality loo
   assert.equal(db.proposalRole, 'resource-icon', 'verified data partition and database icon select a resource tile')
   assert.equal(spanningNodes.get('auth')?.proposalRole, 'capability-chip')
   assert.equal(spanningNodes.get('policy')?.proposalRole, 'capability-chip')
-  assert.ok(ops.y < spanningNodes.get('auth')!.y && ops.y + ops.height > db.y + db.height,
-    'cross-layer operations rail spans its confirmed layer range')
-  assert.ok(audit.y > ops.y && audit.y + audit.height <= ops.y + ops.height,
-    'second support rail has a narrower independently confirmed scope')
-  assert.ok(audit.x >= ops.x + ops.width + 10, 'multiple side rails have separate dedicated tracks')
+  assert.equal(ops.proposalRole, 'support-item')
+  assert.equal(audit.proposalRole, 'support-item')
+  assert.equal(ops.groupId, '__arch-support-domain')
+  assert.equal(audit.groupId, '__arch-support-domain')
+  assert.equal(spanning.scene.groups?.filter((group) => group.id === '__arch-support-domain').length, 1,
+    'support capabilities appear within one governance container instead of multiple tall columns')
+  assert.equal(ops.x, audit.x, 'all governance items align in a single consistent column')
+  assert.ok(audit.y >= ops.y + ops.height + 10, 'support items retain regular vertical separation')
   assert.ok(ops.x > Math.max(...['api', 'auth', 'policy', 'worker', 'db']
     .map((id) => spanningNodes.get(id)!.x + spanningNodes.get(id)!.width)),
-  'support rails remain outside all business layer content')
+  'governance domain remains outside all business layer content')
   assert.ok(ops.x + ops.width <= spanning.scene.width && audit.x + audit.width <= spanning.scene.width)
   assert.equal(spanning.quality.metrics.nodeOverlaps, 0)
   assert.equal(spanning.quality.metrics.edgeNodeIntersections, 0)
@@ -247,7 +255,7 @@ test('architecture generation uses topology archetypes and a bounded quality loo
   assert.ok(contained.x >= outer.x && contained.x + contained.width <= outer.x + outer.width
     && contained.y >= outer.y && contained.y + contained.height <= outer.y + outer.height,
   'the presentation layer fully encloses its real nested container')
-  assert.match(canvasSceneToSvg(spanning.scene), /proposal-support-rail/)
+  assert.match(canvasSceneToSvg(spanning.scene), /proposal-support-item/)
   const crossLayer = composeEnterpriseArchitecture({
     ...spanningIntent,
     title: '跳过中间层的真实依赖',
@@ -257,9 +265,17 @@ test('architecture generation uses topology archetypes and a bounded quality loo
   assert.equal(crossLayer.routeDiagnostics.unrelatedFrameIntrusionLength, 0,
     'verified proposal layers must be respected as routing obstacles even without kind=boundary')
   assert.equal(crossLayer.quality.metrics.edgeNodeIntersections, 0)
+  const verifiedOverview = composeEnterpriseArchitecture({
+    ...spanningIntent, primaryPath: ['entry', 'api', 'auth'],
+  })
+  assert.equal(canvasProposalVisibleArrowIds(verifiedOverview.scene)?.size, 2,
+    'confirmed adjacent primary edges remain visible in scheme overviews')
+  assert.equal(canvasProposalVisibleArrowIds({
+    ...spanning.scene, architecture: { ...spanning.scene.architecture!, proposalMode: 'hybrid' },
+  })?.size, 4, 'hybrid mode shows bounded real adjacent dependencies')
   assert.match(canvasEnterpriseModuleSvg(ops, false, true),
-    /style="fill:#b8dfc7;stroke:#6aa986;stroke-width:1\.2"/,
-    'support rails carry their authoritative paint into the editable SVG DOM')
+    /style="fill:#ffffff;stroke:#d3e0eb;stroke-width:1"/,
+    'governance items carry the same neutral paint into the editable SVG DOM')
   assert.match(canvasEnterpriseModuleSvg(api, false, true),
     /style="fill:#fbd36d;stroke:#dbaa3e;stroke-width:1\.2"/,
     'access bars cannot fall back to the generic white editor card')

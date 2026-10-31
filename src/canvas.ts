@@ -38,7 +38,7 @@ export type CanvasArchitectureScenario = 'enterprise-system' | 'microservices' |
 export type CanvasWorkbenchMode = 'freeform' | 'architecture' | 'flowchart'
 export type CanvasArchitectureCardKind = 'actor' | 'entry' | 'compute' | 'messaging' | 'data' | 'external' | 'generic'
 /** How the same verified node is painted in a proposal. Does not change its identity or dependencies. */
-export type CanvasProposalRole = 'module' | 'gateway-band' | 'capability-chip' | 'resource-icon' | 'support-rail'
+export type CanvasProposalRole = 'module' | 'gateway-band' | 'capability-chip' | 'resource-icon' | 'support-rail' | 'support-item'
 export type CanvasProposalMode = 'proposal' | 'capabilities' | 'dependencies' | 'hybrid'
 export type CanvasArchitectureScopeKind = 'group' | 'lane' | 'node'
 export type CanvasIcon = CanvasRoleIconId
@@ -441,7 +441,8 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
   const nodes = new Map([...allNodes.values()].filter((item) => !collapsedOwners.has(item.id)).map((item) => [item.id, item]))
   const labelLayouts = canvasArrowLabelLayouts(scene)
   const architectureHeader = canvasArchitectureHeader(sourceScene)
-  const bundleTrunks = canvasBundleTrunks(scene).map((bundle) => {
+  const proposalVisibleArrows = canvasProposalVisibleArrowIds(scene)
+  const bundleTrunks = (proposalVisibleArrows ? [] : canvasBundleTrunks(scene)).map((bundle) => {
     const groupBus = architectureMode && bundle.id.startsWith('group:')
     const opacity = architectureMode
       ? groupBus
@@ -454,6 +455,7 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
     return `<path d="${bundle.path}" fill="none" stroke="${escapeXml(architectureMode ? architectureBorder : border)}" stroke-width="${width}" stroke-linecap="round" opacity="${opacity}"/>`
   }).join('')
   const arrows = scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow').map((arrow) => {
+    if (proposalVisibleArrows && !proposalVisibleArrows.has(arrow.id)) return ''
     const standalone = Boolean(arrow.start && arrow.end)
     const from = standalone ? undefined : nodes.get(arrow.from)
     const to = standalone ? undefined : nodes.get(arrow.to)
@@ -1446,16 +1448,59 @@ export function canvasArchitectureGroupPresentation(
  */
 export function canvasEnterpriseBandPalette(index: number, dark: boolean) {
   const palettes = [
-    ['#e3eff8', '#d1e3f1', '#345d7a'],
-    ['#e6f1eb', '#d6e8dc', '#33634e'],
-    ['#e8eef9', '#d7e2f4', '#3c5781'],
-    ['#f3eaf4', '#e9dced', '#704d76'],
-    ['#e8f2f2', '#d4e7e7', '#32676c'],
-    ['#f5eee2', '#ebe0cd', '#786039'],
+    ['#f3f7fc', '#e9f0f8', '#496482'],
+    ['#f5f8fb', '#eaf0f6', '#506983'],
+    ['#f0f5fb', '#e6eef8', '#425e7e'],
+    ['#f5f7fb', '#edf1f8', '#526785'],
+    ['#f2f7f9', '#e8f1f5', '#46697c'],
+    ['#f5f8fa', '#ecf2f6', '#536a7a'],
   ] as const
   if (dark) return { body: '#242f3b', rail: '#344354', accent: '#c7d8e8', border: '#536579' }
   const [body, rail, accent] = palettes[index % palettes.length]
-  return { body, rail, accent, border: '#afc4d6' }
+  return { body, rail, accent, border: '#d3dfea' }
+}
+
+/** Non-destructive relation visibility for domestic proposal presentations.
+ * Real arrows remain in the .diagram.json and in the editable relation index.
+ * A summary isn't permitted to invent a multi-hop route or a primary path.
+ * Return null for full engineering/dependency rendering.
+ */
+export function canvasProposalVisibleArrowIds(scene: CanvasScene): ReadonlySet<string> | null {
+  const mode = scene.architecture?.diagramStyle === 'enterprise'
+    ? scene.architecture.proposalMode : undefined
+  if (!mode || mode === 'dependencies') return null
+  const groups = new Map((scene.groups ?? []).map((group) => [group.id, group]))
+  const layerOrder = new Map((scene.groups ?? []).filter((group) =>
+    group.labelSide === 'left' && !group.parentId).map((group, index) => [group.id, index]))
+  const layerOf = new Map(scene.elements.filter((item): item is CanvasNode => item.type === 'node')
+    .map((node) => {
+      let groupId = node.groupId
+      const visited = new Set<string>()
+      while (groupId && !layerOrder.has(groupId) && !visited.has(groupId)) {
+        visited.add(groupId)
+        groupId = groups.get(groupId)?.parentId
+      }
+      return [node.id, groupId ? layerOrder.get(groupId) : undefined] as const
+    }))
+  const candidates = scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow')
+    .filter((arrow) => {
+      const from = layerOf.get(arrow.from), to = layerOf.get(arrow.to)
+      return from !== undefined && to !== undefined && Math.abs(from - to) <= 1
+    })
+  const chosen = new Set<string>()
+  const perPair = new Map<string, number>()
+  const limit = mode === 'hybrid' ? 2 : 1
+  const ranked = [...candidates].sort((a, b) => Number(b.emphasis === 'primary') - Number(a.emphasis === 'primary'))
+  for (const arrow of ranked) {
+    if (mode !== 'hybrid' && arrow.emphasis !== 'primary') continue
+    const from = layerOf.get(arrow.from)!, to = layerOf.get(arrow.to)!
+    const key = `${Math.min(from, to)}:${Math.max(from, to)}`
+    const count = perPair.get(key) ?? 0
+    if (count >= limit) continue
+    perPair.set(key, count + 1)
+    chosen.add(arrow.id)
+  }
+  return chosen
 }
 
 export function canvasCollapsedOwners(scene: CanvasScene): Map<string, string> {
@@ -1794,12 +1839,18 @@ function canvasEnterpriseProposalPrimitiveSvg(item: CanvasNode, dark: boolean, s
     const size = Math.min(35, Math.max(22, item.height * .39))
     const brand = icon(size, center - size / 2, item.y + Math.max(8, item.height * .13))
     const typography = layoutArchitectureCardText(item.text, undefined, item.width - 18, item.height, 14, 650)
-    return painted(`${plate(item.fillColor ?? (dark ? '#334b50' : '#e2f1ef'), item.strokeColor ?? '#b7d4cb', 1, 2)}${brand}${typography.titleLines.map((line, i) => label(line, center, item.y + item.height - 16 - (typography.titleLines.length - i - 1) * 16, 14, 650)).join('')}`)
+    return painted(`${plate(item.fillColor ?? (dark ? '#334b50' : '#e9f4f1'), item.strokeColor ?? '#cbded9', 1, 2)}${brand}${typography.titleLines.map((line, i) => label(line, center, item.y + item.height - 16 - (typography.titleLines.length - i - 1) * 16, 14, 650)).join('')}`)
+  }
+  if (role === 'support-item') {
+    const brand = item.icon ? icon(20, item.x + 14, item.y + (item.height - 20) / 2) : ''
+    const layout = layoutArchitectureCardText(item.text, undefined, item.width - (brand ? 52 : 20), item.height, 15, 650)
+    const x = brand ? item.x + 44 : center
+    return painted(`${plate(item.fillColor ?? (dark ? '#2a4255' : '#ffffff'), item.strokeColor ?? '#d3e0eb', 1, 3)}${brand}${layout.titleLines.map((line, i) => label(line, x, item.y + layout.titleY + i * layout.titleLineHeight, layout.titleFontSize, 650, brand ? 'start' : 'middle')).join('')}`)
   }
   // Lightweight functional unit inside an actual nested Canvas group.
   const lines = layoutArchitectureCardText(item.text, showSubtitle ? item.subtitle : undefined,
     item.width - 14, item.height, 14, 600)
-  return painted(`${plate(item.fillColor ?? (dark ? '#3a5270' : '#bdcafa'), item.strokeColor ?? '#9fb4e8', 1, 1)}${lines.titleLines.map((line, i) =>
+  return painted(`${plate(item.fillColor ?? (dark ? '#3a5270' : '#e3eaf8'), item.strokeColor ?? '#c4d3ee', 1, 2)}${lines.titleLines.map((line, i) =>
     label(line, center, item.y + lines.titleY + i * lines.titleLineHeight, lines.titleFontSize, 600)).join('')}`)
 }
 
@@ -2087,7 +2138,7 @@ function normalizeCanvasElement(item: CanvasElement): CanvasElement {
   const icons: readonly CanvasIcon[] = CANVAS_ROLE_ICON_IDS
   const stencils: readonly CanvasStencil[] = CANVAS_STENCIL_IDS
   const c4Types: CanvasC4Type[] = ['person', 'software-system', 'container', 'component']
-  const proposalRoles: CanvasProposalRole[] = ['module', 'gateway-band', 'capability-chip', 'resource-icon', 'support-rail']
+  const proposalRoles: CanvasProposalRole[] = ['module', 'gateway-band', 'capability-chip', 'resource-icon', 'support-rail', 'support-item']
   return {
     id: item.id,
     type: item.type,

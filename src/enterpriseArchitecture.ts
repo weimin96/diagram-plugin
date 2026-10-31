@@ -7,13 +7,12 @@ import { assessArchitectureRouteDiagnostics } from './architectureRouteDiagnosti
 import { assessArchitecturePresentation } from './architecturePresentationQuality.js'
 import { planArchitectureVisual } from './architectureVisualPlan.js'
 import { canvasVisualSkin } from './diagramVisualStyles.js'
-import { canvasEnterpriseModuleTextLayout, resolveCanvasArchitectureDensity, type CanvasArrow, type CanvasNode, type CanvasProposalRole, type CanvasScene } from './canvas.js'
+import { canvasEnterpriseBandPalette, canvasEnterpriseModuleTextLayout, resolveCanvasArchitectureDensity, type CanvasArrow, type CanvasNode, type CanvasProposalRole, type CanvasScene } from './canvas.js'
 
 const regionNames: Record<NonNullable<ArchitectureIntentGraph['nodes'][number]['partition']>, string> = {
   external: '外部与参与方', experience: '访问与接入层', application: '业务应用层',
   processing: '处理与服务层', data: '数据与基础设施层',
 }
-const regionColors = ['#e3eff8', '#e6f1eb', '#e8eef9', '#f3eaf4', '#e8f2f2', '#f5eee2']
 const bandGap = 44
 
 /** Layer membership comes from evidence; only presentation order is negotiable. */
@@ -241,7 +240,7 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
   const leftInset = tightMatrix ? 192 : compact ? 202 : 220
   const topInset = tightMatrix ? 82 : compact ? 84 : 90
   const specs: LayeredTemplateLayer[] = entries.map(([label, nodes], index) => ({
-    label, fillColor: regionColors[index % regionColors.length],
+    label, fillColor: canvasEnterpriseBandPalette(index, false).body,
     nodes: nodes.map((node) => ({ text: node.text, subtitle: node.subtitle, icon: node.icon, width: nodeWidth, height: nodeHeight })),
   }))
   const template = buildLayeredTemplateScene(intent.title, { layers: specs })
@@ -284,7 +283,7 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
           const sectionId = `__arch-section-${layerIndex + 1}-${groupIndex + 1}`
           nestedGroups.push({
             id: sectionId, label: key.slice(6), parentId: layerId,
-            kind: 'boundary', fillColor: '#eef1fb',
+            kind: 'boundary', fillColor: '#f3f6fa',
           })
           members.forEach((node, nodeIndex) => {
             const row = Math.floor(nodeIndex / inRow)
@@ -345,19 +344,33 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
     })
     y += Math.ceil(nodes.length / columns) * (nodeHeight + rowGap) + gap + (compact ? 14 : 0)
   }
-  supportRails.forEach(({ node, layer }, index) => {
-    const covered = node.supportLayers ?? [layer]
-    const top = Math.min(...covered.map((name) => layerRows.get(name)!.top))
-    const bottom = Math.max(...covered.map((name) => layerRows.get(name)!.bottom))
-    const { layer: _layer, partition: _partition, visualRole: _role,
-      moduleGroup: _moduleGroup, ...metadata } = node
-    elements.push({
-      ...metadata, id: node.id, type: 'node',
-      proposalRole: 'support-rail', fontSize: 15,
-      x: leftInset + 1140 + index * 106,
-      y: top, width: 82, height: bottom - top,
+  if (supportRails.length) {
+    // Cross-cutting *semantic* coverage remains on the original nodes, while
+    // the summary view shows a single concise governance domain. Three tall
+    // side columns are neither readable nor an accurate ownership hierarchy.
+    const domainId = '__arch-support-domain'
+    const covered = [...new Set(supportRails.flatMap(({ node, layer }) => node.supportLayers ?? [layer]))]
+    const domainTop = Math.min(...covered.map((label) => layerRows.get(label)!.top))
+    const domainBottom = Math.max(...covered.map((label) => layerRows.get(label)!.bottom))
+    const domainX = leftInset + 1100 + 56
+    const tileHeight = 54
+    const rowGap = 14
+    const contentHeight = supportRails.length * (tileHeight + rowGap) - rowGap
+    const domainY = Math.max(domainTop + 32, (domainTop + domainBottom - contentHeight) / 2)
+    nestedGroups.push({
+      id: domainId, label: '治理与运维', kind: 'boundary', fillColor: '#eef3f8', borderStyle: 'solid',
     })
-  })
+    supportRails.forEach(({ node }, index) => {
+      const { layer: _layer, partition: _partition, visualRole: _role,
+        moduleGroup: _moduleGroup, ...metadata } = node
+      elements.push({
+        ...metadata, id: node.id, type: 'node', groupId: domainId,
+        proposalRole: 'support-item', fontSize: 15,
+        x: domainX + 16, y: domainY + index * (tileHeight + rowGap),
+        width: 208, height: tileHeight,
+      })
+    })
+  }
   const primaryRelations = new Set((intent.primaryPath ?? []).slice(1).map((node, index) => `${intent.primaryPath![index]}\u0000${node}`))
   const arrows: CanvasArrow[] = intent.relations.map((relation, index) => ({
     id: `__relation-${index + 1}`, type: 'arrow', from: relation.from, to: relation.to,
@@ -372,7 +385,7 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
     groups: [...(template.groups?.map((group, index) => ({ ...group, id: `__arch-layer-${index + 1}` })) ?? []), ...nestedGroups],
     width: Math.max(tightMatrix ? 680 : compact ? 800 : 1500,
       leftInset + columns * (nodeWidth + columnGap) + (tightMatrix ? 36 : 48),
-      supportRails.length ? leftInset + 1140 + supportRails.length * 106 + 28 : 0),
+      supportRails.length ? leftInset + 1100 + 56 + 240 + 26 : 0),
     height: Math.max(tightMatrix ? 480 : compact ? 520 : 720, y + (tightMatrix ? 22 : compact ? 24 : 40)),
     style: intent.style ?? 'ocean',
     architecture: {
@@ -385,7 +398,12 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
   })
   const intendedStyles = new Map(arrows.map((arrow) => [arrow.id, arrow.lineStyle] as const))
   const scene: CanvasScene = { ...routed, elements: routed.elements.map((item) => item.type === 'arrow'
-    ? { ...item, lineStyle: intendedStyles.get(item.id) ?? item.lineStyle } : item) }
+    ? { ...item, lineStyle: intendedStyles.get(item.id) ?? item.lineStyle,
+      // Routing quality heuristics cannot promote an unstated business
+      // dependency into the user-confirmed overview's primary path.
+      emphasis: primaryRelations.has(`${item.from}\u0000${item.to}`) ? 'primary'
+        : intent.relations.length >= 32 ? 'muted' : 'secondary',
+    } : item) }
   const quality = assessCanvasVisualQuality(scene)
   const routeDiagnostics = assessArchitectureRouteDiagnostics(scene)
   const presentation = assessArchitecturePresentation(scene)

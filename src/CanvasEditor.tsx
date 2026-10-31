@@ -22,7 +22,7 @@ import { compactEnterpriseLayerSpacing } from './architectureProposalSpacing.js'
 import { balanceEnterpriseProposalColumns } from './architectureProposalBalance.js'
 import { straightenArchitectureTerminalRoutes } from './architectureRouteRepair.js'
 import { ARCHITECTURE_NODE_TEMPLATES, architectureNodeTemplate, type ArchitectureNodeTemplate, type ArchitectureNodeTemplateProvider } from './architectureNodeTemplates.js'
-import { anchorPoint, canvasArchitectureCardTemplate, canvasArchitectureGroupPresentation, canvasEnterpriseBandPalette, canvasEnterpriseModuleSvg, canvasArchitectureHeader, canvasArchitectureProjection, canvasArchitectureRelationLabelVisible, canvasArchitectureScopeProjection, canvasArrowBoxRoute, canvasArrowLabelLayouts, canvasArrowPath, canvasArrowRoutePath, canvasArrowRoutePoints, canvasBundleTrunks, canvasCollapsedConnections, canvasCollapsedOwners, canvasGroupFrames, canvasPresentationGroupFrames, canvasIconLabel, canvasIconPaths, canvasIconRefLabel, canvasIconRefMarkup, canvasSemanticLodProjection, resolveCanvasSemanticLod, canvasStencilLabel, canvasStencilVisual, c4Label, parseCanvasScene, serializeCanvasScene, type CanvasAnchor, type CanvasArchitectureDensity, type CanvasArchitectureScope, type CanvasArchitectureView, type CanvasArrow, type CanvasC4Type, type CanvasElement, type CanvasGroup, type CanvasGroupFrame, type CanvasIcon, type CanvasIconRef, type CanvasLineStyle, type CanvasNode, type CanvasNote, type CanvasPoint, type CanvasRouting, type CanvasScene, type CanvasSemanticLodLevel, type CanvasShape, type CanvasStencil, type CanvasTone } from './canvas.js'
+import { anchorPoint, canvasArchitectureCardTemplate, canvasArchitectureGroupPresentation, canvasEnterpriseBandPalette, canvasEnterpriseModuleSvg, canvasArchitectureHeader, canvasArchitectureProjection, canvasArchitectureRelationLabelVisible, canvasArchitectureScopeProjection, canvasArrowBoxRoute, canvasArrowLabelLayouts, canvasArrowPath, canvasArrowRoutePath, canvasArrowRoutePoints, canvasBundleTrunks, canvasCollapsedConnections, canvasCollapsedOwners, canvasGroupFrames, canvasPresentationGroupFrames, canvasProposalVisibleArrowIds, canvasIconLabel, canvasIconPaths, canvasIconRefLabel, canvasIconRefMarkup, canvasSemanticLodProjection, resolveCanvasSemanticLod, canvasStencilLabel, canvasStencilVisual, c4Label, parseCanvasScene, serializeCanvasScene, type CanvasAnchor, type CanvasArchitectureDensity, type CanvasArchitectureScope, type CanvasArchitectureView, type CanvasArrow, type CanvasC4Type, type CanvasElement, type CanvasGroup, type CanvasGroupFrame, type CanvasIcon, type CanvasIconRef, type CanvasLineStyle, type CanvasNode, type CanvasNote, type CanvasPoint, type CanvasRouting, type CanvasScene, type CanvasSemanticLodLevel, type CanvasShape, type CanvasStencil, type CanvasTone } from './canvas.js'
 import { CANVAS_ICON_CATALOG, type CanvasIconSource } from './iconRegistry.js'
 import { alignCanvasSelection, assignCanvasSelectionToLane, canvasRotationFromPointer, clearCanvasLanes, computeCanvasSmartSnap, copyCanvasSelection, createCanvasLanePreset, deleteCanvasSelection, distributeCanvasSelection, expandCanvasGroupSelection, groupCanvasSelection, insertCanvasArchitectureNodeTemplate, insertCanvasArchitectureTemplate, insertCanvasNodeOnArrow, layoutCanvasNeighborhood, layoutCanvasScene, layoutCanvasSelection, nextCanvasElementId, pasteCanvasSelection, reconnectCanvasArrow, reflowCanvasNeighborhood, reorderCanvasSelection, resizeCanvasTransformBox, reverseCanvasArrow, scaleCanvasTransformBoxes, separateCanvasSelection, setCanvasC4CollapseLevel, setCanvasGroupParent, traceCanvasGraph, ungroupCanvasSelection, updateCanvasGroup, updateCanvasLane, type CanvasArchitectureTemplate, type CanvasC4CollapseLevel, type CanvasLayoutMode, type CanvasResizeHandle, type CanvasSpacingGuide, type CanvasTraceDirection, type CanvasTransformBox } from './canvasOperations.js'
 import { ShapeLibrary, ShapePreview } from './ShapeLibrary.js'
@@ -1272,14 +1272,20 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
       .filter((group) => selectedGroupId === group.id || selectedGroupIds.includes(group.id) || intersects(viewportBounds, group))
     : canvasPresentationGroupFrames(renderScene, displayGroupBounds)
   const visibleRenderBoxes = viewportRenderBoxes
-  const visibleRenderArrows = viewportRenderArrows
+  // Read-only proposal summary: long implementation links are still in the
+  // document and relation explorer; selection/trace can reveal them.
+  const proposalVisible = layerReading || keyDependenciesOnly || traceResult
+    ? null : canvasProposalVisibleArrowIds(renderScene)
+  const visibleRenderArrows = proposalVisible
+    ? viewportRenderArrows.filter((arrow) => proposalVisible.has(arrow.id) || selectedIdSet.has(arrow.id))
+    : viewportRenderArrows
   const reuseStaticRelationships = staticUnculledScene === renderScene && !largeSceneViewportCulling
   const collapsedConnections = reuseStaticRelationships && staticRelationshipGeometry
     ? staticRelationshipGeometry.connections : canvasCollapsedConnections(renderScene, projectedGroupBounds)
   const relationshipRenderScene = largeSceneViewportCulling
     ? { ...renderScene, elements: [...viewportRenderBoxes, ...viewportRenderArrows] }
     : renderScene
-  const relationBundleTrunks = Boolean(gesturePositionOverrides) && renderArrows.length > 120
+  const relationBundleTrunks = proposalVisible || Boolean(gesturePositionOverrides) && renderArrows.length > 120
     ? []
     : reuseStaticRelationships && staticRelationshipGeometry ? staticRelationshipGeometry.trunks : canvasBundleTrunks(relationshipRenderScene)
   const reusableVisibleLabels = Boolean(largeSceneViewportCulling && staticGeometry && !hasGeometryDraft && !arrowLabelDraft)
@@ -2867,7 +2873,14 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                     <div className="freeform-menu-grid two">
                       <button type="button" aria-pressed={!keyDependenciesOnly && !layerReading}
                         className={!keyDependenciesOnly && !layerReading ? 'is-selected' : ''}
-                        onClick={() => { setKeyDependenciesOnly(false); setLayerReadingId(null) }}>全部</button>
+                        onClick={() => {
+                          setKeyDependenciesOnly(false)
+                          setLayerReadingId(null)
+                          if (scene.architecture?.diagramStyle === 'enterprise'
+                            && scene.architecture.proposalMode !== 'dependencies') {
+                            updateArchitectureAppearance({ proposalMode: 'dependencies' })
+                          }
+                        }}>全部</button>
                       <button type="button" aria-pressed={keyDependenciesOnly}
                         disabled={!keyDependencyLens?.arrowIds.size}
                         title={keyDependencyLens?.arrowIds.size
@@ -4046,6 +4059,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                         <option value="capability-chip">功能小块</option>
                         <option value="resource-icon">资源图标</option>
                         <option value="support-rail">纵向支撑条</option>
+                        <option value="support-item">支撑能力项</option>
                       </select>
                     </label>
                   ) : null}

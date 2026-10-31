@@ -38,7 +38,7 @@ export function buildGenerationPrompt(workspacePath: string, request: DiagramGen
         `2. 当前架构风格已确定为${architectureStyle === 'enterprise' ? '国内企业方案风格' : '国际工程架构风格'}。调用 diagram.designGuide（type=canvas，intent=系统架构，architectureStyle=${architectureStyle}）。`,
         `3. 只调用一次 diagram.composeArchitecture：明确传 architectureStyle=${architectureStyle}、title、nodes、relations 和必要 theme；如果可以从真实有向依赖确认主要业务链路，按入口到结果填写 primaryPath，必须逐段对应已有关系。无需额外创建文件或整图更新，也不要手动编写 x/y/width/height、line routing 或整份 Canvas JSON。`,
         architectureStyle === 'enterprise'
-          ? '4. 国内企业方案默认 proposalMode=proposal（用户明确要求能力分解、全量依赖或混合图时可选 capabilities、dependencies、hybrid）。从用户资料或真实代码确定每个 layer；只有明确知道能力归属时才填写 moduleGroup；visualRole 可以留空，让布局器根据已确认的结构化角色和图标自动选用横向网关条、容器内功能块或资源图标。对确实跨多个连续层提供支撑的能力才指定 visualRole=support-rail 并给出真实 supportLayers（包含自身所在层），由布局器放在共用的侧向通道。不能通过中文关键词硬编码推断，不为美观编造分组、能力或覆盖范围。全部真实关系保存在文档中，方案视图只降低次要连线的视觉权重，可切回全部依赖。'
+          ? '4. 国内企业方案默认 proposalMode=proposal（明确要求能力分解、全量依赖或混合图时可选 capabilities、dependencies、hybrid）。从资料或真实代码确认 layer、moduleGroup 与节点角色，visualRole 可留空，由布局器根据结构化语义自动选横条、功能块或资源图标。只有真实跨多个连续层的能力才声明 visualRole=support-rail 和 supportLayers，生成器会组合为一个可编辑的治理域而不是三根竖柱。不能根据中文关键词臆测模块、分组或依赖。总览只画明确确认的相邻层主链，不自动制造主路径；混合模式可展示有限相邻调用，所有真实关系仍保存在文档中，可切回全部依赖。'
           : '4. 由插件自动处理 layered、hub-spoke、event-driven 等工程拓扑、语义分区与正交连线；保留实际系统边界、关键依赖和全部真实关系。只有明确要求 C4 时才添加 C4 元数据。',
         '5. 同时检查 quality（已执行 diagram.inspectQuality 同级检查）和 visualPlan.review.readyForVisualReview：基础几何检查合格不代表视觉合格，review=false 表示布局仍存在阻断问题，只能称为待整改草稿；review=true 也只代表待人工视觉审查。诚实说明具体缺陷，不得为过关发明跨域边、降低检查阈值或反复全量重画。',
         '6. 编辑已有 Canvas 时，保留真实箭头的 fromPortRatio/toPortRatio（指定边界侧沿边界 0..1 的位置）；只在已有精确几何证据时使用，不为普通自动生成编造端口比例。重新连接节点应清除已失效的端口位置。',
