@@ -32,10 +32,17 @@ export function preferKeyDependencyLens(scene: CanvasScene): boolean {
   if (!scene.architecture) return false
   const edges = scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow')
   const nodes = scene.elements.filter((item): item is CanvasNode => item.type === 'node')
+  const lens = canvasKeyDependencyLens(scene)
+  // Proposal overviews should read like a designed system map, not a wiring
+  // diagram. A verified primary route is sufficient when it is a meaningful
+  // subset of a multi-layer architecture; other relations stay inspectable.
+  if (scene.architecture.diagramStyle === 'enterprise'
+    && (scene.groups ?? []).filter((group) => group.labelSide === 'left').length >= 3
+    && nodes.length >= 12 && edges.length >= 12
+    && lens.arrowIds.size >= 2 && lens.arrowIds.size < edges.length) return true
   if (nodes.length < 6 || edges.length < nodes.length * 1.5) return false
   const incoming = new Map<string, number>()
   for (const edge of edges) incoming.set(edge.to, (incoming.get(edge.to) ?? 0) + 1)
   if (Math.max(0, ...incoming.values()) < 6 && edges.length < nodes.length * 2.5) return false
-  const lens = canvasKeyDependencyLens(scene)
   return lens.arrowIds.size > 0 && lens.arrowIds.size < edges.length
 }

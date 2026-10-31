@@ -3075,8 +3075,8 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
         {imageImportError ? <div className="freeform-image-error" role="alert">{imageImportError}<button type="button" onClick={() => setImageImportError(null)}>关闭</button></div> : null}
         {keyDependencyActive && keyDependencyLens ? (
           <div className="freeform-relation-lens" aria-label="关键依赖阅读模式">
-            <span>关键依赖 {keyDependencyLens.arrowIds.size}/{keyDependencyLens.totalArrows} · 其余仍保留</span>
-            <button type="button" aria-label="显示全部依赖" onClick={() => setKeyDependenciesOnly(false)}>×</button>
+            <span>主链 {keyDependencyLens.arrowIds.size}/{keyDependencyLens.totalArrows}</span>
+            <button type="button" aria-label="显示全部依赖" onClick={() => setKeyDependenciesOnly(false)}>全部</button>
           </div>
         ) : null}
         {scene.architecture && selectedNodeRelations && selectedNodeEdges.length >= 2 && !traceResult
@@ -3486,7 +3486,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
             return (
               <g key={arrow.id} data-element-id={arrow.id} className={`freeform-arrow emphasis-${displayArrow.emphasis ?? 'secondary'}${standalone ? ' is-free-line' : ''}${displayArrow.freehand ? ' is-freehand' : ''}${displayArrow.bundleKey ? ' is-bundled' : ''}${displayArrow.bundleKey?.startsWith('group:') ? ' is-group-bundle' : ''}${keyDependencyActive ? keyDependencyLens?.arrowIds.has(arrow.id) ? ' is-key-dependency' : ' is-key-dimmed' : ''}${relationFocus ? relationFocus.id === arrow.id ? ' is-relation-focused' : ' is-relation-dimmed' : ''}${selectedIds.includes(arrow.id) ? ' is-selected' : ''}${insertTarget?.arrowId === arrow.id ? ' is-insert-target' : ''}${displayArrow.lineStyle === 'dashed' ? ' is-dashed' : displayArrow.lineStyle === 'dotted' ? ' is-dotted' : ''}${traceResult ? tracedArrowIds.has(arrow.id) ? ' is-traced' : ' is-trace-dimmed' : ''}${highlightedIds.has(arrow.id) ? ' is-updated' : ''}`} style={displayArrow.opacity !== undefined ? { opacity: displayArrow.opacity } : undefined} onPointerEnter={() => { if (scene.architecture && tool === 'select') setHoveredRelationId(arrow.id) }} onPointerLeave={() => setHoveredRelationId((current) => current === arrow.id ? null : current)} onContextMenu={(event) => openContextMenu(event, arrow.id)} onPointerDown={(event) => { event.stopPropagation(); setContextMenu(null); setSelectedGroupTarget(null); editorRef.current?.focus({ preventScroll: true }); setSelectedIds(event.shiftKey ? toggleCanvasSelection(selectedIds, arrow.id) : [arrow.id]) }}>
                 <CanvasArrowInk label={displayArrow.label ?? (scene.architecture && from && to ? `${from.text} → ${to.text}` : undefined)} path={path} markerEnd={displayArrow.markerEnd === 'none' ? undefined : 'url(#canvas-arrow)'} strokeColor={displayArrow.strokeColor || visualSkin ? displayArrow.strokeColor ?? visualSkin?.edge : undefined} strokeWidth={displayArrow.strokeWidth} />
-                {displayArrow.label && labelLayout ? (
+                {displayArrow.label && labelLayout && (!keyDependencyActive || keyDependencyLens?.arrowIds.has(arrow.id)) ? (
                   <g
                     className={`freeform-arrow-label${displayArrow.labelPosition || arrowLabelDraft?.id === arrow.id ? ' is-manual' : ''}`}
                     transform={movingLabel ? `translate(${movingLabel.x} ${movingLabel.y})` : undefined}

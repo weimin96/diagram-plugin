@@ -2,7 +2,7 @@ import { canvasVisualSkin, canvasStyledBox, canvasFillTextColor, isDiagramVisual
 import { hexLuminance } from './colors.js'
 import { canvasArrowLabelText, fitCanvasText } from './canvasLabelText.js'
 import { canvasArchitecturePlainTitleLines } from './canvasNodeTitleLayout.js'
-import { preferKeyDependencyLens } from './canvasDependencyLens.js'
+import { canvasKeyDependencyLens, preferKeyDependencyLens } from './canvasDependencyLens.js'
 import { CanvasRectIndex } from './canvasRectIndex.js'
 import {
   CANVAS_ROLE_ICON_IDS,
@@ -411,6 +411,7 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
   // visual weight in dense exported diagrams. All real relationships remain
   // present and accessible via their SVG-native <title> source/target labels.
   const denseKeyReading = preferKeyDependencyLens(sourceScene)
+  const keyRelations = denseKeyReading ? canvasKeyDependencyLens(sourceScene) : null
   const architectureTheme = sourceScene.architecture?.theme ?? 'enterprise'
   const architectureProfile = canvasArchitectureThemeProfile(architectureTheme)
   const projection = canvasArchitectureProjection(scene)
@@ -460,14 +461,16 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
       ? (arrow.emphasis === 'primary' ? 2.6 : arrow.emphasis === 'muted' ? 1.7 : 2.1) * architectureProfile.edgeScale
       : arrow.emphasis === 'primary' ? 3.2 : arrow.emphasis === 'muted' ? 1.35 : 2)
     const groupBundle = architectureMode && arrow.bundleKey?.startsWith('group:')
-    const opacity = arrow.opacity ?? (architectureMode
+    const opacity = arrow.opacity ?? (keyRelations && !keyRelations.arrowIds.has(arrow.id)
+      ? '0.12' : architectureMode
       ? groupBundle
         ? arrow.emphasis === 'muted' ? darkArchitecture ? '0.24' : '0.20' : arrow.emphasis === 'secondary' ? darkArchitecture ? '0.56' : '0.48' : darkArchitecture ? '0.84' : '0.78'
         : arrow.emphasis === 'muted' ? denseKeyReading ? '0.30' : '0.62'
           : arrow.emphasis === 'secondary' ? denseKeyReading ? '0.48' : '0.90' : '1'
       : arrow.emphasis === 'muted' ? '0.48' : arrow.emphasis === 'secondary' ? '0.78' : '1')
     const stroke = arrow.strokeColor ?? visualSkin?.edge ?? (architectureMode ? architectureBorder : border)
-    const visibleLabel = architectureMode && arrow.label && !canvasArchitectureRelationLabelVisible(arrow) ? undefined : arrow.label
+    const visibleLabel = keyRelations && !keyRelations.arrowIds.has(arrow.id)
+      ? undefined : architectureMode && arrow.label && !canvasArchitectureRelationLabelVisible(arrow) ? undefined : arrow.label
     const label = visibleLabel ? labelLayouts.get(arrow.id) : undefined
     const labelText = label ? `<text x="${label.x}" y="${label.y + 4 - (label.lines.length - 1) * 8}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${architectureMode ? 14 : 12}" font-weight="600" fill="${escapeXml(text)}"${architectureMode ? ` stroke="${escapeXml(background)}" stroke-width="4" stroke-linejoin="round" paint-order="stroke"` : ''}>${label.lines.map((line, index) => `<tspan x="${label.x}" dy="${index ? 16 : 0}">${escapeXml(line)}</tspan>`).join('')}</text>` : ''
     const labelMarkup = visibleLabel && label
@@ -499,9 +502,12 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
     // Style presets are color guidance in architecture mode, not persisted
     // per-node fill overrides. This mirrors CanvasEditor card CSS semantics.
     const item = architectureMode && rawItem.type === 'node' ? rawItem : canvasStyledBox(rawItem, skin)
-    const wrapRotation = (markup: string) => item.rotation
-      ? `<g transform="rotate(${item.rotation} ${item.x + item.width / 2} ${item.y + item.height / 2})">${markup}</g>`
-      : markup
+    const wrapRotation = (markup: string) => {
+      const content = keyRelations && !keyRelations.nodeIds.has(item.id) ? `<g opacity="0.78">${markup}</g>` : markup
+      return item.rotation
+        ? `<g transform="rotate(${item.rotation} ${item.x + item.width / 2} ${item.y + item.height / 2})">${content}</g>`
+        : content
+    }
     const architectureMark = architectureMode && item.type === 'node' && Boolean(item.iconRef || item.stencil || item.icon)
     const palette = skin && item.type === 'node'
       ? { fill: item.fillColor ?? skin.fill, text: architectureMark && !rawItem.fillColor ? text : canvasFillTextColor(item.fillColor, skin.text), stroke: item.strokeColor ?? skin.stroke }

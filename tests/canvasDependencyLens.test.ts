@@ -75,4 +75,31 @@ test('ordinary, unverified, or non-architectural scenes keep complete relation r
   }))
   assert.equal(preferKeyDependencyLens({ ...source, elements: [...nodes, ...arrows] }), false,
     'high fan-in alone cannot invent verified key dependencies')
+  const proposal: CanvasScene = {
+    ...source,
+    architecture: { theme: 'enterprise', diagramStyle: 'enterprise', view: 'detail' },
+    groups: ['接入层', '应用层', '数据层'].map((label, index) => ({
+      id: `level${index}`, label, labelSide: 'left' as const,
+    })),
+    elements: [
+      ...Array.from({ length: 15 }, (_, index) => ({
+        id: `p${index}`, type: 'node' as const, x: 80 + (index % 5) * 140,
+        y: 40 + Math.floor(index / 5) * 160, width: 120, height: 68,
+        groupId: `level${Math.floor(index / 5)}`, text: `组件${index}`,
+      })),
+      ...Array.from({ length: 15 }, (_, index) => ({
+        id: `r${index}`, type: 'arrow' as const,
+        from: `p${index % 12}`, to: `p${(index + 3) % 15}`,
+        label: `关系${index}`, emphasis: index < 3 ? 'primary' as const : 'secondary' as const,
+      })),
+    ],
+  }
+  const unchanged = serializeCanvasScene(proposal)
+  assert.equal(preferKeyDependencyLens(proposal), true, 'moderately connected enterprise proposal starts with the real main route')
+  const overview = canvasSceneToSvg(proposal)
+  assert.equal((overview.match(/<title>p\d+ → p\d+ · 关系\d+<\/title>/g) ?? []).length, 15,
+    'all relations remain accessible through SVG-native titles')
+  assert.equal((overview.match(/<g opacity="0\.12"><title>/g) ?? []).length, 12,
+    'secondary relations remain present but do not dominate the exported presentation')
+  assert.equal(serializeCanvasScene(proposal), unchanged, 'reading mode cannot rewrite user-authored diagram coordinates')
 })
