@@ -439,12 +439,16 @@ test("架构卡片与展示渲染", () => {
   assert.match(svg, /fill-opacity="0\.94" stroke="[^"]+" stroke-opacity="0\.9" stroke-width="1\.7"/)
   assert.equal((svg.match(/fill="#f8fafc" fill-opacity="0\.94"/g) ?? []).length, 2,
     'primary and secondary cards share the same neutral surface; emphasis is not a solid fill wall')
-  assert.match(svg, /font-weight="730"[^>]*>Core API<\/text>/)
-  assert.doesNotMatch(svg, /font-weight="730"[^>]*>Aux Worker<\/text>/)
+  assert.match(svg, /font-weight="730"[^>]*><tspan[^>]*>Core API<\/tspan><\/text>/)
+  assert.doesNotMatch(svg, /font-weight="730"[^>]*><tspan[^>]*>Aux Worker<\/tspan><\/text>/)
   assert.equal((svg.match(/fill-opacity="0\.94"/g) ?? []).length, 2)
   assert.match(svg, /stroke-width="2\.6" marker-end="url\(#arrow\)"/)
   const technical = canvasSceneToSvg({ ...scene, architecture: { theme: 'technical' } })
-  assert.doesNotMatch(technical, /font-weight="730"[^>]*>Core API<\/text>/)
+  assert.doesNotMatch(technical, /font-weight="730"[^>]*><tspan[^>]*>Core API<\/tspan><\/text>/)
+  const longTitle = canvasSceneToSvg({ ...scene, elements: scene.elements.map((item) =>
+    item.id === 'api' ? { ...item, text: '企业统一身份认证中心', subtitle: 'OAuth2 · SSO · 权限管理' } : item) })
+  assert.match(longTitle, /<title>企业统一身份认证中心 · OAuth2 · SSO · 权限管理<\/title>/)
+  assert.match(longTitle, /<tspan[^>]*>企业统一身.*<\/tspan>/)
 
   }
   // 场景 21: 'architecture actors, branded nodes and manual fill share card geometry and readable arrows'
@@ -466,7 +470,7 @@ test("架构卡片与展示渲染", () => {
   assert.match(svg, /fill="#123456" fill-opacity="1"[^>]+stroke-width="3"/)
   assert.match(svg, /opacity="0\.62"><title>brand → custom<\/title><path[^>]+marker-end="url\(#arrow\)"/,
     'muted architecture relations retain arrow style while exposing actual hover endpoints')
-  for (const label of ['用户', 'PostgreSQL', '手工底色']) assert.match(svg, new RegExp(`>${label}<\\/text>`))
+  for (const label of ['用户', 'PostgreSQL', '手工底色']) assert.match(svg, new RegExp(`>${label}<\\/tspan>`))
   assert.equal(serializeCanvasScene(scene), before)
 
   }
@@ -483,8 +487,8 @@ test("架构卡片与展示渲染", () => {
   }
   const svg = canvasSceneToSvg(scene)
   assert.equal((svg.match(/fill="#f8fafc" fill-opacity="0\.94"/g) ?? []).length, 3)
-  assert.match(svg, /fill="#243247"[^>]*>数据采集<\/text>/)
-  assert.match(svg, /fill="#243247"[^>]*>PostgreSQL<\/text>/)
+  assert.match(svg, /fill="#243247"[^>]*><tspan[^>]*>数据采集<\/tspan><\/text>/)
+  assert.match(svg, /fill="#243247"[^>]*><tspan[^>]*>PostgreSQL<\/tspan><\/text>/)
   assert.deepEqual(scene.elements.filter((element) => element.type === 'node').map((node) => node.fillColor),
     [undefined, undefined, undefined])
 

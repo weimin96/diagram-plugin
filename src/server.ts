@@ -991,7 +991,7 @@ server.registerTool('diagram.restore', {
 
 server.registerTool('diagram.beautifyArchitecture', {
   title: 'Beautify architecture diagram',
-  description: 'Apply the built-in architecture design system to a Canvas diagram: infer roles/technology badges, create semantic architecture partitions, apply a theme, re-layout nodes and spread orthogonal relationship routes. Use this when the user asks to beautify, reorganize or make a system architecture diagram presentation-ready.',
+  description: 'Apply the architecture design system. For domestic enterprise proposal diagrams, preserve user-authored layers and geometry; only when explicitly requested to align card heights set alignCardHeights=true. Aligning is rejected if complete geometry regresses. For other diagrams, semantic partitioning and reflow remain available.',
   inputSchema: z.object({
     workspacePath: z.string().optional(),
     path: z.string().optional(),
@@ -1001,9 +1001,10 @@ server.registerTool('diagram.beautifyArchitecture', {
     repartition: z.boolean().default(true),
     relayout: z.boolean().default(true),
     reroute: z.boolean().default(true),
+    alignCardHeights: z.boolean().default(false),
   }),
   annotations: write,
-}, async ({ workspacePath, path: diagramPath, theme, view, density, repartition, relayout, reroute }, extra) => {
+}, async ({ workspacePath, path: diagramPath, theme, view, density, repartition, relayout, reroute, alignCardHeights }, extra) => {
   const threadId = toolThreadId(extra._meta)
   const store = await resolveStore(workspacePath, threadId)
   const targetPath = diagramPath ?? (threadId ? threadSelection.get(threadId)?.path : undefined)
@@ -1011,8 +1012,8 @@ server.registerTool('diagram.beautifyArchitecture', {
   const current = await store.get(targetPath)
   if (current.type !== 'canvas') throw new Error('架构美化仅支持 Canvas 图；Mermaid 图请先转换或新建架构 Canvas。')
   const original = parseCanvasScene(current.source)
-  const result = beautifyArchitectureScene(original, { theme, view, density, repartition, relayout, reroute })
-  assertArchitectureLayoutTransition(original, result.scene, architectureLayoutContract(relayout ? 'reflow' : 'edit'))
+  const result = beautifyArchitectureScene(original, { theme, view, density, repartition, relayout, reroute, alignCardHeights })
+  assertArchitectureLayoutTransition(original, result.scene, architectureLayoutContract(relayout || alignCardHeights ? 'reflow' : 'edit'))
   const diagram = await store.update(current.path, serializeCanvasScene(result.scene), current.modifiedAt)
   markThreadDiagram(extra._meta, diagram.path, undefined, undefined, 'update', diagram.modifiedAt)
   return {

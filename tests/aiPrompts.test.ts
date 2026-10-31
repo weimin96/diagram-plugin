@@ -159,6 +159,7 @@ test('architecture generation uses topology archetypes and a bounded quality loo
   assert.notEqual(originalFrames[0].width, originalFrames[1].width, '路由组边界保持真实节点占地')
   assert.equal(new Set(visualFrames.map((frame) => frame.width)).size, 1, '展示分层对齐宽度')
   assert.equal(new Set(visualFrames.map((frame) => frame.x)).size, 1, '展示分层对齐左侧')
+  assert.equal(new Set(visualFrames.map((frame) => frame.height)).size, 1, '展示分层统一高度')
   assert.equal(unequalLayers.scene.elements.filter((item) => item.type === 'node').length, 8)
   assert.equal(unequalLayers.scene.elements.filter((item) => item.type === 'arrow').length, 0)
   assert.ok(visualFrames.every((frame) => frame.x >= 0 && frame.height > 0))
@@ -178,11 +179,20 @@ test('architecture generation uses topology archetypes and a bounded quality loo
   'user-authored group IDs must not change the explicitly selected enterprise visual style')
   assert.ok(scriptedFrames[0].labelRailWidth! > 132, 'long verified layer names receive adequate label width')
   assert.equal((canvasSceneToSvg(scriptedScene).match(/class="canvas-enterprise-band"/g) ?? []).length, 3)
-  const restyled = beautifyArchitectureScene(scriptedScene, { theme: 'technical', repartition: true, relayout: true })
+  const restyled = beautifyArchitectureScene(scriptedScene, { theme: 'technical', repartition: true, relayout: false })
   assert.deepEqual(restyled.scene.groups, scriptedScene.groups, 'beautify must not replace proposal layers with engineering partitions')
   assert.deepEqual(restyled.scene.elements, scriptedScene.elements, 'appearance changes cannot disturb authored node or edge geometry')
   assert.equal(restyled.scene.architecture?.diagramStyle, 'enterprise')
   assert.equal(restyled.summary.routedEdges, 0)
+  const unevenScene = { ...scriptedScene, elements: scriptedScene.elements.map((element) =>
+    element.type === 'node' && element.id !== 'Service' ? { ...element, height: element.height - 8 } : element) }
+  assert.deepEqual(beautifyArchitectureScene(unevenScene, { relayout: true }).scene.elements, unevenScene.elements,
+    'generic reflow never silently changes user-authored enterprise card dimensions')
+  const aligned = beautifyArchitectureScene(unevenScene, { alignCardHeights: true })
+  assert.equal(new Set(aligned.scene.elements.filter((item) => item.type === 'node').map((item) => item.height)).size, 1,
+    'explicit enterprise reflow aligns unlocked heights only after whole-scene validation')
+  assert.ok(aligned.summary.enrichedNodes > 0, 'reflow proposes a real geometry change, not a cosmetic-only no-op')
+  assert.deepEqual(aligned.scene.groups, unevenScene.groups)
 
   const labelled = composeEnterpriseArchitecture({
     ...intent,

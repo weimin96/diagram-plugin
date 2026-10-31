@@ -1,6 +1,6 @@
 import { routeArchitectureArrowIds, routeArchitectureEdges, routeArchitectureEdgesIncremental } from './architectureRouting.js'
 import { canvasVisualSkin, canvasStyledBox, canvasFillTextColor, diagramVisualStyles, type DiagramVisualStyle } from './diagramVisualStyles.js'
-import { canvasArrowLabelText, fitCanvasText } from './canvasLabelText.js'
+import { canvasArrowLabelText, fitCanvasText, layoutArchitectureCardText } from './canvasLabelText.js'
 import { canvasNodeRelations, resolveCanvasRelationshipFocus, searchCanvasRelations } from './canvasRelationshipFocus.js'
 import { canvasKeyDependencyLens, preferKeyDependencyLens } from './canvasDependencyLens.js'
 import { canvasArchitecturePlainTitleLines } from './canvasNodeTitleLayout.js'
@@ -282,7 +282,7 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
   const showRoleIcon = level === 'detail' || level === 'compact' || selected || displayItem.emphasis === 'primary'
   const showCardMeta = !architecture && (level === 'detail' || (level === 'compact' && architectureCard) || selected)
   const showC4Badge = !architecture && (level === 'detail' || level === 'compact' || selected)
-  const showCardSubtitle = level === 'detail' && Boolean(displayItem.subtitle && (!architectureCard || density !== 'dense'))
+  const showCardSubtitle = level === 'detail' && Boolean(displayItem.subtitle)
   const showSourceBadge = architecture ? selected : level === 'detail' || selected
   const architectureMarkSize = density === 'dense' ? 30 : density === 'compact' ? 34 : 38
   const architectureMarkX = 14
@@ -294,13 +294,18 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
   const architectureTextWidth = architectureCard
     ? Math.max(28, displayItem.width - architectureTextX - 14)
     : Math.max(28, displayItem.width - 28)
-  const titleText = architectureCard ? fitCanvasText(displayText, architectureTextWidth, titleFontSize, displayItem.fontWeight ?? 600) : displayText
+  const cardTypography = architecture && architectureCard
+    ? layoutArchitectureCardText(displayText, showCardSubtitle ? displayItem.subtitle : undefined,
+      architectureTextWidth, displayItem.height,
+      displayItem.fontSize ?? 14 * (titleScale ?? 1), displayItem.fontWeight ?? 650)
+    : null
+  const titleText = architectureCard && !cardTypography ? fitCanvasText(displayText, architectureTextWidth, titleFontSize, displayItem.fontWeight ?? 600) : displayText
   const subtitleText = displayItem.subtitle ? fitCanvasText(displayItem.subtitle, architectureTextWidth, subtitleFontSize, 500) : ''
   const plainTitleLines = architecture && !architectureCard && displayItem.type === 'node'
     ? canvasArchitecturePlainTitleLines(displayText, displayItem.width, displayItem.height,
       architectureTheme === 'technical' ? 'monospace' : 'sans') : null
   return <>
-              {displayItem.description ? <title>{displayItem.description}</title> : null}
+              {(displayItem.description || (architecture && architectureCard)) ? <title>{[displayItem.text, displayItem.subtitle, displayItem.description].filter(Boolean).join(' · ')}</title> : null}
               {imagePath ? <>
                 <defs><clipPath id={`canvas-image-${displayItem.id}`}><rect width={displayItem.width} height={displayItem.height} rx={displayItem.cornerRadius ?? 8} /></clipPath></defs>
                 <rect className="freeform-image-frame" width={displayItem.width} height={displayItem.height} rx={displayItem.cornerRadius ?? 8} />
@@ -353,21 +358,29 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
               ) : <text style={{
                 ...(displayItem.type === 'node' && (skin || originalItem.fillColor) ? { fill: titleColor, fontFamily: skin?.font, fontWeight: displayItem.fontWeight ?? 600 } : {}),
                 ...(displayItem.type === 'node' && displayItem.textColor ? { fill: displayItem.textColor } : {}),
-                ...(displayItem.type === 'node' && displayItem.fontSize ? { fontSize: displayItem.fontSize } : {}),
+                ...(cardTypography ? { fontSize: cardTypography.titleFontSize } : displayItem.type === 'node' && displayItem.fontSize ? { fontSize: displayItem.fontSize } : {}),
                 ...(displayItem.type === 'node' && displayItem.fontWeight ? { fontWeight: displayItem.fontWeight } : {}),
                 ...(plainTitleLines && architectureTheme === 'technical' ? { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' } : {}),
-                ...(architecture && architectureCard && titleScale && titleScale > 1 && !displayItem.fontSize ? {
+                ...(!cardTypography && architecture && architectureCard && titleScale && titleScale > 1 && !displayItem.fontSize ? {
                   fontSize: (architectureMark
                     ? ({ technical: 12, presentation: 14, editorial: 14.5 } as Partial<Record<ArchitectureTheme, number>>)[architectureTheme ?? 'enterprise'] ?? 13
                     : density === 'dense' ? 12 : density === 'compact' ? 13 : 14) * titleScale,
                 } : {}),
-              }} className={architectureCard ? 'freeform-node-title' : undefined} x={architectureTextX} y={architectureTitleY} textAnchor={architectureCard ? 'start' : 'middle'} dominantBaseline={architectureCard ? undefined : 'middle'}>
-                {plainTitleLines
+              }} className={architectureCard ? 'freeform-node-title' : undefined} x={architectureTextX} y={cardTypography?.titleY ?? architectureTitleY} textAnchor={architectureCard ? 'start' : 'middle'} dominantBaseline={architectureCard ? undefined : 'middle'}>
+                {cardTypography ? cardTypography.titleLines.map((line, index) =>
+                  <tspan key={index} x={architectureTextX} dy={index ? cardTypography.titleLineHeight : 0}>{line}</tspan>)
+                  : plainTitleLines
                   ? plainTitleLines.map((line, index) => <tspan key={index} x={architectureTextX}
                     dy={index === 0 ? -(plainTitleLines.length - 1) * ((displayItem.fontSize ?? 15) * 1.36) / 2 : (displayItem.fontSize ?? 15) * 1.3}>{line}</tspan>)
                   : titleText}
               </text> : null}
-              {showCardSubtitle ? <text className="freeform-node-subtitle" style={displayItem.type === 'node' && (displayItem.fontSize || displayItem.textColor) ? { fontSize: subtitleFontSize, fill: displayItem.textColor } : undefined} x={architectureTextX} y={architectureMark ? architectureTitleY + 25 : displayItem.height - 12} textAnchor={architectureCard ? 'start' : 'middle'}>{subtitleText}</text> : null}
+              {showCardSubtitle && (!cardTypography || cardTypography.subtitleLines.length) ? <text className="freeform-node-subtitle" style={cardTypography
+                ? { fontSize: cardTypography.subtitleFontSize, fill: displayItem.textColor }
+                : displayItem.type === 'node' && (displayItem.fontSize || displayItem.textColor) ? { fontSize: subtitleFontSize, fill: displayItem.textColor } : undefined}
+                x={architectureTextX} y={cardTypography?.subtitleY ?? (architectureMark ? architectureTitleY + 25 : displayItem.height - 12)} textAnchor={architectureCard ? 'start' : 'middle'}>
+                {cardTypography ? cardTypography.subtitleLines.map((line, index) =>
+                  <tspan key={index} x={architectureTextX} dy={index ? cardTypography.subtitleLineHeight : 0}>{line}</tspan>) : subtitleText}
+              </text> : null}
               {displayItem.sourcePaths?.length && showSourceBadge ? <text className="freeform-source-badge" x={displayItem.width - 10} y={displayItem.c4Type ? 34 : 18} textAnchor="end">⌘ {displayItem.sourcePaths.length}</text> : null}
   </>
 })
@@ -3371,6 +3384,10 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
             !groupHiddenByCollapsedAncestor(group.id, renderScene.groups ?? [])
           )).map((group) => {
             const presentation = canvasArchitectureGroupPresentation(renderScene, group)
+            const enterpriseLabel = presentation === 'enterprise-band'
+              ? layoutArchitectureCardText(group.label || group.id, undefined,
+                Math.max(24, (group.labelRailWidth ?? 132) - 28), group.height, 15, 700)
+              : null
             return (
             <g
               key={group.id}
@@ -3406,9 +3423,8 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                 } : undefined}
               /> : null}
               {presentation === 'enterprise-band' ? <>
-                <rect className="freeform-enterprise-band-rail" x={group.x + 1} y={group.y + 1} width={(group.labelRailWidth ?? 132) - 1} height={group.height - 2} rx={6} style={{ fill: darkTheme ? '#2a3b4c' : group.fillColor ?? '#e9f1fa', stroke: 'none', strokeDasharray: 'none' }} />
+                <rect className="freeform-enterprise-band-rail" x={group.x + 1} y={group.y + 1} width={(group.labelRailWidth ?? 132) - 1} height={group.height - 2} rx={6} style={{ fill: darkTheme ? '#2a3340' : '#eef2f6', stroke: 'none', strokeDasharray: 'none' }} />
                 <path d={`M${group.x + (group.labelRailWidth ?? 132)} ${group.y + 1}V${group.y + group.height - 1}`} stroke={darkTheme ? '#425164' : '#d9e2ec'} strokeWidth={1} />
-                <rect className="freeform-enterprise-band-accent" x={group.x + 1} y={group.y + 13} width={4} height={Math.max(12, group.height - 26)} rx={2} style={{ fill: visualSkin?.stroke ?? '#2867a8', stroke: 'none' }} />
               </> : null}
               {group.c4Type === 'software-system' && !group.collapsed ? <rect className="freeform-group-header" x={group.x} y={group.y} width={group.width} height="34" rx={scene.architecture ? 10 : 20} /> : null}
               {!group.collapsed && presentation !== 'compact-region' ? (
@@ -3428,7 +3444,9 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                 />
               ) : null}
               {group.label ? presentation === 'enterprise-band' ? (
-                <text className="freeform-enterprise-band-label" x={group.x + 20} y={group.y + group.height / 2 + 5}>{fitCanvasText(group.label, Math.max(24, (group.labelRailWidth ?? 132) - 26), 15, 720)}</text>
+                <text className="freeform-enterprise-band-label" x={group.x + 16} y={group.y + enterpriseLabel!.titleY}>
+                  {enterpriseLabel!.titleLines.map((line, index) => <tspan key={index} x={group.x + 16} dy={index ? enterpriseLabel!.titleLineHeight : 0}>{line}</tspan>)}
+                </text>
               ) : presentation === 'compact-region' ? (
                 <text className="freeform-compact-region-label" x={group.x + 16} y={group.y + 18}>{fitCanvasText(group.label, group.width - 24, 12, 640)}</text>
               ) : group.collapsed && scene.architecture && group.id.startsWith('arch-') ? (

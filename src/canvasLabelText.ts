@@ -41,6 +41,73 @@ export function fitCanvasText(text: string, maxWidth: number, fontSize: number, 
   return best > 0 ? `${chars.slice(0, best).join('').trimEnd()}…` : '…'
 }
 
+/** Shared editor/export typography for the actual space inside a card.
+ * Prioritize a complete title over subtitle detail; no automatic font shrinking.
+ */
+export function layoutArchitectureCardText(
+  title: string, subtitle: string | undefined, width: number, height: number,
+  fontSize = 14, fontWeight = 650,
+): {
+  titleLines: string[]
+  subtitleLines: string[]
+  titleFontSize: number
+  subtitleFontSize: number
+  titleY: number
+  subtitleY: number
+  titleLineHeight: number
+  subtitleLineHeight: number
+  truncated: boolean
+} {
+  const titleFontSize = Math.max(13, fontSize)
+  const subtitleFontSize = Math.max(11, Math.min(12, titleFontSize * 0.8))
+  const titleLineHeight = Math.ceil(titleFontSize * 1.22)
+  const subtitleLineHeight = Math.ceil(subtitleFontSize * 1.22)
+  const usableWidth = Math.max(28, width)
+  const wrap = (value: string, size: number, weight: number, limit: number) => {
+    const lines: string[] = []
+    let remaining = Array.from(value.replace(/\s+/g, ' ').trim())
+    let truncated = false
+    while (remaining.length && lines.length < limit) {
+      let count = 0
+      while (count < remaining.length && measureLabelText(remaining.slice(0, count + 1).join(''), size, weight) <= usableWidth) count++
+      count = Math.max(1, count)
+      if (count >= remaining.length) {
+        lines.push(remaining.join(''))
+        remaining = []
+        break
+      }
+      // Avoid breaking an English word when a useful space is available.
+      const separator = remaining.slice(0, count).lastIndexOf(' ')
+      if (separator > 0 && separator >= count / 2) count = separator + 1
+      lines.push(remaining.slice(0, count).join('').trim())
+      remaining = remaining.slice(count).filter((char, i) => i !== 0 || char !== ' ')
+    }
+    if (remaining.length) {
+      truncated = true
+      lines[lines.length - 1] = fitCanvasText(lines[lines.length - 1] + remaining.join(''), usableWidth, size, weight)
+    }
+    return { lines, truncated }
+  }
+  const titleText = wrap(title, titleFontSize, fontWeight, 2)
+  const availableHeight = height - 10
+  const titleHeight = titleText.lines.length * titleLineHeight
+  const subtitleLineBudget = subtitle && availableHeight - titleHeight - 3 >= subtitleLineHeight
+    ? Math.min(2, Math.floor((availableHeight - titleHeight - 3) / subtitleLineHeight))
+    : 0
+  const subtitleText = subtitle && subtitleLineBudget
+    ? wrap(subtitle, subtitleFontSize, 500, subtitleLineBudget) : { lines: [], truncated: Boolean(subtitle) }
+  const totalHeight = titleHeight + (subtitleText.lines.length ? 3 + subtitleText.lines.length * subtitleLineHeight : 0)
+  const titleY = Math.max(5, (height - totalHeight) / 2) + titleFontSize
+  const subtitleY = titleY + (titleText.lines.length - 1) * titleLineHeight + 3 + subtitleLineHeight
+  return {
+    titleLines: titleText.lines,
+    subtitleLines: subtitleText.lines,
+    titleFontSize, subtitleFontSize, titleY, subtitleY,
+    titleLineHeight, subtitleLineHeight,
+    truncated: titleText.truncated || subtitleText.truncated,
+  }
+}
+
 export function canvasArrowLabelText(label: string): { lines: string[]; width: number; height: number } {
   const cached = labelTextLayouts.get(label)
   if (cached) return cached

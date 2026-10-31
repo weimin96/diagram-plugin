@@ -1,6 +1,6 @@
 import { canvasVisualSkin, canvasStyledBox, canvasFillTextColor, isDiagramVisualStyle, type DiagramVisualStyle } from './diagramVisualStyles.js'
 import { hexLuminance } from './colors.js'
-import { canvasArrowLabelText, fitCanvasText } from './canvasLabelText.js'
+import { canvasArrowLabelText, fitCanvasText, layoutArchitectureCardText } from './canvasLabelText.js'
 import { canvasArchitecturePlainTitleLines } from './canvasNodeTitleLayout.js'
 import { canvasKeyDependencyLens, preferKeyDependencyLens } from './canvasDependencyLens.js'
 import { CanvasRectIndex } from './canvasRectIndex.js'
@@ -598,11 +598,11 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
     if (architectureMode) {
       if (presentation === 'enterprise-band') {
         const railWidth = group.labelRailWidth ?? 132
-        const label = fitCanvasText(group.label || group.id, Math.max(24, railWidth - 26), 15, 720)
-        const rail = darkArchitecture ? '#2a3b4c' : group.fillColor ? escapeXml(group.fillColor) : '#e9f1fa'
-        const accent = visualSkin?.stroke ?? '#2867a8'
+        const label = layoutArchitectureCardText(group.label || group.id, undefined, Math.max(24, railWidth - 28), group.height, 15, 700)
+        const rail = darkArchitecture ? '#2a3340' : '#eef2f6'
         const frameStroke = darkArchitecture ? '#425164' : '#d9e2ec'
-        return `<g class="canvas-enterprise-band"><rect x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" rx="8" fill="${darkArchitecture ? '#222d3a' : '#f8fafc'}" stroke="${frameStroke}" stroke-width="1"/><path d="M${group.x + railWidth} ${group.y + 1}V${group.y + group.height - 1}" stroke="${frameStroke}"/><path d="M${group.x + railWidth} ${group.y + 1}H${group.x + 8}Q${group.x + 1} ${group.y + 1} ${group.x + 1} ${group.y + 8}V${group.y + group.height - 8}Q${group.x + 1} ${group.y + group.height - 1} ${group.x + 8} ${group.y + group.height - 1}H${group.x + railWidth}Z" fill="${rail}"/><rect x="${group.x + 1}" y="${group.y + 13}" width="4" height="${Math.max(12, group.height - 26)}" rx="2" fill="${escapeXml(accent)}"/><text x="${group.x + 20}" y="${group.y + group.height / 2 + 5}" font-size="15" font-weight="720" fill="${darkArchitecture ? '#ecf3fa' : '#29445f'}">${escapeXml(label)}</text></g>`
+        const labelColor = darkArchitecture ? '#eaf0f7' : '#344254'
+        return `<g class="canvas-enterprise-band"><rect x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" rx="7" fill="${darkArchitecture ? '#222d3a' : '#f8fafc'}" stroke="${frameStroke}" stroke-width="1"/><rect x="${group.x + 1}" y="${group.y + 1}" width="${Math.max(0, railWidth - 1)}" height="${group.height - 2}" rx="6" fill="${rail}"/><path d="M${group.x + railWidth} ${group.y}V${group.y + group.height}" stroke="${frameStroke}"/><title>${escapeXml(group.label || group.id)}</title><text x="${group.x + 16}" y="${group.y + label.titleY}" font-size="15" font-weight="700" fill="${labelColor}">${label.titleLines.map((line, index) => `<tspan x="${group.x + 16}" dy="${index ? label.titleLineHeight : 0}">${escapeXml(line)}</tspan>`).join('')}</text></g>`
       }
       if (presentation === 'compact-region')
         return `<g class="canvas-compact-region"><text x="${group.x + 16}" y="${group.y + 18}" font-family="Arial, sans-serif" font-size="12" font-weight="640" fill="${escapeXml(palette.stroke)}" opacity="0.78">${escapeXml(group.label || group.id)}</text></g>`
@@ -1371,7 +1371,11 @@ export function canvasPresentationGroupFrames(
   const bandRight = Math.max(...enterpriseBands.map((frame) => frame.x + frame.width))
   const desiredRailWidth = Math.max(132, ...enterpriseBands.map((frame) =>
     [...(frame.label ?? '')].reduce((width, char) => width + (/\p{Script=Han}/u.test(char) ? 15 : 8), 36)))
-  const railWidth = Math.min(Math.max(0, bandLeft - 12), desiredRailWidth)
+  const railWidth = Math.min(Math.max(0, bandLeft - 8), desiredRailWidth)
+  // Normalize visual band heights without changing routing or node geometry.
+  const orderedBands = enterpriseBands.slice().sort((a, b) => a.y - b.y)
+  const nearestBandGap = Math.min(Infinity, ...orderedBands.slice(1).map((band, index) => band.y - orderedBands[index].y))
+  const bandHeight = Math.max(42, Math.min(Math.max(...enterpriseBands.map((band) => band.height - 32)), nearestBandGap - 12))
   return frames.map((frame) => {
     // The proposal view uses aligned bands with a dedicated label rail. These
     // are presentation bounds only: routing keeps exact member extents.
@@ -1380,7 +1384,7 @@ export function canvasPresentationGroupFrames(
       x: bandLeft - railWidth,
       width: bandRight - bandLeft + railWidth,
       y: frame.y + 24,
-      height: frame.height - 32,
+      height: bandHeight,
       labelRailWidth: railWidth,
     }
     const generatedRegion = /^arch-(external|experience|application|processing|data)$/.test(frame.id)
@@ -1662,14 +1666,10 @@ function renderArchitectureCanvasNode(
   const iconY = item.y + (item.height - iconSize) / 2
   const hasIcon = Boolean(item.iconRef || item.stencil || item.icon)
   const textX = hasIcon ? iconX + iconSize + 12 : item.x + 16
-  const titleY = item.y + item.height / 2 + (item.subtitle ? -10 : 4)
-  const subtitleY = titleY + 25
-  const titleSize = compact ? 12 : density === 'compact' ? 12.5 : 13
   const focused = item.emphasis === 'primary' && theme === 'enterprise'
-  const subtitleSize = compact ? 9 : 9.5
-  const titleFontSize = (item.fontSize ?? (titleSize + profile.titleSizeDelta + (focused ? 0.8 : 0))) * titleScale
-  const subtitleFontSize = item.fontSize ? Math.max(9, item.fontSize * 0.72) : subtitleSize
   const textWidth = Math.max(28, item.x + item.width - textX - 12)
+  const typography = layoutArchitectureCardText(item.text, item.subtitle, textWidth, item.height,
+    item.fontSize ?? 14 * titleScale, item.fontWeight ?? (focused ? 730 : profile.titleWeight))
   const opacity = item.opacity ?? (item.emphasis === 'muted' ? '0.88' : '1')
   const darkSurface = hexLuminance(palette.text) > 0.62
   const mark = item.iconRef
@@ -1681,13 +1681,13 @@ function renderArchitectureCanvasNode(
         : ''
   const family = fontOverride ?? profile.fontFamily
   const fontFamily = family ? ` font-family="${family}"` : ''
-  const subtitle = item.subtitle
-    ? `<text x="${textX}" y="${subtitleY}" font-size="${subtitleFontSize}" fill="${escapeXml(item.textColor ?? palette.text)}" opacity="${profile.subtitleOpacity}"${fontFamily}>${escapeXml(fitCanvasText(item.subtitle, textWidth, subtitleFontSize, 500))}</text>`
+  const subtitle = typography.subtitleLines.length
+    ? `<text x="${textX}" y="${item.y + typography.subtitleY}" font-size="${typography.subtitleFontSize}" fill="${escapeXml(item.textColor ?? palette.text)}" opacity="${Math.max(.72, profile.subtitleOpacity)}"${fontFamily}>${typography.subtitleLines.map((line, index) => `<tspan x="${textX}" dy="${index ? typography.subtitleLineHeight : 0}">${escapeXml(line)}</tspan>`).join('')}</text>`
     : ''
   // Every architecture node, including a technology logo or external actor,
   // has the same hit area and visible card. No invisible technical-node plates.
   const plate = `<rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="${profile.nodeRadius || 8}" fill="${escapeXml(item.fillColor ?? neutralSurface)}" fill-opacity="${item.fillColor ? 1 : 0.94}" stroke="${escapeXml(item.strokeColor ?? palette.stroke)}" stroke-opacity="${item.strokeColor ? 1 : focused ? 0.9 : 0.72}" stroke-width="${item.strokeWidth ?? (focused ? 1.7 : 1.25)}"/>`
-  return `<g opacity="${opacity}">${plate}${mark}<text x="${textX}" y="${titleY}" font-size="${titleFontSize}" font-weight="${item.fontWeight ?? (focused ? 730 : profile.titleWeight)}" fill="${escapeXml(item.textColor ?? palette.text)}"${fontFamily}>${escapeXml(fitCanvasText(item.text.replace(/\n/g, ' '), textWidth, titleFontSize, item.fontWeight ?? (focused ? 730 : profile.titleWeight)))}</text>${subtitle}</g>`
+  return `<g opacity="${opacity}"><title>${escapeXml([item.text, item.subtitle].filter(Boolean).join(' · '))}</title>${plate}${mark}<text x="${textX}" y="${item.y + typography.titleY}" font-size="${typography.titleFontSize}" font-weight="${item.fontWeight ?? (focused ? 730 : profile.titleWeight)}" fill="${escapeXml(item.textColor ?? palette.text)}"${fontFamily}>${typography.titleLines.map((line, index) => `<tspan x="${textX}" dy="${index ? typography.titleLineHeight : 0}">${escapeXml(line)}</tspan>`).join('')}</text>${subtitle}</g>`
 }
 
 function canvasArchitectureThemeProfile(theme: CanvasArchitectureTheme) {
