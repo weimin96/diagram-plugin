@@ -19,6 +19,7 @@ import { applyArchitectureTheme as applyArchitectureThemeToScene, beautifyArchit
 import { architecturePartitionFlow } from './architecturePartitionFlow.js'
 import { recommendArchitectureInitialReadingViewport, recommendArchitectureReadingViewport } from './architecturePresentationQuality.js'
 import { compactEnterpriseLayerSpacing } from './architectureProposalSpacing.js'
+import { straightenArchitectureTerminalRoutes } from './architectureRouteRepair.js'
 import { ARCHITECTURE_NODE_TEMPLATES, architectureNodeTemplate, type ArchitectureNodeTemplate, type ArchitectureNodeTemplateProvider } from './architectureNodeTemplates.js'
 import { anchorPoint, canvasArchitectureCardTemplate, canvasArchitectureGroupPresentation, canvasArchitectureHeader, canvasArchitectureProjection, canvasArchitectureRelationLabelVisible, canvasArchitectureScopeProjection, canvasArrowBoxRoute, canvasArrowLabelLayouts, canvasArrowPath, canvasArrowRoutePath, canvasArrowRoutePoints, canvasBundleTrunks, canvasCollapsedConnections, canvasCollapsedOwners, canvasGroupFrames, canvasPresentationGroupFrames, canvasIconLabel, canvasIconPaths, canvasIconRefLabel, canvasIconRefMarkup, canvasSemanticLodProjection, resolveCanvasSemanticLod, canvasStencilLabel, canvasStencilVisual, c4Label, parseCanvasScene, serializeCanvasScene, type CanvasAnchor, type CanvasArchitectureDensity, type CanvasArchitectureScope, type CanvasArchitectureView, type CanvasArrow, type CanvasC4Type, type CanvasElement, type CanvasGroup, type CanvasGroupFrame, type CanvasIcon, type CanvasIconRef, type CanvasLineStyle, type CanvasNode, type CanvasNote, type CanvasPoint, type CanvasRouting, type CanvasScene, type CanvasSemanticLodLevel, type CanvasShape, type CanvasStencil, type CanvasTone } from './canvas.js'
 import { CANVAS_ICON_CATALOG, type CanvasIconSource } from './iconRegistry.js'
@@ -248,12 +249,13 @@ function relationLabelScene(scene: CanvasScene, architecture: boolean, level: Ca
 }
 
 
-const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, darkTheme, architecture, architectureTheme, density, titleScale, level, selected, imageSource }: {
+const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, darkTheme, architecture, architectureTheme, architectureView, density, titleScale, level, selected, imageSource }: {
   item: CanvasNode | CanvasNote
   visualStyle?: DiagramVisualStyle
   darkTheme: boolean
   architecture: boolean
   architectureTheme?: ArchitectureTheme
+  architectureView?: CanvasArchitectureView
   density: CanvasArchitectureDensity
   titleScale?: number
   level: CanvasSemanticLodLevel
@@ -283,7 +285,7 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
   const showRoleIcon = level === 'detail' || level === 'compact' || selected || displayItem.emphasis === 'primary'
   const showCardMeta = !architecture && (level === 'detail' || (level === 'compact' && architectureCard) || selected)
   const showC4Badge = !architecture && (level === 'detail' || level === 'compact' || selected)
-  const showCardSubtitle = level === 'detail' && Boolean(displayItem.subtitle)
+  const showCardSubtitle = level === 'detail' && architectureView !== 'overview' && Boolean(displayItem.subtitle)
   const showSourceBadge = architecture ? selected : level === 'detail' || selected
   const architectureMarkSize = density === 'dense' ? 30 : density === 'compact' ? 34 : 38
   const architectureMarkX = 14
@@ -2895,6 +2897,17 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                             setToolbarMenu(null)
                             focusArchitectureScene(candidate)
                           }}>收紧层距</button>
+                        <button type="button" title="修正错误的短斜向连接；保留真实关系与节点坐标"
+                          onClick={() => {
+                            const original = currentScene()
+                            const candidate = straightenArchitectureTerminalRoutes(original)
+                            if (candidate === original) {
+                              setSpacingFeedback('连接已规整，或没有可安全矫正的线路')
+                              return
+                            }
+                            commit(candidate)
+                            setSpacingFeedback('已矫正连接端口，可撤销')
+                          }}>矫正端口</button>
                         {spacingFeedback ? <p role="status">{spacingFeedback}</p> : null}
                       </div>
                     </section>
@@ -3663,7 +3676,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
               onPointerUp={finishGesture}
               onPointerCancel={cancelGesture}
             >
-              <CanvasBoxArtwork item={originalItem} visualStyle={scene.style} darkTheme={darkTheme} architecture={Boolean(scene.architecture)} architectureTheme={scene.architecture?.theme} density={architectureProjection.density} titleScale={scene.architecture?.titleScale} level={semanticLodLevel} selected={selectedForLod} imageSource={imageSource} />
+              <CanvasBoxArtwork item={originalItem} visualStyle={scene.style} darkTheme={darkTheme} architecture={Boolean(scene.architecture)} architectureTheme={scene.architecture?.theme} architectureView={architectureProjection.view} density={architectureProjection.density} titleScale={scene.architecture?.titleScale} level={semanticLodLevel} selected={selectedForLod} imageSource={imageSource} />
               {showAnchorPoints ? <g className="freeform-anchor-points">
                   <circle cx={displayItem.width / 2} cy={0} r="7" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => handleAnchorClick(event, item.id, 'top')} />
                   <circle cx={displayItem.width} cy={displayItem.height / 2} r="7" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => handleAnchorClick(event, item.id, 'right')} />

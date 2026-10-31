@@ -449,6 +449,15 @@ test("架构卡片与展示渲染", () => {
     item.id === 'api' ? { ...item, text: '企业统一身份认证中心', subtitle: 'OAuth2 · SSO · 权限管理' } : item) })
   assert.match(longTitle, /<title>企业统一身份认证中心 · OAuth2 · SSO · 权限管理<\/title>/)
   assert.match(longTitle, /<tspan[^>]*>企业统一身.*<\/tspan>/)
+  const withSubtitle: CanvasScene = { ...scene, elements: scene.elements.map((item) =>
+    item.id === 'api' && item.type === 'node' ? { ...item, subtitle: '授权 · 网关' } : item) }
+  const details = canvasSceneToSvg(withSubtitle)
+  const summary = canvasSceneToSvg({ ...withSubtitle, architecture: { ...withSubtitle.architecture!, view: 'overview' } })
+  assert.match(details, /<tspan[^>]*>授权 · 网关<\/tspan>/)
+  assert.doesNotMatch(summary, /<tspan[^>]*>授权 · 网关<\/tspan>/)
+  assert.match(summary, /<title>Core API · 授权 · 网关<\/title>/,
+    'overview keeps full source-backed subtitle in accessible hover detail')
+  assert.equal((summary.match(/<g opacity=/g) ?? []).length >= 2, true)
 
   }
   // 场景 21: 'architecture actors, branded nodes and manual fill share card geometry and readable arrows'

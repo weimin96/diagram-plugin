@@ -536,7 +536,7 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
     if (architectureMode && architectureCard) return wrapRotation(renderArchitectureCanvasNode(item,
       { ...palette, text: item.fillColor ? palette.text : darkArchitecture ? '#f8fafc' : '#243247' },
       projection.density, architectureTheme, skin?.font, scene.architecture?.titleScale ?? 1,
-      darkArchitecture ? '#222d3c' : '#f8fafc'))
+      darkArchitecture ? '#222d3c' : '#f8fafc', projection.view !== 'overview'))
     const cardTemplate = canvasArchitectureCardTemplate(item)
     const showSubtitle = Boolean(item.subtitle && (!architectureCard || projection.density !== 'dense'))
     const cardTitleLimit = projection.density === 'dense' ? 22 : projection.density === 'compact' ? 26 : 30
@@ -1658,6 +1658,7 @@ function renderArchitectureCanvasNode(
   fontOverride?: string,
   titleScale = 1,
   neutralSurface = '#f8fafc',
+  showSubtitle = true,
 ): string {
   const profile = canvasArchitectureThemeProfile(theme)
   const compact = density === 'dense'
@@ -1668,7 +1669,7 @@ function renderArchitectureCanvasNode(
   const textX = hasIcon ? iconX + iconSize + 12 : item.x + 16
   const focused = item.emphasis === 'primary' && theme === 'enterprise'
   const textWidth = Math.max(28, item.x + item.width - textX - 12)
-  const typography = layoutArchitectureCardText(item.text, item.subtitle, textWidth, item.height,
+  const typography = layoutArchitectureCardText(item.text, showSubtitle ? item.subtitle : undefined, textWidth, item.height,
     item.fontSize ?? 14 * titleScale, item.fontWeight ?? (focused ? 730 : profile.titleWeight))
   const opacity = item.opacity ?? (item.emphasis === 'muted' ? '0.88' : '1')
   const darkSurface = hexLuminance(palette.text) > 0.62

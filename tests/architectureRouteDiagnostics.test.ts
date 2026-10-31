@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { CanvasScene } from '../src/canvas.js'
 import { assessArchitectureRouteDiagnostics } from '../src/architectureRouteDiagnostics.js'
+import { straightenArchitectureTerminalRoutes } from '../src/architectureRouteRepair.js'
 import { architectureBenchmarkCases } from '../scripts/architecture-benchmark-cases.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 
@@ -128,9 +129,34 @@ test('真实端点法向诊断区分错误切向连接与合法的正交出入�
   const original = JSON.stringify(scene)
   const measured = assessArchitectureRouteDiagnostics(scene)
   assert.equal(measured.terminalNormalViolations, 1)
+  assert.equal(measured.nonOrthogonalSegments, 0,
+    'an axis-aligned segment may still violate its declared endpoint normal')
   assert.deepEqual(measured.worstTerminalNormalViolations,
     [{ edgeId: 'bad', endpoint: 'from', side: 'right' }])
   assert.equal(JSON.stringify(scene), original)
+  const intentionallyBent: CanvasScene = { ...scene, architecture: {
+    theme: 'enterprise', diagramStyle: 'enterprise', view: 'detail',
+  } }
+  assert.strictEqual(straightenArchitectureTerminalRoutes(intentionallyBent), intentionallyBent,
+    'a large authored detour is not snapped or incorrectly accepted')
+  const shortStubs: CanvasScene = {
+    ...scene,
+    architecture: { theme: 'enterprise', diagramStyle: 'enterprise', view: 'detail' },
+    elements: scene.elements.filter((item) => item.id !== 'ok').map((item) => item.id === 'bad' && item.type === 'arrow'
+      ? { ...item, fromAnchor: 'right', toAnchor: 'left', points: [
+        { x: 320, y: 140.2 }, { x: 430, y: 140.2 },
+      ] } : item),
+  }
+  const corrected = straightenArchitectureTerminalRoutes(shortStubs)
+  assert.notEqual(corrected, shortStubs)
+  assert.equal(assessArchitectureRouteDiagnostics(corrected).terminalNormalViolations, 0)
+  assert.equal(assessArchitectureRouteDiagnostics(corrected).nonOrthogonalSegments, 0)
+  assert.equal(assessArchitectureRouteDiagnostics(shortStubs).nonOrthogonalSegments, 2)
+  assert.equal(assessArchitectureRouteDiagnostics(shortStubs).terminalNormalViolations, 2)
+  assert.deepEqual(corrected.elements.filter((item) => item.type === 'node'),
+    shortStubs.elements.filter((item) => item.type === 'node'), 'no node layout may change')
+  assert.strictEqual(straightenArchitectureTerminalRoutes(corrected), corrected,
+    'straightened edges are idempotent')
 })
 
 test('同分区线路在节点包围范围外明显折返时提示具体关系，不把普通直连当成绕行', () => {

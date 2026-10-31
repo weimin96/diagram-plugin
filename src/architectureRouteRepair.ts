@@ -3,6 +3,68 @@
  * remain with the Composer. No layout engine or persisted protocol here.
  */
 import { canvasArrowBoxRoute, canvasSharedSourceStem, type CanvasArrow, type CanvasNode, type CanvasScene } from './canvas.js'
+import { assessCanvasVisualQuality } from './canvasQuality.js'
+import { assessArchitectureRouteDiagnostics } from './architectureRouteDiagnostics.js'
+
+/** Repair sub-pixel/short diagonal terminal stubs from imported orthogonal
+ * routes. This changes waypoints only, never the original ports or topology.
+ * A complete scene quality veto protects unrelated relationships.
+ */
+export function straightenArchitectureTerminalRoutes(scene: CanvasScene): CanvasScene {
+  if (!scene.architecture) return scene
+  const nodes = new Map(scene.elements.filter((item): item is CanvasNode => item.type === 'node')
+    .map((item) => [item.id, item]))
+  let changed = 0
+  const elements = scene.elements.map((arrow) => {
+    if (arrow.type !== 'arrow' || arrow.routing !== 'orthogonal'
+      || arrow.freehand || arrow.bundleKey || !arrow.points?.length) return arrow
+    const from = nodes.get(arrow.from), to = nodes.get(arrow.to)
+    if (!from || !to) return arrow
+    const route = canvasArrowBoxRoute(from, to, arrow)
+    if (route.length < 4) return arrow
+    const points = route.slice(1, -1).map((point) => ({ ...point }))
+    let edited = false
+    const align = (
+      anchor: CanvasArrow['fromAnchor'], endpoint: { x: number; y: number },
+      point: { x: number; y: number },
+    ) => {
+      if (!anchor || anchor === 'auto') return
+      const axis = anchor === 'left' || anchor === 'right' ? 'y' : 'x'
+      const deviation = Math.abs(point[axis] - endpoint[axis])
+      // A major bend is authored geometry, not floating point jitter. Leave
+      // it untouched rather than changing an intentional user-selected path.
+      if (deviation > 16 || deviation < .00001) return
+      point[axis] = endpoint[axis]
+      edited = true
+    }
+    align(arrow.fromAnchor, route[0], points[0])
+    align(arrow.toAnchor, route.at(-1)!, points.at(-1)!)
+    if (!edited) return arrow
+    const revised = { ...arrow, points }
+    const corrected = canvasArrowBoxRoute(from, to, revised)
+    if (corrected.slice(1).some((point, index) =>
+      Math.abs(point.x - corrected[index].x) > .001
+      && Math.abs(point.y - corrected[index].y) > .001)) return arrow
+    changed++
+    return revised
+  })
+  if (!changed) return scene
+  const proposed = { ...scene, elements }
+  const before = assessCanvasVisualQuality(scene).metrics
+  const after = assessCanvasVisualQuality(proposed).metrics
+  const routeBefore = assessArchitectureRouteDiagnostics(scene)
+  const routeAfter = assessArchitectureRouteDiagnostics(proposed)
+  const checks = [
+    'nodeOverlaps', 'edgeCrossings', 'edgeOverlaps', 'edgeNodeIntersections',
+    'labelOverlaps', 'labelNodeIntersections', 'labelOverflows',
+  ] as const
+  if (checks.some((key) => after[key] > before[key])
+    || routeAfter.terminalNormalViolations >= routeBefore.terminalNormalViolations
+    || routeAfter.nonOrthogonalSegments >= routeBefore.nonOrthogonalSegments
+    || routeAfter.unrelatedFrameIntrusionLength > routeBefore.unrelatedFrameIntrusionLength
+    || routeAfter.totalRouteLength > routeBefore.totalRouteLength * 1.01) return scene
+  return proposed
+}
 
 /**
  * Shift one interior orthogonal corridor; keep endpoint anchors and all nodes

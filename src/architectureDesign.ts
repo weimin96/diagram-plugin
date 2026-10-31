@@ -20,6 +20,7 @@ import { routeArchitectureEdges } from './architectureRouting.js'
 import { assessCanvasVisualQuality } from './canvasQuality.js'
 import { assessArchitectureRouteDiagnostics } from './architectureRouteDiagnostics.js'
 import { compactEnterpriseLayerSpacing } from './architectureProposalSpacing.js'
+import { straightenArchitectureTerminalRoutes } from './architectureRouteRepair.js'
 export { routeArchitectureEdges, routeArchitectureArrowIds, routeArchitectureEdgesIncremental } from './architectureRouting.js'
 
 export type ArchitectureTheme = CanvasArchitectureTheme
@@ -53,6 +54,8 @@ export interface ArchitectureBeautifyOptions {
   alignCardHeights?: boolean
   /** Explicit whole-scene proposal corridor compression with strict geometry veto. */
   compactLayerSpacing?: boolean
+  /** Explicit, quality-gated repair of short off-axis orthogonal end segments. */
+  straightenTerminals?: boolean
 }
 
 export interface ArchitectureBeautifyResult {
@@ -222,7 +225,8 @@ export function beautifyArchitectureScene(scene: CanvasScene, options: Architect
     // reflow may align unlocked card heights, but only if the whole routed
     // scene passes the same geometric regression checks as the original.
     const aligned = options.alignCardHeights === true ? normalizeEnterpriseCardHeights(scene) : scene
-    const candidate = options.compactLayerSpacing === true ? compactEnterpriseLayerSpacing(aligned) : aligned
+    const compacted = options.compactLayerSpacing === true ? compactEnterpriseLayerSpacing(aligned) : aligned
+    const candidate = options.straightenTerminals === true ? straightenArchitectureTerminalRoutes(compacted) : compacted
     const preserved = { ...candidate, architecture: { ...scene.architecture, theme, view, density } }
     return {
       scene: preserved,

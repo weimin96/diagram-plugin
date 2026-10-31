@@ -3,6 +3,10 @@ import { CANVAS_PORT_MIN_SEPARATION_PX, canvasArrowBoxRoute, canvasGroupFrames, 
 /** Geometry diagnostics only. They must not silently alter a saved CanvasScene. */
 export interface ArchitectureRouteDiagnostics {
   totalRouteLength: number
+  /** Off-axis segments on relationships declared orthogonal, including tiny
+   * diagonal terminal stubs; independent of the pairwise collision counter. */
+  nonOrthogonalSegments: number
+  worstNonOrthogonalSegments: Array<{ edgeId: string; segments: number }>
   /** Real right-angle turns, excluding duplicate waypoints and diagonal
    * geometry (reported separately by Canvas quality). A reading-cost signal. */
   totalRouteBends: number
@@ -119,6 +123,8 @@ export function assessArchitectureRouteDiagnostics(scene: CanvasScene): Architec
     }
   }
   let totalRouteLength = 0
+  let nonOrthogonalSegments = 0
+  const offAxisEdges: ArchitectureRouteDiagnostics['worstNonOrthogonalSegments'] = []
   let totalRouteBends = 0
   const routeBends: ArchitectureRouteDiagnostics['worstRouteBends'] = []
   const ingressBySide = new Map<string, Array<{ position: number; bundleKey?: string }>>()
@@ -163,6 +169,15 @@ export function assessArchitectureRouteDiagnostics(scene: CanvasScene): Architec
       }])
     }
     const points = canvasArrowBoxRoute(source, target, arrow)
+    if (arrow.routing === 'orthogonal' && !arrow.freehand) {
+      let offAxis = 0
+      for (let index = 1; index < points.length; index++) {
+        if (Math.abs(points[index].x - points[index - 1].x) > .001
+          && Math.abs(points[index].y - points[index - 1].y) > .001) offAxis++
+      }
+      nonOrthogonalSegments += offAxis
+      if (offAxis) offAxisEdges.push({ edgeId: arrow.id, segments: offAxis })
+    }
     if (arrow.routing === 'orthogonal' && points.length >= 3) {
       const corners = points.filter((point, index) =>
         index === 0 || point.x !== points[index - 1].x || point.y !== points[index - 1].y)
@@ -253,6 +268,9 @@ export function assessArchitectureRouteDiagnostics(scene: CanvasScene): Architec
     || a.nodeId.localeCompare(b.nodeId, 'en') || a.side.localeCompare(b.side, 'en'))
   return {
     totalRouteLength: Math.round(totalRouteLength),
+    nonOrthogonalSegments,
+    worstNonOrthogonalSegments: offAxisEdges.sort((a, b) => b.segments - a.segments
+      || a.edgeId.localeCompare(b.edgeId, 'en')).slice(0, 8),
     totalRouteBends,
     worstRouteBends: routeBends.sort((a, b) => b.bends - a.bends
       || a.edgeId.localeCompare(b.edgeId, 'en')).slice(0, 5),
