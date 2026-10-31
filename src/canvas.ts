@@ -1668,6 +1668,24 @@ function shapeRadius(shape: CanvasShape | undefined, height: number): number {
   return 12
 }
 
+/** The sole authority for available proposal-module title space, shared by
+ * candidate acceptance and editor/SVG rendering. Never shrink node titles
+ * just to manufacture a denser matrix. */
+export function canvasEnterpriseModuleTextLayout(item: CanvasNode, showSubtitle: boolean) {
+  const primary = item.emphasis === 'primary'
+  const hasIcon = Boolean(item.iconRef || item.stencil || item.icon)
+  const tile = Math.min(30, Math.max(24, item.height - 38))
+  const tileX = item.x + 10
+  const tileY = item.y + (item.height - tile) / 2
+  const textX = hasIcon ? tileX + tile + 8 : item.x + 12
+  const textWidth = Math.max(28, item.x + item.width - textX - 6)
+  const typography = layoutArchitectureCardText(
+    item.text, showSubtitle ? item.subtitle : undefined, textWidth, item.height,
+    Math.max(14, item.fontSize ?? 15), item.fontWeight ?? (primary ? 720 : 650),
+  )
+  return { hasIcon, tile, tileX, tileY, textX, typography }
+}
+
 /** Proposal module ink used identically by the interactive editor and SVG export.
  * Text is allocated after the existing semantic icon; no invented branding
  * and no title shrinkage to make room for decoration.
@@ -1681,16 +1699,7 @@ export function canvasEnterpriseModuleSvg(item: CanvasNode, dark: boolean, showS
     generic: ['#5d6d85', '#edf1f6'],
   } satisfies Record<CanvasArchitectureCardKind, [string, string]>)[template.kind]
   const primary = item.emphasis === 'primary'
-  const hasIcon = Boolean(item.iconRef || item.stencil || item.icon)
-  const tile = Math.min(30, Math.max(24, item.height - 38))
-  const tileX = item.x + 10
-  const tileY = item.y + (item.height - tile) / 2
-  const textX = hasIcon ? tileX + tile + 8 : item.x + 12
-  const textWidth = Math.max(28, item.x + item.width - textX - 6)
-  const typography = layoutArchitectureCardText(
-    item.text, showSubtitle ? item.subtitle : undefined, textWidth, item.height,
-    Math.max(14, item.fontSize ?? 15), item.fontWeight ?? (primary ? 720 : 650),
-  )
+  const { hasIcon, tile, tileX, tileY, textX, typography } = canvasEnterpriseModuleTextLayout(item, showSubtitle)
   const ink = item.textColor ?? (dark ? '#edf4fc' : '#293d55')
   const fill = item.fillColor && item.fillColor.toLowerCase() !== '#ffffff'
     ? item.fillColor : dark ? (primary ? '#304557' : '#263645') : primary ? category[1] : '#ffffff'

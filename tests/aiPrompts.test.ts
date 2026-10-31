@@ -5,7 +5,7 @@ import { detectArchitectureStyle } from '../src/architectureStyle.js'
 import { composeEnterpriseArchitecture } from '../src/enterpriseArchitecture.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { beautifyArchitectureScene } from '../src/architectureDesign.js'
-import { canvasArchitectureGroupPresentation, canvasArrowLabelLayouts, canvasEnterpriseModuleSvg, canvasGroupFrames, canvasPresentationGroupFrames, canvasSceneToSvg } from '../src/canvas.js'
+import { canvasArchitectureGroupPresentation, canvasArrowLabelLayouts, canvasEnterpriseModuleSvg, canvasEnterpriseModuleTextLayout, canvasGroupFrames, canvasPresentationGroupFrames, canvasSceneToSvg } from '../src/canvas.js'
 import type { DiagramDocument } from '../src/types.js'
 
 test('builds a Canvas-specific generation contract without Mermaid instructions', () => {
@@ -239,6 +239,13 @@ test('architecture generation uses topology archetypes and a bounded quality loo
   assert.equal(dense.scene.elements.filter((item) => item.type === 'arrow').length, denseEdges.length)
   assert.equal(dense.quality.metrics.nodeOverlaps, 0)
   assert.equal(dense.quality.metrics.edgeNodeIntersections, 0)
+  assert.ok(dense.quality.metrics.edgeCrossings < 132 && dense.quality.metrics.edgeOverlaps < 240,
+    'relation-aware column candidates must reduce the known fixed-four-column conflict baseline')
+  assert.equal(dense.scene.width, 1500, 'dense matrix must not become unreadably wide')
+  assert.ok(dense.scene.height < 1930, 'multiline module matrix must reduce redundant layer height')
+  assert.equal(new Set(dense.scene.elements.flatMap((item) => item.type === 'node'
+    && item.groupId === '__arch-layer-1' ? [item.y] : [])).size, 1,
+  'a six-module layer should fit a single aligned row when safe')
   assert.equal(dense.scene.groups?.length, 6)
   assert.equal(dense.scene.architecture?.density, 'auto')
   assert.equal(dense.summary.resolvedDensity, 'compact')
@@ -250,6 +257,14 @@ test('architecture generation uses topology archetypes and a bounded quality loo
   assert.deepEqual(denseReopened.scene.elements, dense.scene.elements, 'route order is stable across generation')
   assert.equal(dense.scene.elements.filter((item) => item.type === 'arrow').length, denseEdges.length)
   assert.equal(dense.quality.metrics.edgeNodeIntersections, 0)
+  const longNames = composeEnterpriseArchitecture({ title: '完整业务名称',
+    nodes: denseNodes.map((node) => ({ ...node,
+      text: '城市规划业务综合分析治理协同审查和动态监测服务', icon: 'service' as const })),
+    relations: denseEdges,
+  })
+  assert.equal(longNames.scene.elements.filter((item) => item.type === 'node'
+    && canvasEnterpriseModuleTextLayout(item, false).typography.truncated).length, 0,
+  'a compact grid must never clip readable full module titles merely to fit six columns')
 })
 
 test('参考图片忠实重绘不强制走语义自动布局', () => {

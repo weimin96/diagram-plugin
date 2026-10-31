@@ -6,7 +6,7 @@ import { assessArchitectureRouteDiagnostics } from './architectureRouteDiagnosti
 import { assessArchitecturePresentation } from './architecturePresentationQuality.js'
 import { planArchitectureVisual } from './architectureVisualPlan.js'
 import { canvasVisualSkin } from './diagramVisualStyles.js'
-import { resolveCanvasArchitectureDensity, type CanvasArrow, type CanvasNode, type CanvasScene } from './canvas.js'
+import { canvasEnterpriseModuleTextLayout, resolveCanvasArchitectureDensity, type CanvasArrow, type CanvasNode, type CanvasScene } from './canvas.js'
 
 const regionNames: Record<NonNullable<ArchitectureIntentGraph['nodes'][number]['partition']>, string> = {
   external: '外部与参与方', experience: '访问与接入层', application: '业务应用层',
@@ -78,10 +78,28 @@ export function composeEnterpriseArchitecture(intent: ArchitectureIntentGraph) {
   }
   const originalEntries = [...layers.entries()]
   if (intent.relations.length < 2) return composeLayeredCandidate(intent, originalEntries, bandGap)
-  const candidates = [originalEntries, orderConnectedModules(originalEntries, intent.relations, 1)]
+  const connectedOrder = orderConnectedModules(originalEntries, intent.relations, 1)
+  const reordered = connectedOrder.some(([, nodes], layer) => nodes.some((node, index) =>
+    node.id !== originalEntries[layer][1][index].id))
+  // The barycentric ordering frequently matches the verified input order.
+  // Rerouting the same grid a second time only burns compute without adding a candidate.
+  const candidates = reordered ? [originalEntries, connectedOrder] : [originalEntries]
   const configurations = [bandGap, bandGap + 32, bandGap + 64]
   const outputs = candidates.flatMap((entries) => configurations.map((gap) => composeLayeredCandidate(intent, entries, gap)))
+  // The historic fixed four-column layout puts 5–8 modules into jagged rows.
+  // Try at most two wider, aligned grid geometries; the final routed scene
+  // must beat the original in *all* hard safety metrics before adoption.
+  const maxLayerSize = Math.max(...originalEntries.map(([, nodes]) => nodes.length))
+  if (maxLayerSize >= 5) {
+    const alternativeColumns = [...new Set([Math.min(5, maxLayerSize), Math.min(6, maxLayerSize)])]
+    for (const columns of alternativeColumns) {
+      outputs.push(composeLayeredCandidate(intent, connectedOrder, bandGap + 64, columns))
+    }
+  }
   const baseline = outputs[0]
+  const clippedTitles = (scene: CanvasScene) => scene.elements.filter((item) => item.type === 'node'
+    && canvasEnterpriseModuleTextLayout(item, false).typography.truncated).length
+  const baselineClippedTitles = clippedTitles(baseline.scene)
   const eligible = outputs.slice(1).filter((candidate) => {
     const before = baseline.quality.metrics, after = candidate.quality.metrics
     return after.nodeOverlaps <= before.nodeOverlaps
@@ -92,6 +110,11 @@ export function composeEnterpriseArchitecture(intent: ArchitectureIntentGraph) {
       && after.edgeCrossings <= before.edgeCrossings
       && after.edgeOverlaps <= before.edgeOverlaps
       && candidate.routeDiagnostics.unrelatedFrameIntrusionLength <= baseline.routeDiagnostics.unrelatedFrameIntrusionLength
+      && candidate.routeDiagnostics.terminalNormalViolations <= baseline.routeDiagnostics.terminalNormalViolations
+      && candidate.routeDiagnostics.nonOrthogonalSegments <= baseline.routeDiagnostics.nonOrthogonalSegments
+      && candidate.routeDiagnostics.frameOverlaps <= baseline.routeDiagnostics.frameOverlaps
+      && candidate.routeDiagnostics.totalRouteLength <= baseline.routeDiagnostics.totalRouteLength * 1.2
+      && clippedTitles(candidate.scene) <= baselineClippedTitles
       && candidate.presentation.estimatedTitlePxAtFit >= baseline.presentation.estimatedTitlePxAtFit
       && candidate.scene.width <= baseline.scene.width * 1.42
       && candidate.scene.height <= baseline.scene.height * 1.3
@@ -128,7 +151,8 @@ export function composeEnterpriseArchitecture(intent: ArchitectureIntentGraph) {
     const byId = new Map(rerouted.elements.filter((item): item is CanvasArrow => item.type === 'arrow').map((item) => [item.id, item]))
     const scene: CanvasScene = {
       ...selected.scene,
-      elements: selected.scene.elements.map((item) => item.type === 'arrow' ? byId.get(item.id)! : item),
+      elements: selected.scene.elements.map((item) => item.type === 'arrow'
+        ? { ...byId.get(item.id)!, lineStyle: item.lineStyle, label: item.label, emphasis: item.emphasis } : item),
     }
     const quality = assessCanvasVisualQuality(scene)
     const routes = assessArchitectureRouteDiagnostics(scene)
@@ -139,6 +163,8 @@ export function composeEnterpriseArchitecture(intent: ArchitectureIntentGraph) {
       || after.labelOverflows > before.labelOverflows || after.edgeCrossings > before.edgeCrossings
       || after.edgeOverlaps > before.edgeOverlaps
       || routes.unrelatedFrameIntrusionLength > selected.routeDiagnostics.unrelatedFrameIntrusionLength
+      || routes.terminalNormalViolations > selected.routeDiagnostics.terminalNormalViolations
+      || routes.nonOrthogonalSegments > selected.routeDiagnostics.nonOrthogonalSegments
       || routes.totalRouteLength > selected.routeDiagnostics.totalRouteLength * 1.1) continue
     const score = (assessment: typeof quality) => assessment.metrics.edgeCrossings * 5 + assessment.metrics.edgeOverlaps * 2
     if (score(quality) >= score(best.quality)) continue
@@ -153,14 +179,14 @@ export function composeEnterpriseArchitecture(intent: ArchitectureIntentGraph) {
   return best
 }
 
-function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array<[string, ArchitectureIntentGraph['nodes']]>, gap: number) {
+function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array<[string, ArchitectureIntentGraph['nodes']]>, gap: number, requestedColumns?: number) {
   const maxLayerSize = Math.max(...entries.map(([, nodes]) => nodes.length))
   const compact = maxLayerSize <= 4
   const tightMatrix = intent.relations.length === 0
-  const columns = tightMatrix ? Math.min(6, Math.max(2, maxLayerSize)) : compact ? Math.max(2, maxLayerSize) : 4
-  const nodeWidth = tightMatrix ? 182 : compact ? 206 : 248
+  const columns = requestedColumns ?? (tightMatrix ? Math.min(6, Math.max(2, maxLayerSize)) : compact ? Math.max(2, maxLayerSize) : 4)
+  const nodeWidth = tightMatrix ? 182 : requestedColumns ? (requestedColumns >= 6 ? 190 : 220) : compact ? 206 : 248
   const nodeHeight = tightMatrix ? 70 : compact ? 74 : 88
-  const columnGap = tightMatrix ? 16 : compact ? 22 : 28
+  const columnGap = tightMatrix ? 16 : requestedColumns ? (requestedColumns >= 6 ? 14 : 20) : compact ? 22 : 28
   const rowGap = tightMatrix ? 18 : compact ? 22 : 24
   const leftInset = tightMatrix ? 192 : compact ? 202 : 220
   const topInset = tightMatrix ? 82 : compact ? 84 : 90
@@ -197,7 +223,7 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
     emphasis: primaryRelations.has(`${relation.from}\u0000${relation.to}`) ? 'primary'
       : intent.relations.length >= 32 ? 'muted' : 'secondary',
   }))
-  const scene = routeArchitectureEdges({
+  const routed = routeArchitectureEdges({
     ...template,
     groups: template.groups?.map((group, index) => ({ ...group, id: `__arch-layer-${index + 1}` })),
     width: Math.max(tightMatrix ? 680 : compact ? 800 : 1500, leftInset + columns * (nodeWidth + columnGap) + (tightMatrix ? 36 : 48)),
@@ -209,6 +235,9 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
     },
     elements: [...elements, ...arrows],
   })
+  const intendedStyles = new Map(arrows.map((arrow) => [arrow.id, arrow.lineStyle] as const))
+  const scene: CanvasScene = { ...routed, elements: routed.elements.map((item) => item.type === 'arrow'
+    ? { ...item, lineStyle: intendedStyles.get(item.id) ?? item.lineStyle } : item) }
   const quality = assessCanvasVisualQuality(scene)
   const routeDiagnostics = assessArchitectureRouteDiagnostics(scene)
   const presentation = assessArchitecturePresentation(scene)
