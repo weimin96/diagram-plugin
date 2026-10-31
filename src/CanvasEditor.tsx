@@ -2,7 +2,7 @@ import { routeArchitectureArrowIds, routeArchitectureEdges, routeArchitectureEdg
 import { canvasVisualSkin, canvasStyledBox, canvasFillTextColor, diagramVisualStyles, type DiagramVisualStyle } from './diagramVisualStyles.js'
 import { canvasArrowLabelText, fitCanvasText, layoutArchitectureCardText } from './canvasLabelText.js'
 import { canvasNodeRelations, resolveCanvasRelationshipFocus, searchCanvasRelations } from './canvasRelationshipFocus.js'
-import { canvasKeyDependencyLens, preferKeyDependencyLens } from './canvasDependencyLens.js'
+import { canvasKeyDependencyLens, canvasLayerDependencyLens, preferKeyDependencyLens } from './canvasDependencyLens.js'
 import { canvasArchitecturePlainTitleLines } from './canvasNodeTitleLayout.js'
 import { CanvasRectIndex } from './canvasRectIndex.js'
 import { canvasArrowCrossesViewport, MAX_CANVAS_ZOOM } from './canvasViewport.js'
@@ -438,12 +438,17 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   const [architectureScope, setArchitectureScope] = useState<CanvasArchitectureScope | null>(null)
   const [keyDependenciesOnly, setKeyDependenciesOnly] = useState(() =>
     parsed.scene ? preferKeyDependencyLens(parsed.scene) : false)
+  const [layerReadingId, setLayerReadingId] = useState<string | null>(null)
+  const layerReading = useMemo(() => parsed.scene && layerReadingId
+    ? canvasLayerDependencyLens(parsed.scene, layerReadingId) : null,
+  [parsed.scene, layerReadingId])
   const [relationQuery, setRelationQuery] = useState('')
   const keyDependencyLens = useMemo(() => parsed.scene?.architecture
     ? canvasKeyDependencyLens(parsed.scene) : null, [parsed.scene])
   useEffect(() => {
     // This is a per-diagram reading preference, not saved Canvas state.
     setKeyDependenciesOnly(parsed.scene ? preferKeyDependencyLens(parsed.scene) : false)
+    setLayerReadingId(null)
     setHoveredRelationId(null)
     setGuidedRelation(null)
     setRelationQuery('')
@@ -1325,8 +1330,10 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
       guidedEdge ? [guidedEdge.id] : selectedIds, hoveredRelationId, Boolean(traceResult))
     : null
   const keyDependencyActive = keyDependenciesOnly && Boolean(keyDependencyLens?.arrowIds.size)
-    && !relationFocus && !traceResult && tool === 'select'
+    && !layerReading && !relationFocus && !traceResult && tool === 'select'
     && !gesturePositionOverrides && !arrowPointDraft && !arrowEndpointPreview
+  const layerReadingActive = Boolean(layerReading && !relationFocus && !traceResult
+    && tool === 'select' && !gesturePositionOverrides && !arrowPointDraft && !arrowEndpointPreview)
   const relationshipFocusFrom = relationFocus ? projectedBoxLookup.get(relationFocus.from) : undefined
   const relationshipFocusTo = relationFocus ? projectedBoxLookup.get(relationFocus.to) : undefined
   const minimapVisible = minimapOpen ?? largeSceneViewportCulling
@@ -1835,6 +1842,18 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
     setSelectedGroupTarget(groupId)
     setSelectedIds(frame.memberIds)
     focusBoxes(frame.memberIds)
+  }
+
+  function toggleEnterpriseLayerReading(groupId: string) {
+    if (layerReadingId === groupId) {
+      setLayerReadingId(null)
+      setSelectedIds([])
+      setSelectedGroupTarget(null)
+      return
+    }
+    selectGroup(groupId)
+    setLayerReadingId(groupId)
+    setKeyDependenciesOnly(false)
   }
 
   function focusBoxes(ids: string[]) {
@@ -2829,14 +2848,14 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                     <div className="freeform-menu-grid two">
                       <button type="button" aria-pressed={!keyDependenciesOnly}
                         className={!keyDependenciesOnly ? 'is-selected' : ''}
-                        onClick={() => setKeyDependenciesOnly(false)}>全部</button>
+                        onClick={() => { setKeyDependenciesOnly(false); setLayerReadingId(null) }}>全部</button>
                       <button type="button" aria-pressed={keyDependenciesOnly}
                         disabled={!keyDependencyLens?.arrowIds.size}
                         title={keyDependencyLens?.arrowIds.size
                           ? `突出 ${keyDependencyLens.arrowIds.size} / ${keyDependencyLens.totalArrows} 条已有关键关系，全部关系仍保留`
                           : '当前图没有可证实的关键关系'}
                         className={keyDependenciesOnly ? 'is-selected' : ''}
-                        onClick={() => { setKeyDependenciesOnly(true); setHoveredRelationId(null); setSelectedIds([]) }}>关键</button>
+                        onClick={() => { setKeyDependenciesOnly(true); setLayerReadingId(null); setHoveredRelationId(null); setSelectedIds([]) }}>关键</button>
                     </div>
                   </section>
                   {sourceArrows.length ? (
@@ -3129,7 +3148,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   </>
 
   return (
-    <div ref={editorRef} className={`freeform-editor workbench-${workbench} architecture-view-${architectureProjection.view} architecture-density-${architectureProjection.density} architecture-theme-${architectureTheme}${scene.architecture?.diagramStyle === 'enterprise' ? ' architecture-diagram-enterprise' : ''} lod-${semanticLodLevel}${scene.architecture ? ' is-architecture-mode' : ''}${relationFocus ? ' has-relation-lens' : ''}${keyDependencyActive ? ' has-key-dependency-lens' : ''}${architectureScope ? ' has-architecture-scope' : ''}${playbackStep ? ' is-ai-playback' : ''}`} tabIndex={0} inert={!active || undefined} aria-label="自由画布编辑器" aria-busy={imageImporting || undefined} onPaste={handleEditorPaste}>
+    <div ref={editorRef} className={`freeform-editor workbench-${workbench} architecture-view-${architectureProjection.view} architecture-density-${architectureProjection.density} architecture-theme-${architectureTheme}${scene.architecture?.diagramStyle === 'enterprise' ? ' architecture-diagram-enterprise' : ''} lod-${semanticLodLevel}${scene.architecture ? ' is-architecture-mode' : ''}${relationFocus ? ' has-relation-lens' : ''}${keyDependencyActive ? ' has-key-dependency-lens' : ''}${layerReadingActive ? ' has-layer-dependency-lens' : ''}${architectureScope ? ' has-architecture-scope' : ''}${playbackStep ? ' is-ai-playback' : ''}`} tabIndex={0} inert={!active || undefined} aria-label="自由画布编辑器" aria-busy={imageImporting || undefined} onPaste={handleEditorPaste}>
       <div ref={surfaceRef} className="freeform-surface">
         <input
           ref={imageInputRef}
@@ -3147,7 +3166,19 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
         {keyDependencyActive && keyDependencyLens ? (
           <div className="freeform-relation-lens" aria-label="关键依赖阅读模式">
             <span>主链 {keyDependencyLens.arrowIds.size}/{keyDependencyLens.totalArrows}</span>
-            <button type="button" aria-label="显示全部依赖" onClick={() => setKeyDependenciesOnly(false)}>全部</button>
+            <button type="button" aria-label="显示全部依赖" onClick={() => { setKeyDependenciesOnly(false); setLayerReadingId(null) }}>全部</button>
+          </div>
+        ) : null}
+        {layerReadingActive && layerReading ? (
+          <div className="freeform-relation-lens is-layer" aria-label="当前分层真实依赖">
+            <span title={layerReading.label}>{layerReading.label}</span>
+            <span>关联 {layerReading.arrowIds.size}/{layerReading.totalArrows}</span>
+            <span className="freeform-guided-count">内 {layerReading.internal} · 入 {layerReading.inbound} · 出 {layerReading.outbound}</span>
+            <button type="button" aria-label="退出分层依赖聚焦" onClick={() => {
+              setLayerReadingId(null)
+              setSelectedIds([])
+              setSelectedGroupTarget(null)
+            }}>全部</button>
           </div>
         ) : null}
         {scene.architecture && selectedNodeRelations && selectedNodeEdges.length >= 2 && !traceResult
@@ -3523,14 +3554,26 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                   x={group.x} y={group.y} width={group.labelRailWidth ?? 132} height={group.height}
                   fill="transparent" pointerEvents="all"
                   role="button" tabIndex={0}
-                  aria-label={`查看${group.label}详情`}
-                  onClick={(event) => { event.stopPropagation(); selectGroup(group.id) }}
-                  onDoubleClick={(event) => { event.stopPropagation(); enterArchitectureScope({ kind: 'group', id: group.id }) }}
+                  aria-label={`聚焦${group.label}关联依赖，双击进入详情`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    toggleEnterpriseLayerReading(group.id)
+                  }}
+                  onDoubleClick={(event) => {
+                    event.stopPropagation()
+                    setLayerReadingId(null)
+                    enterArchitectureScope({ kind: 'group', id: group.id })
+                  }}
                   onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
+                    if (event.key === 'Enter') {
                       event.preventDefault()
                       event.stopPropagation()
+                      setLayerReadingId(null)
                       enterArchitectureScope({ kind: 'group', id: group.id })
+                    } else if (event.key === ' ') {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      toggleEnterpriseLayerReading(group.id)
                     }
                   }}
                 />
@@ -3580,9 +3623,10 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                   y: ((fromMove ? fromMove.y - fromOrigin!.y : 0) + (toMove ? toMove.y - toOrigin!.y : 0)) / 2 }
               : null
             return (
-              <g key={arrow.id} data-element-id={arrow.id} className={`freeform-arrow emphasis-${displayArrow.emphasis ?? 'secondary'}${standalone ? ' is-free-line' : ''}${displayArrow.freehand ? ' is-freehand' : ''}${displayArrow.bundleKey ? ' is-bundled' : ''}${displayArrow.bundleKey?.startsWith('group:') ? ' is-group-bundle' : ''}${keyDependencyActive ? keyDependencyLens?.arrowIds.has(arrow.id) ? ' is-key-dependency' : ' is-key-dimmed' : ''}${relationFocus ? relationFocus.id === arrow.id ? ' is-relation-focused' : ' is-relation-dimmed' : ''}${selectedIds.includes(arrow.id) ? ' is-selected' : ''}${insertTarget?.arrowId === arrow.id ? ' is-insert-target' : ''}${displayArrow.lineStyle === 'dashed' ? ' is-dashed' : displayArrow.lineStyle === 'dotted' ? ' is-dotted' : ''}${traceResult ? tracedArrowIds.has(arrow.id) ? ' is-traced' : ' is-trace-dimmed' : ''}${highlightedIds.has(arrow.id) ? ' is-updated' : ''}`} style={displayArrow.opacity !== undefined ? { opacity: displayArrow.opacity } : undefined} onPointerEnter={() => { if (scene.architecture && tool === 'select') setHoveredRelationId(arrow.id) }} onPointerLeave={() => setHoveredRelationId((current) => current === arrow.id ? null : current)} onContextMenu={(event) => openContextMenu(event, arrow.id)} onPointerDown={(event) => { event.stopPropagation(); setContextMenu(null); setSelectedGroupTarget(null); editorRef.current?.focus({ preventScroll: true }); setSelectedIds(event.shiftKey ? toggleCanvasSelection(selectedIds, arrow.id) : [arrow.id]) }}>
+              <g key={arrow.id} data-element-id={arrow.id} className={`freeform-arrow emphasis-${displayArrow.emphasis ?? 'secondary'}${standalone ? ' is-free-line' : ''}${displayArrow.freehand ? ' is-freehand' : ''}${displayArrow.bundleKey ? ' is-bundled' : ''}${displayArrow.bundleKey?.startsWith('group:') ? ' is-group-bundle' : ''}${keyDependencyActive ? keyDependencyLens?.arrowIds.has(arrow.id) ? ' is-key-dependency' : ' is-key-dimmed' : ''}${layerReadingActive ? layerReading!.arrowIds.has(arrow.id) ? ' is-layer-dependency' : ' is-layer-dimmed' : ''}${relationFocus ? relationFocus.id === arrow.id ? ' is-relation-focused' : ' is-relation-dimmed' : ''}${selectedIds.includes(arrow.id) ? ' is-selected' : ''}${insertTarget?.arrowId === arrow.id ? ' is-insert-target' : ''}${displayArrow.lineStyle === 'dashed' ? ' is-dashed' : displayArrow.lineStyle === 'dotted' ? ' is-dotted' : ''}${traceResult ? tracedArrowIds.has(arrow.id) ? ' is-traced' : ' is-trace-dimmed' : ''}${highlightedIds.has(arrow.id) ? ' is-updated' : ''}`} style={displayArrow.opacity !== undefined ? { opacity: displayArrow.opacity } : undefined} onPointerEnter={() => { if (scene.architecture && tool === 'select') setHoveredRelationId(arrow.id) }} onPointerLeave={() => setHoveredRelationId((current) => current === arrow.id ? null : current)} onContextMenu={(event) => openContextMenu(event, arrow.id)} onPointerDown={(event) => { event.stopPropagation(); setContextMenu(null); setSelectedGroupTarget(null); editorRef.current?.focus({ preventScroll: true }); setSelectedIds(event.shiftKey ? toggleCanvasSelection(selectedIds, arrow.id) : [arrow.id]) }}>
                 <CanvasArrowInk label={displayArrow.label ?? (scene.architecture && from && to ? `${from.text} → ${to.text}` : undefined)} path={path} markerEnd={displayArrow.markerEnd === 'none' ? undefined : 'url(#canvas-arrow)'} strokeColor={displayArrow.strokeColor || visualSkin ? displayArrow.strokeColor ?? visualSkin?.edge : undefined} strokeWidth={displayArrow.strokeWidth} />
-                {displayArrow.label && labelLayout && (!keyDependencyActive || keyDependencyLens?.arrowIds.has(arrow.id)) ? (
+                {displayArrow.label && labelLayout && (!keyDependencyActive || keyDependencyLens?.arrowIds.has(arrow.id))
+                  && (!layerReadingActive || layerReading?.arrowIds.has(arrow.id)) ? (
                   <g
                     className={`freeform-arrow-label${displayArrow.labelPosition || arrowLabelDraft?.id === arrow.id ? ' is-manual' : ''}`}
                     transform={movingLabel ? `translate(${movingLabel.x} ${movingLabel.y})` : undefined}
@@ -3681,7 +3725,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
             <g
               key={item.id}
               data-element-id={item.id}
-              className={`freeform-box freeform-${displayItem.type} tone-${displayItem.tone ?? 'default'} shape-${displayItem.shape ?? 'rounded'} emphasis-${displayItem.emphasis ?? 'secondary'}${proposalModule ? ' is-enterprise-module' : ''}${displayItem.type === 'note' && displayItem.textOnly ? ' is-text-only' : ''}${imagePath ? ' is-image' : ''}${architectureCard ? ` is-architecture-card card-kind-${cardTemplate.kind}` : ''}${architectureMark && !proposalModule ? ' is-architecture-mark' : ''}${displayItem.iconRef ? ' has-icon-ref' : displayItem.stencil ? ' has-stencil-logo' : ''}${displayItem.fillColor ? ' has-custom-fill' : ''}${displayItem.strokeColor ? ' has-custom-stroke' : ''}${displayItem.strokeWidth ? ' has-custom-stroke-width' : ''}${displayItem.locked ? ' is-locked' : ''}${selectedIds.includes(item.id) ? ' is-selected' : ''}${dragCollisionIds.has(item.id) ? ' is-collision' : ''}${connectFrom === item.id ? ' is-connect-source' : ''}${arrowEndpointPreview?.targetId === item.id ? ' is-reconnect-target' : ''}${keyDependencyActive && !keyDependencyLens?.nodeIds.has(item.id) ? ' is-key-dimmed' : ''}${relationFocus ? item.id === relationFocus.from ? ' is-relation-source' : item.id === relationFocus.to ? ' is-relation-target' : ' is-relation-dimmed' : ''}${traceResult ? tracedNodeIds.has(item.id) ? ` is-traced trace-depth-${Math.min(3, traceResult.distanceById[item.id] ?? 0)}` : ' is-trace-dimmed' : ''}${highlightedIds.has(item.id) ? ' is-updated' : ''}`}
+              className={`freeform-box freeform-${displayItem.type} tone-${displayItem.tone ?? 'default'} shape-${displayItem.shape ?? 'rounded'} emphasis-${displayItem.emphasis ?? 'secondary'}${proposalModule ? ' is-enterprise-module' : ''}${displayItem.type === 'note' && displayItem.textOnly ? ' is-text-only' : ''}${imagePath ? ' is-image' : ''}${architectureCard ? ` is-architecture-card card-kind-${cardTemplate.kind}` : ''}${architectureMark && !proposalModule ? ' is-architecture-mark' : ''}${displayItem.iconRef ? ' has-icon-ref' : displayItem.stencil ? ' has-stencil-logo' : ''}${displayItem.fillColor ? ' has-custom-fill' : ''}${displayItem.strokeColor ? ' has-custom-stroke' : ''}${displayItem.strokeWidth ? ' has-custom-stroke-width' : ''}${displayItem.locked ? ' is-locked' : ''}${selectedIds.includes(item.id) ? ' is-selected' : ''}${dragCollisionIds.has(item.id) ? ' is-collision' : ''}${connectFrom === item.id ? ' is-connect-source' : ''}${arrowEndpointPreview?.targetId === item.id ? ' is-reconnect-target' : ''}${keyDependencyActive && !keyDependencyLens?.nodeIds.has(item.id) ? ' is-key-dimmed' : ''}${layerReadingActive && !layerReading?.nodeIds.has(item.id) ? ' is-layer-dimmed' : ''}${relationFocus ? item.id === relationFocus.from ? ' is-relation-source' : item.id === relationFocus.to ? ' is-relation-target' : ' is-relation-dimmed' : ''}${traceResult ? tracedNodeIds.has(item.id) ? ` is-traced trace-depth-${Math.min(3, traceResult.distanceById[item.id] ?? 0)}` : ' is-trace-dimmed' : ''}${highlightedIds.has(item.id) ? ' is-updated' : ''}`}
               style={{ ...canvasBoxVisualStyle(displayItem), ...(skin && displayItem.type === 'node' ? { filter: skin.shadow, ...(selectedIds.includes(item.id) ? { '--canvas-box-stroke': 'var(--accent)' } : {}) } : {}) }}
               transform={`translate(${displayX} ${displayY})${displayItem.rotation ? ` rotate(${displayItem.rotation} ${displayItem.width / 2} ${displayItem.height / 2})` : ''}`}
               onContextMenu={(event) => openContextMenu(event, item.id)}

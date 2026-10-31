@@ -695,6 +695,29 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .freeform-editor.has-key-dependency-lens .freeform-arrow.is-key-dependency .freeform-arrow-line {
   stroke: var(--accent) !important; stroke-width: 3px !important; opacity: 1 !important;
 }
+.freeform-editor.is-architecture-mode.has-layer-dependency-lens .freeform-arrow.is-layer-dimmed {
+  opacity: .10 !important;
+}
+.freeform-editor.is-architecture-mode.has-layer-dependency-lens .freeform-box.is-layer-dimmed {
+  opacity: .54 !important;
+}
+.freeform-editor.is-architecture-mode.has-layer-dependency-lens .freeform-arrow.is-layer-dependency .freeform-arrow-line {
+  stroke: #487c99 !important;
+  stroke-width: 2.35px !important;
+  opacity: 1 !important;
+}
+:root[data-theme='dark'] .freeform-editor.is-architecture-mode.has-layer-dependency-lens .freeform-arrow.is-layer-dependency .freeform-arrow-line {
+  stroke: #a5c8df !important;
+}
+.freeform-relation-lens.is-layer {
+  max-width: min(96%, 560px);
+}
+.freeform-relation-lens.is-layer > span:first-child {
+  max-width: 170px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 .freeform-editor.is-architecture-mode.has-key-dependency-lens .freeform-arrow.is-key-dependency .freeform-arrow-line {
   stroke: #547c98 !important;
   stroke-width: 2.1px !important;
@@ -1478,6 +1501,15 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .freeform-editor.is-architecture-mode .freeform-group-frame.is-enterprise-band > rect:first-of-type {
   stroke-dasharray: none;
   opacity: 1;
+}
+.freeform-editor.is-architecture-mode .freeform-group-frame.is-enterprise-band.is-selected > rect:first-of-type {
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  stroke-dasharray: none;
+}
+.freeform-editor.is-architecture-mode .freeform-group-frame.is-enterprise-band.is-selected .freeform-enterprise-band-rail {
+  stroke: none;
+  stroke-dasharray: none;
 }
 .freeform-editor.is-architecture-mode .freeform-group-frame.is-enterprise-band .freeform-enterprise-band-label {
   fill: #36556c;

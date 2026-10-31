@@ -25,6 +25,45 @@ export function canvasKeyDependencyLens(scene: CanvasScene): {
   return { nodeIds, arrowIds: new Set(selectedArrows.map((arrow) => arrow.id)), totalArrows: arrows.length }
 }
 
+/** A layer's real inbound, outbound and internal relationships. Read-only:
+ * crossings remain actual edges and no grouping/bundling changes their IDs. */
+export function canvasLayerDependencyLens(scene: CanvasScene, groupId: string): {
+  groupId: string
+  label: string
+  nodeIds: ReadonlySet<string>
+  arrowIds: ReadonlySet<string>
+  internal: number
+  inbound: number
+  outbound: number
+  totalArrows: number
+} | null {
+  if (scene.architecture?.diagramStyle !== 'enterprise') return null
+  const group = scene.groups?.find((item) => item.id === groupId && item.labelSide === 'left')
+  if (!group) return null
+  const membership = new Map(scene.elements.filter((item): item is CanvasNode => item.type === 'node')
+    .map((node) => [node.id, node.groupId]))
+  const nodes = new Set([...membership].filter(([, id]) => id === groupId).map(([id]) => id))
+  if (!nodes.size) return null
+  const arrowIds = new Set<string>()
+  let internal = 0, inbound = 0, outbound = 0, totalArrows = 0
+  const connectedNodes = new Set(nodes)
+  for (const arrow of scene.elements) {
+    if (arrow.type !== 'arrow') continue
+    totalArrows++
+    if (!membership.has(arrow.from) || !membership.has(arrow.to)) continue
+    const from = nodes.has(arrow.from), to = nodes.has(arrow.to)
+    if (!from && !to) continue
+    arrowIds.add(arrow.id)
+    connectedNodes.add(arrow.from)
+    connectedNodes.add(arrow.to)
+    if (from && to) internal++
+    else if (from) outbound++
+    else inbound++
+  }
+  return { groupId, label: group.label || groupId,
+    nodeIds: connectedNodes, arrowIds, internal, inbound, outbound, totalArrows }
+}
+
 /** Complex architecture graphs open with a legible, evidence-backed reading
  * lens. Every source relation remains in the Canvas and can be shown via
  * “全部”; diagrams without verified primary edges open unchanged. */

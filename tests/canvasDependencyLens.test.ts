@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { canvasKeyDependencyLens, preferKeyDependencyLens } from '../src/canvasDependencyLens.js'
+import { canvasKeyDependencyLens, canvasLayerDependencyLens, preferKeyDependencyLens } from '../src/canvasDependencyLens.js'
 import { canvasSceneToSvg, serializeCanvasScene, type CanvasScene } from '../src/canvas.js'
 import { projectArchitectureCase } from '../scripts/architecture-project-cases.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
@@ -102,4 +102,19 @@ test('ordinary, unverified, or non-architectural scenes keep complete relation r
   assert.equal((overview.match(/<g opacity="0\.12"><title>/g) ?? []).length, 12,
     'secondary relations remain present but do not dominate the exported presentation')
   assert.equal(serializeCanvasScene(proposal), unchanged, 'reading mode cannot rewrite user-authored diagram coordinates')
+  const layer = canvasLayerDependencyLens(proposal, 'level0')
+  assert.ok(layer, 'a verified proposal layer can be read as a real dependency slice')
+  assert.deepEqual([...layer.arrowIds], ['r0', 'r1', 'r2', 'r3', 'r4', 'r12', 'r13', 'r14'])
+  assert.equal(layer.internal, 5)
+  assert.equal(layer.inbound, 0)
+  assert.equal(layer.outbound, 3)
+  assert.equal(layer.totalArrows, 15)
+  assert.ok(layer.nodeIds.has('p5') && !layer.nodeIds.has('p11'),
+    'downstream endpoints are emphasized without inventing a layer member')
+  assert.equal(canvasLayerDependencyLens(proposal, 'missing'), null)
+  assert.equal(canvasLayerDependencyLens({ ...proposal, architecture: {
+    theme: 'technical', diagramStyle: 'engineering',
+  } }, 'level0'), null, 'C4/engineering boundaries never inherit enterprise layer reading')
+  assert.equal(serializeCanvasScene(proposal), unchanged,
+    'switching layer reading never edits, removes or reorders any source relation')
 })
