@@ -689,6 +689,20 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .freeform-arrow.is-selected .freeform-arrow-line { stroke: var(--accent) !important; stroke-width: 3px !important; opacity: 1 !important; }
 .freeform-editor.has-relation-lens .freeform-arrow.is-relation-dimmed { opacity: .16 !important; }
 .freeform-editor.has-key-dependency-lens .freeform-arrow.is-key-dimmed { opacity: .16 !important; }
+/* Proposal modes adjust only what is emphasized on screen. Every relation
+   remains an actual editable CanvasArrow and is restored in dependency mode. */
+.freeform-editor.architecture-diagram-enterprise:not(.has-relation-lens):not(.has-layer-dependency-lens):not(.has-key-dependency-lens).architecture-proposal-mode-proposal .freeform-arrow.emphasis-secondary,
+.freeform-editor.architecture-diagram-enterprise:not(.has-relation-lens):not(.has-layer-dependency-lens):not(.has-key-dependency-lens).architecture-proposal-mode-proposal .freeform-arrow.emphasis-muted {
+  opacity: .20 !important;
+}
+.freeform-editor.architecture-diagram-enterprise:not(.has-relation-lens):not(.has-layer-dependency-lens):not(.has-key-dependency-lens).architecture-proposal-mode-capabilities .freeform-arrow.emphasis-secondary,
+.freeform-editor.architecture-diagram-enterprise:not(.has-relation-lens):not(.has-layer-dependency-lens):not(.has-key-dependency-lens).architecture-proposal-mode-capabilities .freeform-arrow.emphasis-muted {
+  opacity: .12 !important;
+}
+.freeform-editor.architecture-diagram-enterprise:not(.has-relation-lens):not(.has-layer-dependency-lens):not(.has-key-dependency-lens).architecture-proposal-mode-hybrid .freeform-arrow.emphasis-secondary,
+.freeform-editor.architecture-diagram-enterprise:not(.has-relation-lens):not(.has-layer-dependency-lens):not(.has-key-dependency-lens).architecture-proposal-mode-hybrid .freeform-arrow.emphasis-muted {
+  opacity: .52 !important;
+}
 .freeform-editor.has-key-dependency-lens .freeform-box.is-key-dimmed { opacity: .46 !important; }
 .freeform-editor.is-architecture-mode.has-key-dependency-lens .freeform-arrow.is-key-dimmed { opacity: .095 !important; }
 .freeform-editor.is-architecture-mode.has-key-dependency-lens .freeform-box.is-key-dimmed { opacity: .78 !important; }

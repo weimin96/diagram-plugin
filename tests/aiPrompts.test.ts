@@ -6,7 +6,7 @@ import { composeEnterpriseArchitecture } from '../src/enterpriseArchitecture.js'
 import { normalizeGeneratedArchitectureTerminals } from '../src/architectureRouteRepair.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { beautifyArchitectureScene } from '../src/architectureDesign.js'
-import { canvasArchitectureGroupPresentation, canvasArrowLabelLayouts, canvasEnterpriseModuleSvg, canvasEnterpriseModuleTextLayout, canvasGroupFrames, canvasPresentationGroupFrames, canvasSceneToSvg } from '../src/canvas.js'
+import { canvasArchitectureGroupPresentation, canvasArrowLabelLayouts, canvasEnterpriseModuleSvg, canvasEnterpriseModuleTextLayout, canvasGroupFrames, canvasPresentationGroupFrames, canvasSceneToSvg, parseCanvasScene, serializeCanvasScene, type CanvasNode } from '../src/canvas.js'
 import type { DiagramDocument } from '../src/types.js'
 
 test('builds a Canvas-specific generation contract without Mermaid instructions', () => {
@@ -109,7 +109,8 @@ test('architecture generation uses topology archetypes and a bounded quality loo
     type: 'canvas', architectureStyle: 'enterprise', title: '总体架构', scope: '', instructions: '',
   })
   assert.match(proposal, /architectureStyle=enterprise/)
-  assert.match(proposal, /layer 层名/)
+  assert.match(proposal, /每个 layer/)
+  assert.match(proposal, /gateway-band.*capability-chip.*resource-icon.*support-rail/)
   assert.doesNotMatch(proposal, /不要默认把所有组件排成等权卡片矩阵/)
 
   const intent = {
@@ -142,6 +143,56 @@ test('architecture generation uses topology archetypes and a bounded quality loo
     'module titles stay readable with the icon inside the available width')
   assert.doesNotMatch(canvasSceneToSvg(engineering.scene), /class="canvas-enterprise-module"/,
     'engineering/C4 cards must not inherit domestic proposal cell markup')
+  const composed = composeEnterpriseArchitecture({
+    title: '有证据的组合式方案',
+    proposalMode: 'proposal',
+    nodes: [
+      { id: 'entry', text: '客户端', layer: '访问入口', icon: 'web' },
+      { id: 'gateway', text: 'API网关', layer: '统一接入', icon: 'gateway', visualRole: 'gateway-band' },
+      { id: 'admin', text: '用户管理', layer: '服务中台', moduleGroup: '运营平台', visualRole: 'capability-chip' },
+      { id: 'role', text: '角色管理', layer: '服务中台', moduleGroup: '运营平台', visualRole: 'capability-chip' },
+      { id: 'ops', text: '运维', layer: '服务中台', visualRole: 'support-rail' },
+      { id: 'mysql', text: 'MySQL', layer: '数据资源', icon: 'database', visualRole: 'resource-icon' },
+    ],
+    relations: [
+      { from: 'entry', to: 'gateway' }, { from: 'gateway', to: 'admin' },
+      { from: 'admin', to: 'mysql' },
+    ],
+  })
+  const composedScene = composed.scene
+  const composedSvg = canvasSceneToSvg(composedScene)
+  assert.equal(composedScene.elements.filter((item) => item.type === 'node').length, 6)
+  assert.equal(composedScene.elements.filter((item) => item.type === 'arrow').length, 3)
+  assert.deepEqual(composedScene.elements.filter((item) => item.type === 'arrow')
+    .map((item) => [item.from, item.to]), [['entry', 'gateway'], ['gateway', 'admin'], ['admin', 'mysql']])
+  assert.equal(composedScene.architecture?.proposalMode, 'proposal')
+  assert.ok(composedScene.groups?.some((group) =>
+    group.label === '运营平台' && Boolean(group.parentId)), 'capability blocks live in a real editable nested group')
+  for (const role of ['gateway-band', 'capability-chip', 'support-rail', 'resource-icon']) {
+    assert.match(composedSvg, new RegExp(`proposal-${role}`))
+  }
+  assert.equal(composed.quality.metrics.nodeOverlaps, 0)
+  assert.equal(composedScene.elements.filter((item) => item.type === 'arrow'
+    && item.markerEnd === 'arrow').length, 3)
+  const reopened = parseCanvasScene(serializeCanvasScene(composedScene))
+  assert.deepEqual(reopened.elements.filter((item) => item.type === 'node').map((item) =>
+    [item.id, item.proposalRole, item.groupId, item.text]),
+  composedScene.elements.filter((item) => item.type === 'node').map((item) =>
+    [item.id, item.proposalRole, item.groupId, item.text]),
+  'all composed node roles, labels and membership survive reopening')
+  assert.deepEqual(reopened.elements.filter((item) => item.type === 'arrow').map((item) =>
+    [item.id, item.from, item.to, item.label, item.lineStyle]),
+  composedScene.elements.filter((item) => item.type === 'arrow').map((item) =>
+    [item.id, item.from, item.to, item.label, item.lineStyle]),
+  'all real directed relationships survive reopening')
+  assert.deepEqual(reopened.groups, composedScene.groups, 'verified parent-child capability membership survives reopening')
+  const dependencySvg = canvasSceneToSvg({
+    ...reopened, architecture: { ...reopened.architecture!, proposalMode: 'dependencies' },
+  })
+  assert.doesNotMatch(dependencySvg, /proposal-gateway-band|proposal-support-rail|proposal-resource-icon/,
+    'dependency view renders regular modules but retains original roles in data')
+  assert.equal(reopened.elements.find((item) => item.id === 'gateway')?.type, 'node')
+  assert.equal((reopened.elements.find((item) => item.id === 'gateway') as CanvasNode).proposalRole, 'gateway-band')
   const brandModule = canvasEnterpriseModuleSvg({
     id: 'redis', type: 'node', text: '缓存服务 Redis', subtitle: '热点数据 · 会话',
     x: 0, y: 0, width: 168, height: 82, icon: 'cache', stencil: 'redis',

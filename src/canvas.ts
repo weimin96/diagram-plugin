@@ -37,6 +37,9 @@ export type CanvasArchitectureDensity = 'auto' | 'comfortable' | 'compact' | 'de
 export type CanvasArchitectureScenario = 'enterprise-system' | 'microservices' | 'data-platform' | 'ai-agent' | 'deployment'
 export type CanvasWorkbenchMode = 'freeform' | 'architecture' | 'flowchart'
 export type CanvasArchitectureCardKind = 'actor' | 'entry' | 'compute' | 'messaging' | 'data' | 'external' | 'generic'
+/** How the same verified node is painted in a proposal. Does not change its identity or dependencies. */
+export type CanvasProposalRole = 'module' | 'gateway-band' | 'capability-chip' | 'resource-icon' | 'support-rail'
+export type CanvasProposalMode = 'proposal' | 'capabilities' | 'dependencies' | 'hybrid'
 export type CanvasArchitectureScopeKind = 'group' | 'lane' | 'node'
 export type CanvasIcon = CanvasRoleIconId
 export type CanvasStencil = CanvasStencilId
@@ -105,6 +108,8 @@ export interface CanvasScene {
     titleScale?: number
     /** Explicit author intent; distinct from the geometry engine's layout choice. */
     scenario?: CanvasArchitectureScenario
+    /** Domestic proposal reading strategy; never changes real arrow topology. */
+    proposalMode?: CanvasProposalMode
   }
 }
 
@@ -121,6 +126,7 @@ export interface CanvasNode {
   shapeRef?: CanvasShapeRef
   locked?: boolean
   groupId?: string
+  proposalRole?: CanvasProposalRole
   sourcePaths?: string[]
   icon?: CanvasIcon
   stencil?: CanvasStencil
@@ -461,13 +467,19 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
       ? (arrow.emphasis === 'primary' ? 2.6 : arrow.emphasis === 'muted' ? 1.7 : 2.1) * architectureProfile.edgeScale
       : arrow.emphasis === 'primary' ? 3.2 : arrow.emphasis === 'muted' ? 1.35 : 2)
     const groupBundle = architectureMode && arrow.bundleKey?.startsWith('group:')
-    const opacity = arrow.opacity ?? (keyRelations && !keyRelations.arrowIds.has(arrow.id)
+    const profileOpacity = scene.architecture?.diagramStyle === 'enterprise'
+      && scene.architecture.proposalMode && scene.architecture.proposalMode !== 'dependencies'
+      && arrow.emphasis !== 'primary'
+      ? scene.architecture.proposalMode === 'hybrid' ? 0.52
+        : scene.architecture.proposalMode === 'capabilities' ? 0.12 : 0.20
+      : 1
+    const opacity = Number(arrow.opacity !== undefined ? arrow.opacity : keyRelations && !keyRelations.arrowIds.has(arrow.id)
       ? '0.12' : architectureMode
       ? groupBundle
         ? arrow.emphasis === 'muted' ? darkArchitecture ? '0.24' : '0.20' : arrow.emphasis === 'secondary' ? darkArchitecture ? '0.56' : '0.48' : darkArchitecture ? '0.84' : '0.78'
         : arrow.emphasis === 'muted' ? denseKeyReading ? '0.30' : '0.62'
           : arrow.emphasis === 'secondary' ? denseKeyReading ? '0.48' : '0.90' : '1'
-      : arrow.emphasis === 'muted' ? '0.48' : arrow.emphasis === 'secondary' ? '0.78' : '1')
+      : arrow.emphasis === 'muted' ? '0.48' : arrow.emphasis === 'secondary' ? '0.78' : '1') * profileOpacity
     const stroke = arrow.strokeColor ?? visualSkin?.edge ?? (architectureMode ? architectureBorder : border)
     const visibleLabel = keyRelations && !keyRelations.arrowIds.has(arrow.id)
       ? undefined : architectureMode && arrow.label && !canvasArchitectureRelationLabelVisible(arrow) ? undefined : arrow.label
@@ -534,7 +546,8 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
     }
     const architectureCard = item.type === 'node' && Boolean(item.iconRef || item.icon || item.stencil || item.c4Type)
     if (architectureMode && scene.architecture?.diagramStyle === 'enterprise' && item.type === 'node' && !item.shapeRef)
-      return wrapRotation(canvasEnterpriseModuleSvg(item, darkArchitecture, projection.view !== 'overview'))
+      return wrapRotation(canvasEnterpriseModuleSvg(scene.architecture.proposalMode === 'dependencies'
+        ? { ...item, proposalRole: 'module' } : item, darkArchitecture, projection.view !== 'overview'))
     if (architectureMode && architectureCard) return wrapRotation(renderArchitectureCanvasNode(item,
       { ...palette, text: item.fillColor ? palette.text : darkArchitecture ? '#f8fafc' : '#243247' },
       projection.density, architectureTheme, skin?.font, scene.architecture?.titleScale ?? 1,
@@ -1368,6 +1381,9 @@ export function canvasPresentationGroupFrames(
   const enterpriseBands = scene.architecture.diagramStyle === 'enterprise'
     ? frames.filter((frame) => frame.labelSide === 'left' && !frame.parentId && !frame.collapsed)
     : []
+  const mixedProposal = scene.architecture.diagramStyle === 'enterprise'
+    && scene.elements.some((item) => item.type === 'node'
+      && item.proposalRole && item.proposalRole !== 'module')
   const bandLeft = Math.min(...enterpriseBands.map((frame) => frame.x))
   const bandRight = Math.max(...enterpriseBands.map((frame) => frame.x + frame.width))
   const desiredRailWidth = Math.max(132, ...enterpriseBands.map((frame) =>
@@ -1384,8 +1400,8 @@ export function canvasPresentationGroupFrames(
       ...frame,
       x: bandLeft - railWidth,
       width: bandRight - bandLeft + railWidth,
-      y: frame.y + 24,
-      height: bandHeight,
+      y: frame.y + (mixedProposal ? 4 : 24),
+      height: mixedProposal ? Math.max(66, frame.height - 12) : bandHeight,
       labelRailWidth: railWidth,
     }
     const generatedRegion = /^arch-(external|experience|application|processing|data)$/.test(frame.id)
@@ -1691,6 +1707,9 @@ export function canvasEnterpriseModuleTextLayout(item: CanvasNode, showSubtitle:
  * and no title shrinkage to make room for decoration.
  */
 export function canvasEnterpriseModuleSvg(item: CanvasNode, dark: boolean, showSubtitle: boolean): string {
+  if (item.proposalRole && item.proposalRole !== 'module') {
+    return canvasEnterpriseProposalPrimitiveSvg(item, dark, showSubtitle)
+  }
   const template = canvasArchitectureCardTemplate(item)
   const category = ({
     actor: ['#607c96', '#eaf0f5'], external: ['#66788b', '#eef1f5'],
@@ -1718,6 +1737,56 @@ export function canvasEnterpriseModuleSvg(item: CanvasNode, dark: boolean, showS
   const text = (lines: string[], top: number, size: number, lineHeight: number, weight: number, opacity = 1) =>
     lines.length ? `<text x="${textX}" y="${item.y + top}" font-size="${size}" font-weight="${weight}" style="fill:${escapeXml(ink)}" opacity="${opacity}">${lines.map((line, index) => `<tspan x="${textX}" dy="${index ? lineHeight : 0}">${escapeXml(line)}</tspan>`).join('')}</text>` : ''
   return `<g class="canvas-enterprise-module" opacity="${item.opacity ?? 1}"><title>${escapeXml([item.text, item.subtitle, item.description].filter(Boolean).join(' · '))}</title><rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="3" style="fill:${escapeXml(fill)};stroke:${escapeXml(border)};stroke-width:${item.strokeWidth ?? (primary ? 1.6 : 1)}"/>${hasIcon ? `<rect x="${tileX}" y="${tileY}" width="${tile}" height="${tile}" rx="5" style="fill:${dark ? '#3b4b5b' : category[1]};stroke:none"/>${brand}` : ''}${text(typography.titleLines, typography.titleY, typography.titleFontSize, typography.titleLineHeight, item.fontWeight ?? (primary ? 720 : 650))}${text(typography.subtitleLines, typography.subtitleY, typography.subtitleFontSize, typography.subtitleLineHeight, 500, .8)}</g>`
+}
+
+/** Distinct visual grammar for author-confirmed proposal roles. All variants
+ * remain ordinary, independently editable Canvas nodes with the same bounds,
+ * ports, stable IDs and persisted semantic metadata. */
+function canvasEnterpriseProposalPrimitiveSvg(item: CanvasNode, dark: boolean, showSubtitle: boolean): string {
+  const role = item.proposalRole!
+  const title = escapeXml([item.text, item.subtitle, item.description].filter(Boolean).join(' · '))
+  const ink = escapeXml(item.textColor ?? (dark ? '#f1f5fb' : '#263950'))
+  const common = `x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}"`
+  const label = (text: string, x: number, y: number, size: number, weight: number, anchor: 'start' | 'middle' = 'middle') =>
+    `<text x="${x}" y="${y}" text-anchor="${anchor}" font-size="${size}" font-weight="${weight}" fill="${ink}">${escapeXml(text)}</text>`
+  const center = item.x + item.width / 2
+  const tint = dark ? '#344c5f' : '#dbeafa'
+  const stroke = dark ? '#7396b4' : '#8cacc7'
+  const icon = (size: number, x: number, y: number) => item.iconRef
+    ? architectureIconRefMark(item.iconRef, x, y, size, '#207bba', dark)
+    : item.stencil
+      ? architectureStencilMark(item.stencil, x, y, size, '#207bba', dark)
+      : item.icon
+        ? `<g transform="translate(${x} ${y}) scale(${size / 24})" fill="none" stroke="${dark ? '#8ad7ef' : '#0b99bd'}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${canvasIconPaths(item.icon).map((path) => `<path d="${path}"/>`).join('')}</g>`
+        : ''
+  const painted = (body: string) => `<g class="canvas-enterprise-module proposal-${role}" opacity="${item.opacity ?? 1}"><title>${title}</title>${body}</g>`
+  if (role === 'gateway-band') {
+    const full = layoutArchitectureCardText(item.text, showSubtitle ? item.subtitle : undefined,
+      item.width - 36, item.height, 17, 700)
+    const brand = (item.icon || item.iconRef || item.stencil) ? icon(25, item.x + 20, item.y + (item.height - 25) / 2) : ''
+    const x = brand ? item.x + 58 : center
+    const anchor = brand ? 'start' : 'middle'
+    return painted(`<rect ${common} rx="2" fill="${item.fillColor ?? (dark ? '#66552a' : '#fbd36d')}" stroke="${item.strokeColor ?? '#dbaa3e'}" stroke-width="1.2"/>${brand}${full.titleLines.map((line, i) => label(line, x, item.y + full.titleY + i * full.titleLineHeight, full.titleFontSize, 700, anchor)).join('')}`)
+  }
+  if (role === 'support-rail') {
+    const chars = Array.from(item.text)
+    const heightPerChar = Math.min(23, (item.height - 28) / Math.max(1, chars.length))
+    const vertical = chars.length <= 12 && heightPerChar >= 15
+    return painted(`<rect ${common} rx="2" fill="${item.fillColor ?? (dark ? '#315b46' : '#b8dfc7')}" stroke="${item.strokeColor ?? '#6aa986'}" stroke-width="1.2"/>${vertical
+      ? chars.map((char, i) => label(char, center, item.y + (item.height - (chars.length - 1) * heightPerChar) / 2 + i * heightPerChar + 5, 16, 700)).join('')
+      : `<g transform="translate(${center} ${item.y + item.height / 2}) rotate(-90)">${label(item.text, 0, 5, 16, 700)}</g>`}`)
+  }
+  if (role === 'resource-icon') {
+    const size = Math.min(35, Math.max(22, item.height * .39))
+    const brand = icon(size, center - size / 2, item.y + Math.max(8, item.height * .13))
+    const typography = layoutArchitectureCardText(item.text, undefined, item.width - 18, item.height, 14, 650)
+    return painted(`<rect ${common} rx="2" fill="${item.fillColor ?? (dark ? '#334b50' : '#e2f1ef')}" stroke="${item.strokeColor ?? '#b7d4cb'}" stroke-width="1"/>${brand}${typography.titleLines.map((line, i) => label(line, center, item.y + item.height - 16 - (typography.titleLines.length - i - 1) * 16, 14, 650)).join('')}`)
+  }
+  // Lightweight functional unit inside an actual nested Canvas group.
+  const lines = layoutArchitectureCardText(item.text, showSubtitle ? item.subtitle : undefined,
+    item.width - 14, item.height, 14, 600)
+  return painted(`<rect ${common} rx="1" fill="${item.fillColor ?? (dark ? '#3a5270' : '#bdcafa')}" stroke="${item.strokeColor ?? '#9fb4e8'}" stroke-width="1"/>${lines.titleLines.map((line, i) =>
+    label(line, center, item.y + lines.titleY + i * lines.titleLineHeight, lines.titleFontSize, 600)).join('')}`)
 }
 
 function renderArchitectureCanvasNode(
@@ -1936,6 +2005,8 @@ function normalizeArchitectureAppearance(value: unknown): CanvasScene['architect
     ...(typeof item.titleScale === 'number' && Number.isFinite(item.titleScale) && item.titleScale >= 1 && item.titleScale <= 1.35 ? { titleScale: item.titleScale } : {}),
     ...(typeof item.scenario === 'string' && scenarios.includes(item.scenario as CanvasArchitectureScenario)
       ? { scenario: item.scenario as CanvasArchitectureScenario } : {}),
+    ...(['proposal', 'capabilities', 'dependencies', 'hybrid'].includes(String(item.proposalMode))
+      ? { proposalMode: item.proposalMode as CanvasProposalMode } : {}),
   }
 }
 
@@ -2002,6 +2073,7 @@ function normalizeCanvasElement(item: CanvasElement): CanvasElement {
   const icons: readonly CanvasIcon[] = CANVAS_ROLE_ICON_IDS
   const stencils: readonly CanvasStencil[] = CANVAS_STENCIL_IDS
   const c4Types: CanvasC4Type[] = ['person', 'software-system', 'container', 'component']
+  const proposalRoles: CanvasProposalRole[] = ['module', 'gateway-band', 'capability-chip', 'resource-icon', 'support-rail']
   return {
     id: item.id,
     type: item.type,
@@ -2015,6 +2087,8 @@ function normalizeCanvasElement(item: CanvasElement): CanvasElement {
     ...(isCanvasShapeRef(item.shapeRef) ? { shapeRef: item.shapeRef } : {}),
     ...(item.locked === true ? { locked: true } : {}),
     ...(typeof item.groupId === 'string' && item.groupId.trim() ? { groupId: item.groupId.trim() } : {}),
+    ...(item.type === 'node' && proposalRoles.includes(item.proposalRole as CanvasProposalRole)
+      ? { proposalRole: item.proposalRole as CanvasProposalRole } : {}),
     ...(Array.isArray(item.sourcePaths) ? { sourcePaths: item.sourcePaths.filter((path) => typeof path === 'string' && path.trim()).map((path) => path.trim()).slice(0, 12) } : {}),
     ...(item.icon && icons.includes(item.icon) ? { icon: item.icon } : {}),
     ...(item.stencil && stencils.includes(item.stencil) ? { stencil: item.stencil } : {}),

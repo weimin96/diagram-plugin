@@ -901,6 +901,8 @@ server.registerTool('diagram.composeArchitecture', {
     density: z.enum(['auto', 'comfortable', 'compact', 'dense']).default('auto'),
     visualScenario: z.enum(['enterprise-system', 'microservices', 'data-platform', 'ai-agent', 'deployment'])
       .optional().describe('Choose only when explicitly stated by the user or confirmed by the project. Independent of the layout algorithm.'),
+    proposalMode: z.enum(['proposal', 'capabilities', 'dependencies', 'hybrid']).optional()
+      .describe('Domestic enterprise scheme only: proposal overview, capability decomposition, dependency detail, or overview plus key calls. Defaults to proposal when explicitly given semantic roles; otherwise preserves the existing diagram.'),
     primaryPath: z.array(z.string().min(1)).min(2).max(30).optional()
       .describe('Verified directed node chain from entry to outcome, in reading order; every adjacent pair MUST have an actual relation. Omit when unknown. Never invent edges to satisfy this.'),
     style: z.enum(diagramVisualStyles.map((style) => style.id) as [string, ...string[]]).optional().describe('Optional one unified visual theme. Defaults to a restrained, low-saturation professional preset rather than bright card walls.'),
@@ -916,6 +918,10 @@ server.registerTool('diagram.composeArchitecture', {
       partition: z.enum(['external', 'experience', 'application', 'processing', 'data']).optional()
         .describe('Functional region confirmed by source or user. Omit unknown instead of guessing.'),
       layer: z.string().trim().min(1).max(32).optional().describe('Actual verified layer name for enterprise proposal style, e.g. 业务应用层. Do not invent fixed layers.'),
+      visualRole: z.enum(['module', 'gateway-band', 'capability-chip', 'resource-icon', 'support-rail']).optional()
+        .describe('Choose from verified visual semantics; gateway-band for a real single access gateway, resource-icon for real infrastructure, support-rail for cross-cutting capability. Do not assign by keyword or appearance alone.'),
+      moduleGroup: z.string().trim().min(1).max(50).optional()
+        .describe('Verified capability container within the same layer, e.g. an actual admin platform domain; children remain separately editable real nodes.'),
     })).min(2).max(80),
     relations: z.array(z.object({
       from: z.string().min(1),
@@ -925,8 +931,8 @@ server.registerTool('diagram.composeArchitecture', {
     })).max(160).describe('Only real dependencies between nodes. An empty array is valid for a functional architecture without verified cross-module calls; never invent edges.'),
   }),
   annotations: write,
-}, async ({ workspacePath, title, architectureStyle, theme, density, visualScenario, primaryPath, style, nodes, relations }, extra) => {
-  const intent = { title, theme, density, visualScenario, primaryPath, style: style as typeof diagramVisualStyles[number]['id'] | undefined, nodes, relations }
+}, async ({ workspacePath, title, architectureStyle, theme, density, visualScenario, proposalMode, primaryPath, style, nodes, relations }, extra) => {
+  const intent = { title, theme, density, visualScenario, proposalMode, primaryPath, style: style as typeof diagramVisualStyles[number]['id'] | undefined, nodes, relations }
   const composed = architectureStyle === 'enterprise' ? composeEnterpriseArchitecture(intent) : composeArchitectureGraph(intent)
   assertArchitectureLayoutTransition(undefined, composed.scene, architectureLayoutContract('generate'))
   const store = await resolveStore(workspacePath, toolThreadId(extra._meta))

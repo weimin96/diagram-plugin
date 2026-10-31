@@ -3,7 +3,7 @@ import { annotateSourceFanoutTrunks, proposeIngressPortSlots, restoreArchitectur
 import { beautifyArchitectureScene, inferArchitectureComposition, type ArchitectureComposition, type ArchitecturePartition, type ArchitectureTheme } from './architectureDesign.js'
 import { assessCanvasVisualQuality, type CanvasVisualQualityAssessment } from './canvasQuality.js'
 import type { DiagramVisualStyle } from './diagramVisualStyles.js'
-import { canvasArrowBoxRoute, canvasBundleTrunks, canvasSharedSourceStem, type CanvasArchitectureDensity, type CanvasArchitectureScenario, type CanvasArrow, type CanvasIcon, type CanvasNode, type CanvasScene, type CanvasStencil } from './canvas.js'
+import { canvasArrowBoxRoute, canvasBundleTrunks, canvasSharedSourceStem, type CanvasArchitectureDensity, type CanvasArchitectureScenario, type CanvasProposalMode, type CanvasProposalRole, type CanvasArrow, type CanvasIcon, type CanvasNode, type CanvasScene, type CanvasStencil } from './canvas.js'
 import { assessArchitecturePresentation, recommendArchitectureTitleScale } from './architecturePresentationQuality.js'
 import { assessArchitectureRouteDiagnostics } from './architectureRouteDiagnostics.js'
 import { planArchitectureVisual, rankArchitectureOverlapHotspots } from './architectureVisualPlan.js'
@@ -16,6 +16,8 @@ export interface ArchitectureIntentGraph {
   style?: DiagramVisualStyle
   /** A stated user scenario, never inferred from pixel geometry. */
   visualScenario?: CanvasArchitectureScenario
+  /** Explicit audience/presentation goal, not a topology claim. */
+  proposalMode?: CanvasProposalMode
   /** Ordered, verified directed relationships; unknown path means automatic inference. */
   primaryPath?: string[]
   nodes: Array<{
@@ -30,6 +32,10 @@ export interface ArchitectureIntentGraph {
     partition?: ArchitecturePartition
     /** Verified display layer for enterprise proposal-style architecture diagrams. */
     layer?: string
+    /** Optional user/source-confirmed presentation role. */
+    visualRole?: CanvasProposalRole
+    /** Real capability domain, not a decorative container inferred from keywords. */
+    moduleGroup?: string
   }>
   relations: Array<{
     from: string

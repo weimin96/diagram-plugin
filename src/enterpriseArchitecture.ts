@@ -78,6 +78,11 @@ export function composeEnterpriseArchitecture(intent: ArchitectureIntentGraph) {
     }
   }
   const originalEntries = [...layers.entries()]
+  // Explicit composition roles cannot be evaluated using the plain-card
+  // permutations: a platform container and an access bar have real geometry.
+  if (intent.nodes.some((node) => node.visualRole || node.moduleGroup)) {
+    return composeLayeredCandidate(intent, originalEntries, bandGap)
+  }
   if (intent.relations.length < 2) return composeLayeredCandidate(intent, originalEntries, bandGap)
   const connectedOrder = orderConnectedModules(originalEntries, intent.relations, 1)
   const reordered = connectedOrder.some(([, nodes], layer) => nodes.some((node, index) =>
@@ -206,13 +211,101 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
   const primaryNodes = new Set(intent.primaryPath ?? [])
   const primaryStroke = canvasVisualSkin(intent.style ?? 'ocean', false, 'accent')?.stroke
   const elements: CanvasScene['elements'] = []
+  const nestedGroups: NonNullable<CanvasScene['groups']> = []
   let y = topInset
   for (const [layerIndex, [, nodes]] of entries.entries()) {
+    const explicit = nodes.some((node) => node.visualRole || node.moduleGroup)
+      || (intent.proposalMode === 'proposal' || intent.proposalMode === 'capabilities'
+        || intent.proposalMode === 'hybrid')
+    const layerId = `__arch-layer-${layerIndex + 1}`
+    if (explicit) {
+      const railMembers = nodes.filter((node) => node.visualRole === 'support-rail')
+      const mainMembers = nodes.filter((node) => node.visualRole !== 'support-rail')
+      const available = 1100 - railMembers.length * 106
+      const xStart = leftInset
+      const sections = new Map<string, typeof nodes>()
+      for (const node of mainMembers) {
+        const groupKey = node.moduleGroup ? `group:${node.moduleGroup}` : `single:${node.id}`
+        sections.set(groupKey, [...(sections.get(groupKey) ?? []), node])
+      }
+      let rowY = y
+      const grouped = [...sections.entries()].filter(([key]) => key.startsWith('group:'))
+      const singles = mainMembers.filter((node) => !node.moduleGroup)
+      if (grouped.length) {
+        const sectionColumns = Math.min(3, grouped.length)
+        const sectionWidth = Math.floor((available - (sectionColumns - 1) * 20) / sectionColumns)
+        const rowHeights = Array.from({ length: Math.ceil(grouped.length / sectionColumns) },
+          (_, row) => Math.max(...grouped.slice(row * sectionColumns, (row + 1) * sectionColumns)
+            .map(([, members]) => 50 + Math.ceil(members.length / Math.min(3, members.length)) * 68)))
+        let groupRowHeight = 0
+        grouped.forEach(([key, members], groupIndex) => {
+          const inRow = Math.min(3, members.length)
+          const sectionHeight = 50 + Math.ceil(members.length / inRow) * 68
+          const sectionX = xStart + (groupIndex % sectionColumns) * (sectionWidth + 20)
+          const sectionRow = Math.floor(groupIndex / sectionColumns)
+          const sectionY = rowY + rowHeights.slice(0, sectionRow)
+            .reduce((sum, height) => sum + height + 18, 0)
+          const sectionId = `__arch-section-${layerIndex + 1}-${groupIndex + 1}`
+          nestedGroups.push({
+            id: sectionId, label: key.slice(6), parentId: layerId,
+            kind: 'boundary', fillColor: '#eef1fb',
+          })
+          members.forEach((node, nodeIndex) => {
+            const row = Math.floor(nodeIndex / inRow)
+            const lastRowCount = Math.min(inRow, members.length - row * inRow)
+            const rowWidth = Math.floor((sectionWidth - 40 - (lastRowCount - 1) * 10) / lastRowCount)
+            const { layer: _layer, partition: _partition, visualRole, moduleGroup: _moduleGroup, ...metadata } = node
+            elements.push({
+              ...metadata, id: node.id, type: 'node', groupId: sectionId,
+              proposalRole: visualRole ?? 'capability-chip', fontSize: 14,
+              x: sectionX + 20 + (nodeIndex % inRow) * (rowWidth + 10),
+              y: sectionY + 32 + row * 68,
+              width: rowWidth, height: 54,
+            })
+          })
+          groupRowHeight = Math.max(groupRowHeight, sectionY - rowY + sectionHeight + 18)
+        })
+        rowY += groupRowHeight + 6
+      }
+      if (singles.length) {
+        const band = singles.length === 1 && singles[0].visualRole === 'gateway-band'
+        const infrastructure = singles.every((node) => node.visualRole === 'resource-icon')
+        const perRow = band ? 1 : Math.min(infrastructure ? 5 : 4, singles.length)
+        const spacing = 18
+        const cardWidth = band ? available : infrastructure ? 174
+          : Math.min(230, Math.floor((available - (perRow - 1) * spacing) / perRow))
+        const cardHeight = band ? 62 : infrastructure ? 98 : 78
+        singles.forEach((node, index) => {
+          const { layer: _layer, partition: _partition, visualRole, moduleGroup: _moduleGroup, ...metadata } = node
+          elements.push({
+            ...metadata, id: node.id, type: 'node', groupId: layerId,
+            proposalRole: visualRole ?? 'module', fontSize: 15,
+            x: band ? xStart : xStart + ((index % perRow) + .5) * (available / perRow) - cardWidth / 2,
+            y: rowY + Math.floor(index / perRow) * (cardHeight + 16),
+            width: cardWidth, height: cardHeight,
+          })
+        })
+        rowY += Math.ceil(singles.length / perRow) * (cardHeight + 16)
+      }
+      const layerHeight = Math.max(96, rowY - y + 8)
+      railMembers.forEach((node, index) => {
+        const { layer: _layer, partition: _partition, visualRole: _role, moduleGroup: _moduleGroup, ...metadata } = node
+        elements.push({
+          ...metadata, id: node.id, type: 'node', groupId: layerId,
+          proposalRole: 'support-rail', fontSize: 15,
+          x: xStart + available + index * 106 + 18, y,
+          width: 82, height: layerHeight,
+        })
+      })
+      y += layerHeight + gap + 20
+      continue
+    }
     nodes.forEach((node, nodeIndex) => {
       const seed = templateNodes.get(`layer-${layerIndex + 1}-${nodeIndex + 1}`)!
-      const { layer: _layer, partition: _partition, ...metadata } = node
+      const { layer: _layer, partition: _partition, visualRole, moduleGroup: _moduleGroup, ...metadata } = node
       elements.push({
         ...seed, ...metadata, id: node.id, groupId: `__arch-layer-${layerIndex + 1}`,
+        ...(visualRole ? { proposalRole: visualRole } : {}),
         fontSize: 15,
         ...(primaryNodes.has(node.id) ? { emphasis: 'primary' as const, strokeColor: primaryStroke, strokeWidth: 2 } : {}),
         x: leftInset + (nodeIndex % columns) * (nodeWidth + columnGap),
@@ -232,13 +325,15 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
   }))
   const routed = routeArchitectureEdges({
     ...template,
-    groups: template.groups?.map((group, index) => ({ ...group, id: `__arch-layer-${index + 1}` })),
+    groups: [...(template.groups?.map((group, index) => ({ ...group, id: `__arch-layer-${index + 1}` })) ?? []), ...nestedGroups],
     width: Math.max(tightMatrix ? 680 : compact ? 800 : 1500, leftInset + columns * (nodeWidth + columnGap) + (tightMatrix ? 36 : 48)),
     height: Math.max(tightMatrix ? 480 : compact ? 520 : 720, y + (tightMatrix ? 22 : compact ? 24 : 40)),
     style: intent.style ?? 'ocean',
     architecture: {
       theme: intent.theme ?? 'presentation', diagramStyle: 'enterprise', view: 'detail', density: intent.density ?? 'auto',
       ...(intent.visualScenario ? { scenario: intent.visualScenario } : {}),
+      ...(intent.proposalMode || intent.nodes.some((node) => node.visualRole || node.moduleGroup)
+        ? { proposalMode: intent.proposalMode ?? 'proposal' } : {}),
     },
     elements: [...elements, ...arrows],
   })

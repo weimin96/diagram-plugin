@@ -250,12 +250,13 @@ function relationLabelScene(scene: CanvasScene, architecture: boolean, level: Ca
 }
 
 
-const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, darkTheme, architecture, proposal, architectureTheme, architectureView, density, titleScale, level, selected, imageSource }: {
+const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, darkTheme, architecture, proposal, proposalMode, architectureTheme, architectureView, density, titleScale, level, selected, imageSource }: {
   item: CanvasNode | CanvasNote
   visualStyle?: DiagramVisualStyle
   darkTheme: boolean
   architecture: boolean
   proposal?: boolean
+  proposalMode?: NonNullable<CanvasScene['architecture']>['proposalMode']
   architectureTheme?: ArchitectureTheme
   architectureView?: CanvasArchitectureView
   density: CanvasArchitectureDensity
@@ -273,7 +274,9 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
   if (proposal && displayItem.type === 'node') {
     return <g dangerouslySetInnerHTML={{
       __html: canvasEnterpriseModuleSvg(
-        { ...displayItem, x: 0, y: 0 }, darkTheme, architectureView !== 'overview' && level === 'detail',
+        { ...displayItem, x: 0, y: 0,
+          ...(proposalMode === 'dependencies' ? { proposalRole: 'module' as const } : {}) },
+        darkTheme, architectureView !== 'overview' && level === 'detail',
       ),
     }} />
   }
@@ -1398,7 +1401,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
     })
   }
 
-  function updateArchitectureAppearance(patch: { view?: CanvasArchitectureView; density?: CanvasArchitectureDensity }) {
+  function updateArchitectureAppearance(patch: { view?: CanvasArchitectureView; density?: CanvasArchitectureDensity; proposalMode?: NonNullable<CanvasScene['architecture']>['proposalMode'] }) {
     const current = currentScene()
     commit({
       ...current,
@@ -1408,6 +1411,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
         ...(current.architecture?.presentation ? { presentation: true } : {}),
         view: patch.view ?? current.architecture?.view ?? architectureView,
         density: patch.density ?? current.architecture?.density ?? architectureDensity,
+        ...(patch.proposalMode ? { proposalMode: patch.proposalMode } : {}),
       },
     })
   }
@@ -2839,6 +2843,24 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                       <button type="button" aria-pressed={architectureView === 'detail'} className={architectureView === 'detail' ? 'is-selected' : ''} onClick={() => { setArchitectureView('detail'); updateArchitectureAppearance({ view: 'detail' }); setSelectedIds([]); setSelectedGroupTarget(null) }}>详情</button>
                     </div>
                   </section>
+                  {scene.architecture.diagramStyle === 'enterprise' ? (
+                    <section className="freeform-compact-control-row">
+                      <span>方案表现</span>
+                      <div className="freeform-menu-grid two">
+                        {([['proposal', '方案总览'], ['capabilities', '能力分解'],
+                          ['hybrid', '总览 + 依赖'], ['dependencies', '全部依赖']] as const).map(([mode, name]) => (
+                          <button key={mode} type="button"
+                            aria-pressed={(scene.architecture?.proposalMode ?? 'dependencies') === mode}
+                            className={(scene.architecture?.proposalMode ?? 'dependencies') === mode ? 'is-selected' : ''}
+                            onClick={() => {
+                              updateArchitectureAppearance({ proposalMode: mode })
+                              setKeyDependenciesOnly(false)
+                              setLayerReadingId(null)
+                            }}>{name}</button>
+                        ))}
+                      </div>
+                    </section>
+                  ) : null}
 
                   <section className="freeform-compact-control-row">
                     <span>依赖关系</span>
@@ -3145,7 +3167,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   </>
 
   return (
-    <div ref={editorRef} className={`freeform-editor workbench-${workbench} architecture-view-${architectureProjection.view} architecture-density-${architectureProjection.density} architecture-theme-${architectureTheme}${scene.architecture?.diagramStyle === 'enterprise' ? ' architecture-diagram-enterprise' : ''} lod-${semanticLodLevel}${scene.architecture ? ' is-architecture-mode' : ''}${relationFocus ? ' has-relation-lens' : ''}${keyDependencyActive ? ' has-key-dependency-lens' : ''}${layerReadingActive ? ' has-layer-dependency-lens' : ''}${architectureScope ? ' has-architecture-scope' : ''}${playbackStep ? ' is-ai-playback' : ''}`} tabIndex={0} inert={!active || undefined} aria-label="自由画布编辑器" aria-busy={imageImporting || undefined} onPaste={handleEditorPaste}>
+    <div ref={editorRef} className={`freeform-editor workbench-${workbench} architecture-view-${architectureProjection.view} architecture-density-${architectureProjection.density} architecture-theme-${architectureTheme}${scene.architecture?.diagramStyle === 'enterprise' ? ` architecture-diagram-enterprise architecture-proposal-mode-${scene.architecture.proposalMode ?? 'dependencies'}` : ''} lod-${semanticLodLevel}${scene.architecture ? ' is-architecture-mode' : ''}${relationFocus ? ' has-relation-lens' : ''}${keyDependencyActive ? ' has-key-dependency-lens' : ''}${layerReadingActive ? ' has-layer-dependency-lens' : ''}${architectureScope ? ' has-architecture-scope' : ''}${playbackStep ? ' is-ai-playback' : ''}`} tabIndex={0} inert={!active || undefined} aria-label="自由画布编辑器" aria-busy={imageImporting || undefined} onPaste={handleEditorPaste}>
       <div ref={surfaceRef} className="freeform-surface">
         <input
           ref={imageInputRef}
@@ -3742,7 +3764,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
               onPointerUp={finishGesture}
               onPointerCancel={cancelGesture}
             >
-              <CanvasBoxArtwork item={originalItem} visualStyle={scene.style} darkTheme={darkTheme} architecture={Boolean(scene.architecture)} proposal={proposalModule} architectureTheme={scene.architecture?.theme} architectureView={architectureProjection.view} density={architectureProjection.density} titleScale={scene.architecture?.titleScale} level={semanticLodLevel} selected={selectedForLod} imageSource={imageSource} />
+              <CanvasBoxArtwork item={originalItem} visualStyle={scene.style} darkTheme={darkTheme} architecture={Boolean(scene.architecture)} proposal={proposalModule} proposalMode={scene.architecture?.proposalMode} architectureTheme={scene.architecture?.theme} architectureView={architectureProjection.view} density={architectureProjection.density} titleScale={scene.architecture?.titleScale} level={semanticLodLevel} selected={selectedForLod} imageSource={imageSource} />
               {showAnchorPoints ? <g className="freeform-anchor-points">
                   <circle cx={displayItem.width / 2} cy={0} r="7" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => handleAnchorClick(event, item.id, 'top')} />
                   <circle cx={displayItem.width} cy={displayItem.height / 2} r="7" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => handleAnchorClick(event, item.id, 'right')} />
@@ -4008,6 +4030,23 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                 </label>
                 {architectureWorkbench ? <label><span>副标题</span><input aria-label="节点副标题" disabled={selectedBox.locked} value={selectedBox.subtitle ?? ''} placeholder="例如：Spring Boot 4" onChange={(event) => updateElement(selectedBox.id, (item) => item.type === 'arrow' || item.locked ? item : { ...item, subtitle: event.target.value || undefined })} /></label> : null}
                 {selectedBox.type === 'node' ? <>
+                  {scene.architecture?.diagramStyle === 'enterprise' ? (
+                    <label>
+                      <span>模块表现</span>
+                      <select aria-label="模块表现" disabled={selectedBox.locked}
+                        value={selectedBox.proposalRole ?? 'module'}
+                        onChange={(event) => updateElement(selectedBox.id, (item) =>
+                          item.type === 'node' && !item.locked ? {
+                            ...item, proposalRole: event.target.value as NonNullable<CanvasNode['proposalRole']>,
+                          } : item)}>
+                        <option value="module">标准模块</option>
+                        <option value="gateway-band">横向能力条</option>
+                        <option value="capability-chip">功能小块</option>
+                        <option value="resource-icon">资源图标</option>
+                        <option value="support-rail">纵向支撑条</option>
+                      </select>
+                    </label>
+                  ) : null}
                   <div className="freeform-section-caption">文字样式</div>
                   <StyleColorControl label="文字颜色" value={selectedBox.textColor} onChange={(value) => updateSelectedBoxes((item) => ({ ...item, textColor: value }))} />
                   <div className="freeform-property-row">

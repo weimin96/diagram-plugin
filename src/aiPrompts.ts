@@ -38,7 +38,7 @@ export function buildGenerationPrompt(workspacePath: string, request: DiagramGen
         `2. 当前架构风格已确定为${architectureStyle === 'enterprise' ? '国内企业方案风格' : '国际工程架构风格'}。调用 diagram.designGuide（type=canvas，intent=系统架构，architectureStyle=${architectureStyle}）。`,
         `3. 只调用一次 diagram.composeArchitecture：明确传 architectureStyle=${architectureStyle}、title、nodes、relations 和必要 theme；如果可以从真实有向依赖确认主要业务链路，按入口到结果填写 primaryPath，必须逐段对应已有关系。无需额外创建文件或整图更新，也不要手动编写 x/y/width/height、line routing 或整份 Canvas JSON。`,
         architectureStyle === 'enterprise'
-          ? '4. 根据用户资料或真实代码确定业务层/能力域，每个节点填写证据支持的 layer 层名，或已确认的 partition；至少两个实际层次。生成彩色横向分层、左侧层标签、内部紧凑模块矩阵；保留全部真实依赖，不能为了图好看编造层次、模块或连线。'
+          ? '4. 国内企业方案默认 proposalMode=proposal（用户明确要求能力分解、全量依赖或混合图时可选 capabilities、dependencies、hybrid）。从用户资料或真实代码确定每个 layer；只有明确知道能力归属时才填写 moduleGroup，按实际语义选择 visualRole：gateway-band（横向网关）、capability-chip（容器内功能块）、resource-icon（图标底座）、support-rail（横向支撑能力）、module（普通模块）。不能通过中文关键词硬编码推断，不为美观编造分组或能力。引擎自动排布复合模块；全部关系保存在文档中，默认方案视图只降低次要连线的视觉权重，可切回全部依赖。'
           : '4. 由插件自动处理 layered、hub-spoke、event-driven 等工程拓扑、语义分区与正交连线；保留实际系统边界、关键依赖和全部真实关系。只有明确要求 C4 时才添加 C4 元数据。',
         '5. 同时检查 quality（已执行 diagram.inspectQuality 同级检查）和 visualPlan.review.readyForVisualReview：基础几何检查合格不代表视觉合格，review=false 表示布局仍存在阻断问题，只能称为待整改草稿；review=true 也只代表待人工视觉审查。诚实说明具体缺陷，不得为过关发明跨域边、降低检查阈值或反复全量重画。',
         '6. 编辑已有 Canvas 时，保留真实箭头的 fromPortRatio/toPortRatio（指定边界侧沿边界 0..1 的位置）；只在已有精确几何证据时使用，不为普通自动生成编造端口比例。重新连接节点应清除已失效的端口位置。',
