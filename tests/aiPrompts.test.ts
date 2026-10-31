@@ -5,7 +5,7 @@ import { detectArchitectureStyle } from '../src/architectureStyle.js'
 import { composeEnterpriseArchitecture } from '../src/enterpriseArchitecture.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { beautifyArchitectureScene } from '../src/architectureDesign.js'
-import { canvasArchitectureGroupPresentation, canvasArrowLabelLayouts, canvasGroupFrames, canvasPresentationGroupFrames, canvasSceneToSvg } from '../src/canvas.js'
+import { canvasArchitectureGroupPresentation, canvasArrowLabelLayouts, canvasEnterpriseModuleSvg, canvasGroupFrames, canvasPresentationGroupFrames, canvasSceneToSvg } from '../src/canvas.js'
 import type { DiagramDocument } from '../src/types.js'
 
 test('builds a Canvas-specific generation contract without Mermaid instructions', () => {
@@ -133,10 +133,27 @@ test('architecture generation uses topology archetypes and a bounded quality loo
   assert.equal((proposalSvg.match(/class="canvas-enterprise-module"/g) ?? []).length, 3,
     'proposal modules use matrix cells rather than engineering icon cards')
   assert.equal((proposalSvg.match(/class="canvas-enterprise-band"/g) ?? []).length, 3)
-  assert.match(proposalSvg, /text-anchor="middle" font-size="15"/)
-  assert.doesNotMatch(proposalSvg, /class="canvas-enterprise-module"[^]*?class="freeform-icon-ref"/)
+  assert.match(proposalSvg, /class="canvas-enterprise-module"[^]*?<rect[^>]+rx="5"/,
+    'compact proposal cells retain an icon tile')
+  assert.ok((proposalSvg.match(/stroke-linejoin="round" stroke-linecap="round"/g) ?? []).length >= 3,
+    'authored role icons are displayed rather than silently discarded')
+  assert.match(proposalSvg, /font-size="15" font-weight="650"/,
+    'module titles stay readable with the icon inside the available width')
   assert.doesNotMatch(canvasSceneToSvg(engineering.scene), /class="canvas-enterprise-module"/,
     'engineering/C4 cards must not inherit domestic proposal cell markup')
+  const brandModule = canvasEnterpriseModuleSvg({
+    id: 'redis', type: 'node', text: '缓存服务 Redis', subtitle: '热点数据 · 会话',
+    x: 0, y: 0, width: 168, height: 82, icon: 'cache', stencil: 'redis',
+  }, false, true)
+  assert.match(brandModule, /class="canvas-enterprise-module"/)
+  assert.match(brandModule, /<path d="[^"]+" fill="#FF4438"\/>/,
+    'existing Redis brand path and its brand color are preserved')
+  assert.match(brandModule, /热点数据/, 'detail view preserves the real subtitle')
+  assert.doesNotMatch(canvasEnterpriseModuleSvg({
+    id: 'redis', type: 'node', text: '缓存服务 Redis', subtitle: '热点数据 · 会话',
+    x: 0, y: 0, width: 168, height: 82, icon: 'cache', stencil: 'redis',
+  }, false, false), /<tspan[^>]*>热点数据/,
+  'overview suppresses subtitle text without modifying the underlying node')
   assert.equal(canvasPresentationGroupFrames(enterprise.scene).every((frame) =>
     canvasArchitectureGroupPresentation(enterprise.scene, frame) === 'enterprise-band'), true)
   assert.ok(enterprise.scene.width < 1000, 'small proposal architecture should use a compact canvas')

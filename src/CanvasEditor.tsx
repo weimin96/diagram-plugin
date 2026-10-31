@@ -21,7 +21,7 @@ import { recommendArchitectureInitialReadingViewport, recommendArchitectureReadi
 import { compactEnterpriseLayerSpacing } from './architectureProposalSpacing.js'
 import { straightenArchitectureTerminalRoutes } from './architectureRouteRepair.js'
 import { ARCHITECTURE_NODE_TEMPLATES, architectureNodeTemplate, type ArchitectureNodeTemplate, type ArchitectureNodeTemplateProvider } from './architectureNodeTemplates.js'
-import { anchorPoint, canvasArchitectureCardTemplate, canvasArchitectureGroupPresentation, canvasEnterpriseBandPalette, canvasArchitectureHeader, canvasArchitectureProjection, canvasArchitectureRelationLabelVisible, canvasArchitectureScopeProjection, canvasArrowBoxRoute, canvasArrowLabelLayouts, canvasArrowPath, canvasArrowRoutePath, canvasArrowRoutePoints, canvasBundleTrunks, canvasCollapsedConnections, canvasCollapsedOwners, canvasGroupFrames, canvasPresentationGroupFrames, canvasIconLabel, canvasIconPaths, canvasIconRefLabel, canvasIconRefMarkup, canvasSemanticLodProjection, resolveCanvasSemanticLod, canvasStencilLabel, canvasStencilVisual, c4Label, parseCanvasScene, serializeCanvasScene, type CanvasAnchor, type CanvasArchitectureDensity, type CanvasArchitectureScope, type CanvasArchitectureView, type CanvasArrow, type CanvasC4Type, type CanvasElement, type CanvasGroup, type CanvasGroupFrame, type CanvasIcon, type CanvasIconRef, type CanvasLineStyle, type CanvasNode, type CanvasNote, type CanvasPoint, type CanvasRouting, type CanvasScene, type CanvasSemanticLodLevel, type CanvasShape, type CanvasStencil, type CanvasTone } from './canvas.js'
+import { anchorPoint, canvasArchitectureCardTemplate, canvasArchitectureGroupPresentation, canvasEnterpriseBandPalette, canvasEnterpriseModuleSvg, canvasArchitectureHeader, canvasArchitectureProjection, canvasArchitectureRelationLabelVisible, canvasArchitectureScopeProjection, canvasArrowBoxRoute, canvasArrowLabelLayouts, canvasArrowPath, canvasArrowRoutePath, canvasArrowRoutePoints, canvasBundleTrunks, canvasCollapsedConnections, canvasCollapsedOwners, canvasGroupFrames, canvasPresentationGroupFrames, canvasIconLabel, canvasIconPaths, canvasIconRefLabel, canvasIconRefMarkup, canvasSemanticLodProjection, resolveCanvasSemanticLod, canvasStencilLabel, canvasStencilVisual, c4Label, parseCanvasScene, serializeCanvasScene, type CanvasAnchor, type CanvasArchitectureDensity, type CanvasArchitectureScope, type CanvasArchitectureView, type CanvasArrow, type CanvasC4Type, type CanvasElement, type CanvasGroup, type CanvasGroupFrame, type CanvasIcon, type CanvasIconRef, type CanvasLineStyle, type CanvasNode, type CanvasNote, type CanvasPoint, type CanvasRouting, type CanvasScene, type CanvasSemanticLodLevel, type CanvasShape, type CanvasStencil, type CanvasTone } from './canvas.js'
 import { CANVAS_ICON_CATALOG, type CanvasIconSource } from './iconRegistry.js'
 import { alignCanvasSelection, assignCanvasSelectionToLane, canvasRotationFromPointer, clearCanvasLanes, computeCanvasSmartSnap, copyCanvasSelection, createCanvasLanePreset, deleteCanvasSelection, distributeCanvasSelection, expandCanvasGroupSelection, groupCanvasSelection, insertCanvasArchitectureNodeTemplate, insertCanvasArchitectureTemplate, insertCanvasNodeOnArrow, layoutCanvasNeighborhood, layoutCanvasScene, layoutCanvasSelection, nextCanvasElementId, pasteCanvasSelection, reconnectCanvasArrow, reflowCanvasNeighborhood, reorderCanvasSelection, resizeCanvasTransformBox, reverseCanvasArrow, scaleCanvasTransformBoxes, separateCanvasSelection, setCanvasC4CollapseLevel, setCanvasGroupParent, traceCanvasGraph, ungroupCanvasSelection, updateCanvasGroup, updateCanvasLane, type CanvasArchitectureTemplate, type CanvasC4CollapseLevel, type CanvasLayoutMode, type CanvasResizeHandle, type CanvasSpacingGuide, type CanvasTraceDirection, type CanvasTransformBox } from './canvasOperations.js'
 import { ShapeLibrary, ShapePreview } from './ShapeLibrary.js'
@@ -269,6 +269,13 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
   // A visual-style preset must not silently turn a semantic architecture card
   // into an authored solid-fill node. Only explicit node colors override cards.
   const displayItem = architecture && originalItem.type === 'node' ? originalItem : canvasStyledBox(originalItem, skin)
+  if (proposal && displayItem.type === 'node') {
+    return <g dangerouslySetInnerHTML={{
+      __html: canvasEnterpriseModuleSvg(
+        { ...displayItem, x: 0, y: 0 }, darkTheme, architectureView !== 'overview' && level === 'detail',
+      ),
+    }} />
+  }
   const displayText = displayItem.text
   const imagePath = displayItem.type === 'note' ? displayItem.imagePath : undefined
   const imageFit = displayItem.type === 'note' ? displayItem.imageFit : undefined
@@ -276,7 +283,7 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
   const cardTemplate = canvasArchitectureCardTemplate(displayItem)
   const cardMeta = displayItem.iconRef ? canvasIconRefLabel(displayItem.iconRef) : displayItem.stencil ? canvasStencilLabel(displayItem.stencil) : architectureCard ? cardTemplate.label : displayItem.icon ? canvasIconLabel(displayItem.icon) : undefined
   // Actor, external and technical nodes share a common card/icon/title grid.
-  const architectureMark = Boolean(architecture && !proposal && architectureCard && (displayItem.iconRef || displayItem.stencil || displayItem.icon))
+  const architectureMark = Boolean(architecture && architectureCard && (displayItem.iconRef || displayItem.stencil || displayItem.icon))
   const titleColor = architectureMark && !originalItem.fillColor
     ? darkTheme ? '#f8fafc' : '#243247'
     : canvasFillTextColor(displayItem.fillColor, skin?.text ?? (darkTheme ? '#f8fafc' : '#243247'))
@@ -291,17 +298,17 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
   const architectureMarkSize = density === 'dense' ? 30 : density === 'compact' ? 34 : 38
   const architectureMarkX = 14
   const architectureMarkY = (displayItem.height - architectureMarkSize) / 2
-  const architectureTextX = proposal ? displayItem.width / 2 : architectureMark ? architectureMarkX + architectureMarkSize + 12 : architectureCard ? 16 : displayItem.width / 2
+  const architectureTextX = architectureMark ? architectureMarkX + architectureMarkSize + 12 : architectureCard ? 16 : displayItem.width / 2
   const architectureTitleY = architectureMark ? displayItem.height / 2 + (showCardSubtitle ? -10 : 4) : architectureCard ? (showCardSubtitle ? 55 : Math.max(54, displayItem.height / 2 + 5)) : displayItem.height / 2
   const titleFontSize = displayItem.fontSize ?? 15
   const subtitleFontSize = displayItem.fontSize ? Math.max(9, displayItem.fontSize * 0.72) : 11
-  const architectureTextWidth = proposal ? Math.max(28, displayItem.width - 20) : architectureCard
+  const architectureTextWidth = architectureCard
     ? Math.max(28, displayItem.width - architectureTextX - 14)
     : Math.max(28, displayItem.width - 28)
-  const cardTypography = architecture && (architectureCard || proposal)
+  const cardTypography = architecture && architectureCard
     ? layoutArchitectureCardText(displayText, showCardSubtitle ? displayItem.subtitle : undefined,
       architectureTextWidth, displayItem.height,
-      proposal ? Math.max(14, displayItem.fontSize ?? 15) : displayItem.fontSize ?? 14 * (titleScale ?? 1), displayItem.fontWeight ?? 650)
+      displayItem.fontSize ?? 14 * (titleScale ?? 1), displayItem.fontWeight ?? 650)
     : null
   const titleText = architectureCard && !cardTypography ? fitCanvasText(displayText, architectureTextWidth, titleFontSize, displayItem.fontWeight ?? 600) : displayText
   const subtitleText = displayItem.subtitle ? fitCanvasText(displayItem.subtitle, architectureTextWidth, subtitleFontSize, 500) : ''
@@ -317,9 +324,9 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
                   ? <image href={imageSource} width={displayItem.width} height={displayItem.height} preserveAspectRatio={imageFit === 'cover' ? 'xMidYMid slice' : 'xMidYMid meet'} clipPath={`url(#canvas-image-${displayItem.id})`} />
                   : <text className="freeform-image-placeholder" x={displayItem.width / 2} y={displayItem.height / 2} textAnchor="middle" dominantBaseline="middle">图片加载中</text>}
                 <rect className="freeform-image-outline" width={displayItem.width} height={displayItem.height} rx={displayItem.cornerRadius ?? 8} />
-              </> : displayItem.shapeRef && !proposal ? <CanvasBoxShape item={displayItem} /> : <rect width={displayItem.width} height={displayItem.height} rx={proposal ? 3 : displayItem.cornerRadius ?? (displayItem.shape === 'square' ? 3 : displayItem.shape === 'pill' ? displayItem.height / 2 : architecture && architectureMark ? 9 : 14)} />}
+              </> : displayItem.shapeRef ? <CanvasBoxShape item={displayItem} /> : <rect width={displayItem.width} height={displayItem.height} rx={displayItem.cornerRadius ?? (displayItem.shape === 'square' ? 3 : displayItem.shape === 'pill' ? displayItem.height / 2 : architecture && architectureMark ? 9 : 14)} />}
               {!architecture && !visualStyle && displayItem.emphasis === 'primary' ? <rect className="freeform-card-accent" width="5" height={displayItem.height} rx="3" /> : null}
-              {architecture && !proposal && displayItem.type === 'node' && displayItem.emphasis === 'primary'
+              {architecture && displayItem.type === 'node' && displayItem.emphasis === 'primary'
                 && !displayItem.shapeRef && !architectureMark
                 ? <rect className="freeform-architecture-primary-rule" width="5" height={displayItem.height} rx="3" /> : null}
               {!architecture && architectureCard ? <rect className="freeform-card-kind-band" x="12" y={displayItem.height - 4} width={Math.max(24, displayItem.width - 24)} height="2" rx="1" /> : null}
@@ -338,9 +345,9 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
                     {canvasIconPaths(displayItem.icon).map((path, index) => <path key={`${displayItem.icon}-${index}`} d={path} />)}
                   </g>
                 </g>
-              ) : !proposal && displayItem.iconRef && iconRefMarkup && showRoleIcon ? (
+              ) : displayItem.iconRef && iconRefMarkup && showRoleIcon ? (
                 <g className="freeform-icon-ref" transform="translate(8 8) scale(.8333)" dangerouslySetInnerHTML={{ __html: iconRefMarkup }} />
-              ) : !proposal && displayItem.icon && showRoleIcon ? (
+              ) : displayItem.icon && showRoleIcon ? (
                 <g className="freeform-node-role" transform="translate(18 18)">
                   <circle r="10" />
                   <g className="freeform-node-role-symbol" transform="translate(-7 -7) scale(.5833)">
@@ -370,7 +377,7 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
                     ? ({ technical: 12, presentation: 14, editorial: 14.5 } as Partial<Record<ArchitectureTheme, number>>)[architectureTheme ?? 'enterprise'] ?? 13
                     : density === 'dense' ? 12 : density === 'compact' ? 13 : 14) * titleScale,
                 } : {}),
-              }} className={architectureCard || proposal ? 'freeform-node-title' : undefined} x={architectureTextX} y={cardTypography?.titleY ?? architectureTitleY} textAnchor={proposal ? 'middle' : architectureCard ? 'start' : 'middle'} dominantBaseline={architectureCard || proposal ? undefined : 'middle'}>
+              }} className={architectureCard ? 'freeform-node-title' : undefined} x={architectureTextX} y={cardTypography?.titleY ?? architectureTitleY} textAnchor={architectureCard ? 'start' : 'middle'} dominantBaseline={architectureCard ? undefined : 'middle'}>
                 {cardTypography ? cardTypography.titleLines.map((line, index) =>
                   <tspan key={index} x={architectureTextX} dy={index ? cardTypography.titleLineHeight : 0}>{line}</tspan>)
                   : plainTitleLines
@@ -381,7 +388,7 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
               {showCardSubtitle && (!cardTypography || cardTypography.subtitleLines.length) ? <text className="freeform-node-subtitle" style={cardTypography
                 ? { fontSize: cardTypography.subtitleFontSize, fill: displayItem.textColor }
                 : displayItem.type === 'node' && (displayItem.fontSize || displayItem.textColor) ? { fontSize: subtitleFontSize, fill: displayItem.textColor } : undefined}
-                x={architectureTextX} y={cardTypography?.subtitleY ?? (architectureMark ? architectureTitleY + 25 : displayItem.height - 12)} textAnchor={proposal ? 'middle' : architectureCard ? 'start' : 'middle'}>
+                x={architectureTextX} y={cardTypography?.subtitleY ?? (architectureMark ? architectureTitleY + 25 : displayItem.height - 12)} textAnchor={architectureCard ? 'start' : 'middle'}>
                 {cardTypography ? cardTypography.subtitleLines.map((line, index) =>
                   <tspan key={index} x={architectureTextX} dy={index ? cardTypography.subtitleLineHeight : 0}>{line}</tspan>) : subtitleText}
               </text> : null}

@@ -534,7 +534,7 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
     }
     const architectureCard = item.type === 'node' && Boolean(item.iconRef || item.icon || item.stencil || item.c4Type)
     if (architectureMode && scene.architecture?.diagramStyle === 'enterprise' && item.type === 'node' && !item.shapeRef)
-      return wrapRotation(renderEnterpriseProposalModule(item, darkArchitecture, projection.view !== 'overview'))
+      return wrapRotation(canvasEnterpriseModuleSvg(item, darkArchitecture, projection.view !== 'overview'))
     if (architectureMode && architectureCard) return wrapRotation(renderArchitectureCanvasNode(item,
       { ...palette, text: item.fillColor ? palette.text : darkArchitecture ? '#f8fafc' : '#243247' },
       projection.density, architectureTheme, skin?.font, scene.architecture?.titleScale ?? 1,
@@ -1668,21 +1668,47 @@ function shapeRadius(shape: CanvasShape | undefined, height: number): number {
   return 12
 }
 
-/** A compact proposal matrix cell, deliberately distinct from a C4/technical card.
- * Icon metadata remains in the document and is available to detail panels.
+/** Proposal module ink used identically by the interactive editor and SVG export.
+ * Text is allocated after the existing semantic icon; no invented branding
+ * and no title shrinkage to make room for decoration.
  */
-function renderEnterpriseProposalModule(item: CanvasNode, dark: boolean, showSubtitle: boolean): string {
-  const center = item.x + item.width / 2
-  const ink = dark ? '#eaf2fb' : '#273f56'
-  const title = layoutArchitectureCardText(item.text, showSubtitle ? item.subtitle : undefined,
-    Math.max(28, item.width - 20), item.height, Math.max(14, item.fontSize ?? 15), item.fontWeight ?? 660)
+export function canvasEnterpriseModuleSvg(item: CanvasNode, dark: boolean, showSubtitle: boolean): string {
+  const template = canvasArchitectureCardTemplate(item)
+  const category = ({
+    actor: ['#607c96', '#eaf0f5'], external: ['#66788b', '#eef1f5'],
+    entry: ['#326bba', '#e5f0fc'], compute: ['#4b65b5', '#eaf0fc'],
+    messaging: ['#9c6731', '#faf0dd'], data: ['#2c826b', '#e2f5ee'],
+    generic: ['#5d6d85', '#edf1f6'],
+  } satisfies Record<CanvasArchitectureCardKind, [string, string]>)[template.kind]
+  const primary = item.emphasis === 'primary'
+  const hasIcon = Boolean(item.iconRef || item.stencil || item.icon)
+  const tile = Math.min(30, Math.max(24, item.height - 38))
+  const tileX = item.x + 10
+  const tileY = item.y + (item.height - tile) / 2
+  const textX = hasIcon ? tileX + tile + 8 : item.x + 12
+  const textWidth = Math.max(28, item.x + item.width - textX - 6)
+  const typography = layoutArchitectureCardText(
+    item.text, showSubtitle ? item.subtitle : undefined, textWidth, item.height,
+    Math.max(14, item.fontSize ?? 15), item.fontWeight ?? (primary ? 720 : 650),
+  )
+  const ink = item.textColor ?? (dark ? '#edf4fc' : '#293d55')
   const fill = item.fillColor && item.fillColor.toLowerCase() !== '#ffffff'
-    ? item.fillColor : dark ? '#2b3947' : item.emphasis === 'primary' ? '#f0f7fc' : '#ffffff'
-  const stroke = item.strokeColor && item.strokeColor !== '#cfd8e3'
-    ? item.strokeColor : dark ? '#738aa0' : '#a4bacd'
-  const line = (texts: string[], start: number, fontSize: number, step: number, weight: number, opacity = 1) =>
-    texts.length ? `<text x="${center}" y="${item.y + start}" text-anchor="middle" font-size="${fontSize}" font-weight="${weight}" fill="${escapeXml(item.textColor ?? ink)}" opacity="${opacity}">${texts.map((text, index) => `<tspan x="${center}" dy="${index ? step : 0}">${escapeXml(text)}</tspan>`).join('')}</text>` : ''
-  return `<g class="canvas-enterprise-module"><title>${escapeXml([item.text, item.subtitle].filter(Boolean).join(' · '))}</title><rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="3" fill="${escapeXml(fill)}" stroke="${escapeXml(stroke)}" stroke-width="${item.emphasis === 'primary' ? 1.7 : 1}"/>${line(title.titleLines, title.titleY, title.titleFontSize, title.titleLineHeight, item.fontWeight ?? 660)}${line(title.subtitleLines, title.subtitleY, title.subtitleFontSize, title.subtitleLineHeight, 500, .82)}</g>`
+    ? item.fillColor : dark ? (primary ? '#304557' : '#263645') : primary ? category[1] : '#ffffff'
+  const border = item.strokeColor && item.strokeColor !== '#cfd8e3'
+    ? item.strokeColor : dark ? (primary ? category[0] : '#607388') : primary ? category[0] : '#a8b7c7'
+  const logoSize = Math.min(25, tile - 7)
+  const logoX = tileX + (tile - logoSize) / 2
+  const logoY = tileY + (tile - logoSize) / 2
+  const brand = item.iconRef
+    ? architectureIconRefMark(item.iconRef, logoX, logoY, logoSize, category[0], dark)
+    : item.stencil
+      ? architectureStencilMark(item.stencil, logoX, logoY, logoSize, category[0], dark)
+      : item.icon
+        ? `<g transform="translate(${logoX} ${logoY}) scale(${logoSize / 24})" fill="none" stroke="${category[0]}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">${canvasIconPaths(item.icon).map((path) => `<path d="${path}"/>`).join('')}</g>`
+        : ''
+  const text = (lines: string[], top: number, size: number, lineHeight: number, weight: number, opacity = 1) =>
+    lines.length ? `<text x="${textX}" y="${item.y + top}" font-size="${size}" font-weight="${weight}" style="fill:${escapeXml(ink)}" opacity="${opacity}">${lines.map((line, index) => `<tspan x="${textX}" dy="${index ? lineHeight : 0}">${escapeXml(line)}</tspan>`).join('')}</text>` : ''
+  return `<g class="canvas-enterprise-module" opacity="${item.opacity ?? 1}"><title>${escapeXml([item.text, item.subtitle, item.description].filter(Boolean).join(' · '))}</title><rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="3" style="fill:${escapeXml(fill)};stroke:${escapeXml(border)};stroke-width:${item.strokeWidth ?? (primary ? 1.6 : 1)}"/>${hasIcon ? `<rect x="${tileX}" y="${tileY}" width="${tile}" height="${tile}" rx="5" style="fill:${dark ? '#3b4b5b' : category[1]};stroke:none"/>${brand}` : ''}${text(typography.titleLines, typography.titleY, typography.titleFontSize, typography.titleLineHeight, item.fontWeight ?? (primary ? 720 : 650))}${text(typography.subtitleLines, typography.subtitleY, typography.subtitleFontSize, typography.subtitleLineHeight, 500, .8)}</g>`
 }
 
 function renderArchitectureCanvasNode(

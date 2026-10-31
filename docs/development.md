@@ -17,6 +17,7 @@ R2 隔离的逻辑走廊优先排列实验覆盖 4 个不同真实源码子图�
 ## 架构与输出
 
 - 国内企业方案图视觉重构：已确认 `architecture.diagramStyle=enterprise` 的普通节点不再复用 C4/云平台的大图标卡片，而以**小圆角矩阵模块、居中标题、按需显示的副标题**表达分层方案。图标、技术种类和完整说明仍留在 `.diagram.json`，不删除来源事实；显式手工 `shapeRef` 维持原形状。层板采用六个稳定的低饱和色系和较醒目的层名栏，由 `canvasEnterpriseBandPalette` 同时驱动 Canvas 编辑器与 SVG。无关系的能力清单使用 182×70 紧凑矩阵，最多六列；有真实关系的图维持原有节点尺寸与路由空间，防止为了更密而产生交叉。19 节点/19 关系场景对比试验中，强制压成 182px 会使交叉 0→1、独立重叠 1→6，因此不允许用于关系图。国际工程/C4 风格不受企业方案矩阵视觉影响。
+- 企业方案图标回归：上一轮矩阵模块隐藏了节点中已存在的技术图标，导致纯文字方块单调；本轮重新显示 `iconRef > stencil > icon` 优先级的真实标识，在矩阵内放入约 24–30px 的低饱和图标区。角色图标按入口/计算/数据/消息/外部等已有语义着色，技术组件保留原本的品牌形状与配色；核心节点以同类别的浅强调底色与边框突出。编辑器的节点 `<g>` 内直接复用 `canvasEnterpriseModuleSvg`，与 SVG 出口共用同一个图标/文本测量/底色实现，不维护第二套 JSX 绘制几何。总览隐藏副标题但保留悬停全文，紧凑文本换行不拆分能够独立容纳的英文技术名；已锁定节点、关系和手工 shapeRef 不变。使用现有六层 19 节点/19 关系 SVG 进行 Chrome A/B，全部保留、0 节点碰撞、0 交叉、0 独立重叠、0 穿节点，未自动改写文档。
 
 - 语义入口：`diagram.composeArchitecture` 接收实际存在的节点、关系、证据和可选经确认的主路径、功能分区；`ArchitectureIntentGraph` 是权威输入。
 - 构图：`architectureComposer.ts` 协调完整候选；`architectureDesign.ts` 负责场景/节点/分区；`architectureRouting.ts` 与 `architectureOrthogonalSolver.ts` 负责端口、线段和可见通道；`architectureRouteRepair.ts` 仅提出局部几何候选。

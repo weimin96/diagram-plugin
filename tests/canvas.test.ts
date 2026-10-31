@@ -2,8 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { anchorPoint, canvasArchitectureCardTemplate, canvasArchitectureProjection, canvasArchitectureScopeProjection, canvasArrowBoxRoute, canvasArrowLabelLayouts, canvasArrowRoutePath, canvasBundleTrunks, canvasCollapsedConnections, canvasIconRefMarkup, canvasSemanticLodProjection, canvasSceneToSvg, createCanvasSource, parseCanvasScene, resolveCanvasSemanticLod, serializeCanvasScene, type CanvasScene } from '../src/canvas.js'
 import { canvasArrowLabelText } from '../src/canvasLabelText.js'
+import { layoutArchitectureCardText } from '../src/canvasLabelText.js'
 
 test("关系标签布局与避让", () => {
+  assert.deepEqual(layoutArchitectureCardText('容器平台 Kubernetes', undefined, 102, 82, 15).titleLines,
+    ['容器平台', 'Kubernetes'], 'do not leave a fragment of a technology name on the previous line')
   // 场景 1: '关系标签按显示宽度换行，中文、英文和超长文本保持有界'
   {
   for (const label of ['事务提交后持久化订单及关联审批记录', 'Validate authorization and persist approved order transaction', '审批处理'.repeat(80)]) {

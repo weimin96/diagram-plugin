@@ -76,9 +76,13 @@ export function layoutArchitectureCardText(
         remaining = []
         break
       }
-      // Avoid breaking an English word when a useful space is available.
+      // Preserve a complete Latin technical name on the next line when it
+      // fits there (e.g. '容器平台 Kubernetes'), not 'Kube' / 'rnetes'.
       const separator = remaining.slice(0, count).lastIndexOf(' ')
-      if (separator > 0 && separator >= count / 2) count = separator + 1
+      const nextWord = separator > 0 ? remaining.slice(separator + 1).join('').split(' ')[0] : ''
+      const wholeWordFits = /^[A-Za-z0-9][A-Za-z0-9._/+-]*$/.test(nextWord)
+        && measureLabelText(nextWord, size, weight) <= usableWidth
+      if (separator > 0 && (separator >= count / 2 || wholeWordFits)) count = separator + 1
       lines.push(remaining.slice(0, count).join('').trim())
       remaining = remaining.slice(count).filter((char, i) => i !== 0 || char !== ' ')
     }
