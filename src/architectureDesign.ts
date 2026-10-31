@@ -15,7 +15,7 @@ import type {
   CanvasStencil,
   CanvasTone,
 } from './canvas.js'
-import { canvasGroupFrames } from './canvas.js'
+import { canvasGroupFrames, resolveCanvasArchitectureDensity } from './canvas.js'
 import { routeArchitectureEdges } from './architectureRouting.js'
 export { routeArchitectureEdges, routeArchitectureArrowIds, routeArchitectureEdgesIncremental } from './architectureRouting.js'
 
@@ -178,9 +178,24 @@ function detectArchitectureComposition(
 }
 
 export function beautifyArchitectureScene(scene: CanvasScene, options: ArchitectureBeautifyOptions = {}): ArchitectureBeautifyResult {
-  const theme = options.theme ?? 'enterprise'
+  const theme = options.theme ?? scene.architecture?.theme ?? 'enterprise'
   const view = options.view ?? scene.architecture?.view ?? 'detail'
   const density = options.density ?? scene.architecture?.density ?? 'auto'
+  if (scene.architecture?.diagramStyle === 'enterprise' && scene.groups?.some((group) => group.labelSide === 'left')) {
+    // This view owns factual layer membership and hand-authored node geometry.
+    // Engineering repartition/reflow would replace those layers with arch-* regions.
+    const preserved = { ...scene, architecture: { ...scene.architecture, theme, view, density } }
+    return {
+      scene: preserved,
+      summary: {
+        theme, composition: 'layered', partitions: scene.groups.filter((group) => group.labelSide === 'left').length,
+        enrichedNodes: 0, routedEdges: 0,
+        primaryNodes: scene.elements.filter((item) => item.type !== 'arrow' && item.emphasis === 'primary').length,
+        bundledEdges: scene.elements.filter((item) => item.type === 'arrow' && Boolean(item.bundleKey)).length,
+        view, density, resolvedDensity: resolveCanvasArchitectureDensity(preserved),
+      },
+    }
+  }
   const repartition = options.repartition !== false
   const relayout = options.relayout !== false
   const reroute = options.reroute !== false

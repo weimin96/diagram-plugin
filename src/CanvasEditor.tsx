@@ -3406,8 +3406,8 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                 } : undefined}
               /> : null}
               {presentation === 'enterprise-band' ? <>
-                <rect className="freeform-enterprise-band-rail" x={group.x + 1} y={group.y + 1} width={131} height={group.height - 2} rx={6} style={{ fill: darkTheme ? '#2a3b4c' : group.fillColor ?? '#e9f1fa', stroke: 'none', strokeDasharray: 'none' }} />
-                <path d={`M${group.x + 132} ${group.y + 1}V${group.y + group.height - 1}`} stroke={darkTheme ? '#425164' : '#d9e2ec'} strokeWidth={1} />
+                <rect className="freeform-enterprise-band-rail" x={group.x + 1} y={group.y + 1} width={(group.labelRailWidth ?? 132) - 1} height={group.height - 2} rx={6} style={{ fill: darkTheme ? '#2a3b4c' : group.fillColor ?? '#e9f1fa', stroke: 'none', strokeDasharray: 'none' }} />
+                <path d={`M${group.x + (group.labelRailWidth ?? 132)} ${group.y + 1}V${group.y + group.height - 1}`} stroke={darkTheme ? '#425164' : '#d9e2ec'} strokeWidth={1} />
                 <rect className="freeform-enterprise-band-accent" x={group.x + 1} y={group.y + 13} width={4} height={Math.max(12, group.height - 26)} rx={2} style={{ fill: visualSkin?.stroke ?? '#2867a8', stroke: 'none' }} />
               </> : null}
               {group.c4Type === 'software-system' && !group.collapsed ? <rect className="freeform-group-header" x={group.x} y={group.y} width={group.width} height="34" rx={scene.architecture ? 10 : 20} /> : null}
@@ -3428,7 +3428,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                 />
               ) : null}
               {group.label ? presentation === 'enterprise-band' ? (
-                <text className="freeform-enterprise-band-label" x={group.x + 20} y={group.y + group.height / 2 + 5}>{fitCanvasText(group.label, 110, 15, 720)}</text>
+                <text className="freeform-enterprise-band-label" x={group.x + 20} y={group.y + group.height / 2 + 5}>{fitCanvasText(group.label, Math.max(24, (group.labelRailWidth ?? 132) - 26), 15, 720)}</text>
               ) : presentation === 'compact-region' ? (
                 <text className="freeform-compact-region-label" x={group.x + 16} y={group.y + 18}>{fitCanvasText(group.label, group.width - 24, 12, 640)}</text>
               ) : group.collapsed && scene.architecture && group.id.startsWith('arch-') ? (

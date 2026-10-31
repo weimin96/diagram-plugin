@@ -4,6 +4,7 @@ import { buildGenerationPrompt, buildModificationPrompt, buildSubgraphModificati
 import { detectArchitectureStyle } from '../src/architectureStyle.js'
 import { composeEnterpriseArchitecture } from '../src/enterpriseArchitecture.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
+import { beautifyArchitectureScene } from '../src/architectureDesign.js'
 import { canvasArchitectureGroupPresentation, canvasArrowLabelLayouts, canvasGroupFrames, canvasPresentationGroupFrames, canvasSceneToSvg } from '../src/canvas.js'
 import type { DiagramDocument } from '../src/types.js'
 
@@ -161,6 +162,27 @@ test('architecture generation uses topology archetypes and a bounded quality loo
   assert.equal(unequalLayers.scene.elements.filter((item) => item.type === 'node').length, 8)
   assert.equal(unequalLayers.scene.elements.filter((item) => item.type === 'arrow').length, 0)
   assert.ok(visualFrames.every((frame) => frame.x >= 0 && frame.height > 0))
+
+  const renamedGroups = new Map(unequalLayers.scene.groups!.map((group, index) => [group.id, `L${index + 1}`]))
+  const scriptedScene = {
+    ...unequalLayers.scene,
+    groups: unequalLayers.scene.groups!.map((group) =>
+      ({ ...group, id: renamedGroups.get(group.id)!, kind: 'boundary' as const })),
+    elements: unequalLayers.scene.elements.map((element) =>
+      element.type === 'node' ? { ...element, groupId: renamedGroups.get(element.groupId!) } : element),
+  }
+  scriptedScene.groups[2].label = '基础设施与运维保障层'
+  const scriptedFrames = canvasPresentationGroupFrames(scriptedScene)
+  assert.equal(scriptedFrames.every((frame) =>
+    canvasArchitectureGroupPresentation(scriptedScene, frame) === 'enterprise-band'), true,
+  'user-authored group IDs must not change the explicitly selected enterprise visual style')
+  assert.ok(scriptedFrames[0].labelRailWidth! > 132, 'long verified layer names receive adequate label width')
+  assert.equal((canvasSceneToSvg(scriptedScene).match(/class="canvas-enterprise-band"/g) ?? []).length, 3)
+  const restyled = beautifyArchitectureScene(scriptedScene, { theme: 'technical', repartition: true, relayout: true })
+  assert.deepEqual(restyled.scene.groups, scriptedScene.groups, 'beautify must not replace proposal layers with engineering partitions')
+  assert.deepEqual(restyled.scene.elements, scriptedScene.elements, 'appearance changes cannot disturb authored node or edge geometry')
+  assert.equal(restyled.scene.architecture?.diagramStyle, 'enterprise')
+  assert.equal(restyled.summary.routedEdges, 0)
 
   const labelled = composeEnterpriseArchitecture({
     ...intent,

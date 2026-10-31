@@ -212,6 +212,8 @@ export interface CanvasGroupFrame extends CanvasGroup {
   width: number
   height: number
   memberIds: string[]
+  /** View-only width of the left label rail for an enterprise proposal band. */
+  labelRailWidth?: number
 }
 
 export interface CanvasCollapsedConnection {
@@ -589,11 +591,12 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
     const fill = group.fillColor ? escapeXml(group.fillColor) : architectureMode || group.collapsed || softwareSystem || container ? escapeXml(palette.fill) : 'none'
     if (architectureMode) {
       if (presentation === 'enterprise-band') {
-        const label = fitCanvasText(group.label || group.id, 110, 15, 720)
+        const railWidth = group.labelRailWidth ?? 132
+        const label = fitCanvasText(group.label || group.id, Math.max(24, railWidth - 26), 15, 720)
         const rail = darkArchitecture ? '#2a3b4c' : group.fillColor ? escapeXml(group.fillColor) : '#e9f1fa'
         const accent = visualSkin?.stroke ?? '#2867a8'
         const frameStroke = darkArchitecture ? '#425164' : '#d9e2ec'
-        return `<g class="canvas-enterprise-band"><rect x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" rx="8" fill="${darkArchitecture ? '#222d3a' : '#f8fafc'}" stroke="${frameStroke}" stroke-width="1"/><path d="M${group.x + 132} ${group.y + 1}V${group.y + group.height - 1}" stroke="${frameStroke}"/><path d="M${group.x + 132} ${group.y + 1}H${group.x + 8}Q${group.x + 1} ${group.y + 1} ${group.x + 1} ${group.y + 8}V${group.y + group.height - 8}Q${group.x + 1} ${group.y + group.height - 1} ${group.x + 8} ${group.y + group.height - 1}H${group.x + 132}Z" fill="${rail}"/><rect x="${group.x + 1}" y="${group.y + 13}" width="4" height="${Math.max(12, group.height - 26)}" rx="2" fill="${escapeXml(accent)}"/><text x="${group.x + 20}" y="${group.y + group.height / 2 + 5}" font-size="15" font-weight="720" fill="${darkArchitecture ? '#ecf3fa' : '#29445f'}">${escapeXml(label)}</text></g>`
+        return `<g class="canvas-enterprise-band"><rect x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" rx="8" fill="${darkArchitecture ? '#222d3a' : '#f8fafc'}" stroke="${frameStroke}" stroke-width="1"/><path d="M${group.x + railWidth} ${group.y + 1}V${group.y + group.height - 1}" stroke="${frameStroke}"/><path d="M${group.x + railWidth} ${group.y + 1}H${group.x + 8}Q${group.x + 1} ${group.y + 1} ${group.x + 1} ${group.y + 8}V${group.y + group.height - 8}Q${group.x + 1} ${group.y + group.height - 1} ${group.x + 8} ${group.y + group.height - 1}H${group.x + railWidth}Z" fill="${rail}"/><rect x="${group.x + 1}" y="${group.y + 13}" width="4" height="${Math.max(12, group.height - 26)}" rx="2" fill="${escapeXml(accent)}"/><text x="${group.x + 20}" y="${group.y + group.height / 2 + 5}" font-size="15" font-weight="720" fill="${darkArchitecture ? '#ecf3fa' : '#29445f'}">${escapeXml(label)}</text></g>`
       }
       if (presentation === 'compact-region')
         return `<g class="canvas-compact-region"><text x="${group.x + 16}" y="${group.y + 18}" font-family="Arial, sans-serif" font-size="12" font-weight="640" fill="${escapeXml(palette.stroke)}" opacity="0.78">${escapeXml(group.label || group.id)}</text></g>`
@@ -1212,7 +1215,7 @@ export function canvasArrowLabelLayouts(scene: CanvasScene): Map<string, CanvasA
       occupied.add({ x: group.x, y: group.y, width: rail, height: group.height })
       occupied.add({ x: group.x + group.width - rail, y: group.y, width: rail, height: group.height })
       if (presentation === 'enterprise-band') {
-        occupied.add({ x: group.x, y: group.y, width: 136, height: group.height })
+        occupied.add({ x: group.x, y: group.y, width: (group.labelRailWidth ?? 132) + 4, height: group.height })
       }
     }
   }
@@ -1356,19 +1359,23 @@ export function canvasPresentationGroupFrames(
 ): CanvasGroupFrame[] {
   if (!scene.architecture) return [...frames]
   const enterpriseBands = scene.architecture.diagramStyle === 'enterprise'
-    ? frames.filter((frame) => frame.id.startsWith('__arch-layer-') && frame.labelSide === 'left' && !frame.collapsed)
+    ? frames.filter((frame) => frame.labelSide === 'left' && !frame.parentId && !frame.collapsed)
     : []
   const bandLeft = Math.min(...enterpriseBands.map((frame) => frame.x))
   const bandRight = Math.max(...enterpriseBands.map((frame) => frame.x + frame.width))
+  const desiredRailWidth = Math.max(132, ...enterpriseBands.map((frame) =>
+    [...(frame.label ?? '')].reduce((width, char) => width + (/\p{Script=Han}/u.test(char) ? 15 : 8), 36)))
+  const railWidth = Math.min(Math.max(0, bandLeft - 12), desiredRailWidth)
   return frames.map((frame) => {
     // The proposal view uses aligned bands with a dedicated label rail. These
     // are presentation bounds only: routing keeps exact member extents.
     if (enterpriseBands.includes(frame)) return {
       ...frame,
-      x: bandLeft - 132,
-      width: bandRight - bandLeft + 132,
+      x: bandLeft - railWidth,
+      width: bandRight - bandLeft + railWidth,
       y: frame.y + 24,
       height: frame.height - 32,
+      labelRailWidth: railWidth,
     }
     const generatedRegion = /^arch-(external|experience|application|processing|data)$/.test(frame.id)
       && frame.kind === 'boundary' && !frame.c4Type && !frame.collapsed
@@ -1389,7 +1396,7 @@ export function canvasArchitectureGroupPresentation(
   scene: CanvasScene, group: CanvasGroupFrame,
 ): 'enterprise-band' | 'compact-region' | 'boundary' {
   if (!scene.architecture || group.collapsed) return 'boundary'
-  if (scene.architecture.diagramStyle === 'enterprise' && group.id.startsWith('__arch-layer-') && group.labelSide === 'left')
+  if (scene.architecture.diagramStyle === 'enterprise' && group.labelSide === 'left' && !group.parentId)
     return 'enterprise-band'
   if ((scene.architecture.diagramStyle === 'engineering' || scene.architecture.diagramStyle === undefined)
     && /^arch-(external|experience|application|processing|data)$/.test(group.id)
