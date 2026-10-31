@@ -50,7 +50,11 @@ test('架构基准有可追溯的适配字号与画布覆盖率数据', () => {
   const boostedSvg = canvasSceneToSvg(graph.scene)
   const unboostedSvg = canvasSceneToSvg({ ...graph.scene, architecture: { ...graph.scene.architecture!, titleScale: 1 } })
   assert.notEqual(boostedSvg, unboostedSvg)
-  assert.match(boostedSvg, /font-size="16\.\d+"/)
+  const nodeTitleSize = (svg: string) => Math.max(0,
+    ...[...svg.matchAll(/<text[^>]*font-size="([\d.]+)" font-weight="(?:650|730)"/g)]
+      .map((match) => Number(match[1])))
+  assert.ok(nodeTitleSize(boostedSvg) >= 14 && nodeTitleSize(boostedSvg) > nodeTitleSize(unboostedSvg),
+    'readability compensation must increase the actual rendered card title rather than match a stale hardcoded size')
 })
 
 test('标题补偿有界，并且不影响已有 Canvas 文件和特别长的标题', () => {

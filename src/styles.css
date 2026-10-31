@@ -1495,6 +1495,16 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
   stroke: none;
   stroke-dasharray: none;
 }
+.freeform-editor.is-architecture-mode .freeform-group-frame.is-enterprise-band .freeform-enterprise-band-navigation-hit {
+  cursor: zoom-in;
+  stroke: none;
+}
+.freeform-editor.is-architecture-mode .freeform-group-frame.is-enterprise-band .freeform-enterprise-band-navigation-hit:focus-visible {
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: none;
+  outline: none;
+}
 :root[data-theme='dark'] .freeform-editor.is-architecture-mode .freeform-group-frame.is-enterprise-band .freeform-enterprise-band-label {
   fill: #ecf3fa;
 }

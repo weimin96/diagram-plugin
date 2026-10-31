@@ -18,6 +18,7 @@ import { Hand, Link2, MousePointer2, Shapes, Type, type IconNode } from 'lucide'
 import { applyArchitectureTheme as applyArchitectureThemeToScene, beautifyArchitectureScene, type ArchitectureTheme } from './architectureDesign.js'
 import { architecturePartitionFlow } from './architecturePartitionFlow.js'
 import { recommendArchitectureInitialReadingViewport, recommendArchitectureReadingViewport } from './architecturePresentationQuality.js'
+import { compactEnterpriseLayerSpacing } from './architectureProposalSpacing.js'
 import { ARCHITECTURE_NODE_TEMPLATES, architectureNodeTemplate, type ArchitectureNodeTemplate, type ArchitectureNodeTemplateProvider } from './architectureNodeTemplates.js'
 import { anchorPoint, canvasArchitectureCardTemplate, canvasArchitectureGroupPresentation, canvasArchitectureHeader, canvasArchitectureProjection, canvasArchitectureRelationLabelVisible, canvasArchitectureScopeProjection, canvasArrowBoxRoute, canvasArrowLabelLayouts, canvasArrowPath, canvasArrowRoutePath, canvasArrowRoutePoints, canvasBundleTrunks, canvasCollapsedConnections, canvasCollapsedOwners, canvasGroupFrames, canvasPresentationGroupFrames, canvasIconLabel, canvasIconPaths, canvasIconRefLabel, canvasIconRefMarkup, canvasSemanticLodProjection, resolveCanvasSemanticLod, canvasStencilLabel, canvasStencilVisual, c4Label, parseCanvasScene, serializeCanvasScene, type CanvasAnchor, type CanvasArchitectureDensity, type CanvasArchitectureScope, type CanvasArchitectureView, type CanvasArrow, type CanvasC4Type, type CanvasElement, type CanvasGroup, type CanvasGroupFrame, type CanvasIcon, type CanvasIconRef, type CanvasLineStyle, type CanvasNode, type CanvasNote, type CanvasPoint, type CanvasRouting, type CanvasScene, type CanvasSemanticLodLevel, type CanvasShape, type CanvasStencil, type CanvasTone } from './canvas.js'
 import { CANVAS_ICON_CATALOG, type CanvasIconSource } from './iconRegistry.js'
@@ -471,6 +472,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   const [layerQuery, setLayerQuery] = useState('')
   const [toolbarMenu, setToolbarMenu] = useState<'architecture' | 'flowchart' | 'analysis' | 'insert' | 'style' | null>(null)
   const [architecturePanel, setArchitecturePanel] = useState<'settings' | 'assets'>('settings')
+  const [spacingFeedback, setSpacingFeedback] = useState<string | null>(null)
   const [assetQuery, setAssetQuery] = useState('')
   const [assetProvider, setAssetProvider] = useState<'all' | ArchitectureNodeTemplateProvider>('all')
   const [favoriteTemplateIds, setFavoriteTemplateIds] = useState<string[]>(() => readStoredTemplateIds(TEMPLATE_FAVORITES_STORAGE_KEY))
@@ -2876,6 +2878,27 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                       ))}
                     </div>
                   </section>
+                  {scene.architecture.diagramStyle === 'enterprise' ? (
+                    <section className="freeform-compact-control-row">
+                      <span>分层布局</span>
+                      <div className="freeform-menu-stack">
+                        <button type="button" title="仅压缩空闲的跨层走廊；保留所有真实关系，整图指标退化则拒绝"
+                          onClick={() => {
+                            const original = currentScene()
+                            const candidate = compactEnterpriseLayerSpacing(original)
+                            if (candidate === original) {
+                              setSpacingFeedback('没有可安全收紧的层距，原图未改动')
+                              return
+                            }
+                            commit(candidate)
+                            setSpacingFeedback(null)
+                            setToolbarMenu(null)
+                            focusArchitectureScene(candidate)
+                          }}>收紧层距</button>
+                        {spacingFeedback ? <p role="status">{spacingFeedback}</p> : null}
+                      </div>
+                    </section>
+                  ) : null}
                   {partitionFlow?.steps.length ? (
                     <section className="freeform-architecture-dependency-navigation">
                       <span>依赖分区 · {partitionFlow.crossPartitionRelations} 跨区关系</span>
@@ -3457,6 +3480,24 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
               ) : group.labelSide === 'left' ? (
                 <text x={group.x - 12} y={group.y + group.height / 2} textAnchor="end" dominantBaseline="middle" className="freeform-group-left-label" style={{ fontSize: group.labelFontSize, fill: group.labelColor }}>{fitCanvasText(group.label, Math.max(60, group.x - 20), group.labelFontSize ?? 17, 730)}</text>
               ) : <text x={group.x + 32} y={group.y + (group.labelFontSize ?? 11.5) + 6} style={{ fontSize: group.labelFontSize, fill: group.labelColor }}>{fitCanvasText(`${group.label}${autoCollapsedGroupIds.has(group.id) ? ` · ${group.memberIds.length} 节点` : !scene.architecture && group.c4Type ? ` · ${c4Label(group.c4Type)}` : ''}${group.collapsed ? scene.architecture ? ' · 双击下钻' : autoCollapsedGroupIds.has(group.id) ? ' · 双击进入' : ' · 双击展开' : ''}`, Math.max(60, group.width - 34), group.labelFontSize ?? 11.5, 650)}</text> : null}
+              {presentation === 'enterprise-band' && !group.collapsed ? (
+                <rect
+                  className="freeform-enterprise-band-navigation-hit"
+                  x={group.x} y={group.y} width={group.labelRailWidth ?? 132} height={group.height}
+                  fill="transparent" pointerEvents="all"
+                  role="button" tabIndex={0}
+                  aria-label={`查看${group.label}详情`}
+                  onClick={(event) => { event.stopPropagation(); selectGroup(group.id) }}
+                  onDoubleClick={(event) => { event.stopPropagation(); enterArchitectureScope({ kind: 'group', id: group.id }) }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      enterArchitectureScope({ kind: 'group', id: group.id })
+                    }
+                  }}
+                />
+              ) : null}
             </g>
           )})}
           {relationBundleTrunks.map((bundle) => (

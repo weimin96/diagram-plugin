@@ -19,6 +19,7 @@ import { canvasGroupFrames, resolveCanvasArchitectureDensity } from './canvas.js
 import { routeArchitectureEdges } from './architectureRouting.js'
 import { assessCanvasVisualQuality } from './canvasQuality.js'
 import { assessArchitectureRouteDiagnostics } from './architectureRouteDiagnostics.js'
+import { compactEnterpriseLayerSpacing } from './architectureProposalSpacing.js'
 export { routeArchitectureEdges, routeArchitectureArrowIds, routeArchitectureEdgesIncremental } from './architectureRouting.js'
 
 export type ArchitectureTheme = CanvasArchitectureTheme
@@ -50,6 +51,8 @@ export interface ArchitectureBeautifyOptions {
   reroute?: boolean
   /** Explicit, geometry-gated alignment of unlocked proposal cards. Never implied by theme changes. */
   alignCardHeights?: boolean
+  /** Explicit whole-scene proposal corridor compression with strict geometry veto. */
+  compactLayerSpacing?: boolean
 }
 
 export interface ArchitectureBeautifyResult {
@@ -218,15 +221,18 @@ export function beautifyArchitectureScene(scene: CanvasScene, options: Architect
     // Never reclassify authored proposal layers. An explicitly requested
     // reflow may align unlocked card heights, but only if the whole routed
     // scene passes the same geometric regression checks as the original.
-    const candidate = options.alignCardHeights === true ? normalizeEnterpriseCardHeights(scene) : scene
+    const aligned = options.alignCardHeights === true ? normalizeEnterpriseCardHeights(scene) : scene
+    const candidate = options.compactLayerSpacing === true ? compactEnterpriseLayerSpacing(aligned) : aligned
     const preserved = { ...candidate, architecture: { ...scene.architecture, theme, view, density } }
     return {
       scene: preserved,
       summary: {
         theme, composition: 'layered', partitions: scene.groups.filter((group) => group.labelSide === 'left').length,
         enrichedNodes: candidate === scene ? 0 : candidate.elements.filter((item, index) =>
-          item.type === 'node' && item.height !== (scene.elements[index] as CanvasNode).height).length,
-        routedEdges: 0,
+          item.type === 'node' && (item.height !== (scene.elements[index] as CanvasNode).height
+            || item.y !== (scene.elements[index] as CanvasNode).y)).length,
+        routedEdges: candidate === scene ? 0 : candidate.elements.filter((item, index) =>
+          item.type === 'arrow' && JSON.stringify(item.points) !== JSON.stringify((scene.elements[index] as CanvasArrow).points)).length,
         primaryNodes: scene.elements.filter((item) => item.type !== 'arrow' && item.emphasis === 'primary').length,
         bundledEdges: scene.elements.filter((item) => item.type === 'arrow' && Boolean(item.bundleKey)).length,
         view, density, resolvedDensity: resolveCanvasArchitectureDensity(preserved),

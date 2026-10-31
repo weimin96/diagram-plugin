@@ -3,6 +3,8 @@ import test from 'node:test'
 import { applyArchitectureTheme, beautifyArchitectureScene, inferArchitectureComposition, routeArchitectureArrowIds, routeArchitectureEdges, routeArchitectureEdgesIncremental } from '../src/architectureDesign.js'
 import { assessCanvasVisualQuality } from '../src/canvasQuality.js'
 import { anchorPoint, canvasArrowRoutePoints, canvasBundleTrunks, canvasGroupFrames, type CanvasScene } from '../src/canvas.js'
+import { compactEnterpriseLayerSpacing } from '../src/architectureProposalSpacing.js'
+import { assertArchitectureLayoutTransition, architectureLayoutContract } from '../src/architectureLayoutContract.js'
 
 test('自动布局避让锁定节点，并保留锁定节点的位置和尺寸', () => {
   const scene: CanvasScene = {
@@ -760,6 +762,43 @@ test("全部主题的外观与手动几何保护", () => {
     assert.deepEqual({ x: item.x, y: item.y, width: item.width, height: item.height }, before.get(item.id))
   }
 
+  }
+  // Real semantics, synthetic geometry: 3 editable proposal tiers must keep
+  // every directed relation and manual point in an explicit spacing reflow.
+  {
+    const proposal: CanvasScene = {
+      type: 'diagram-plugin-canvas', version: 1, title: 'Proposal tiers',
+      width: 1000, height: 790,
+      architecture: { theme: 'enterprise', diagramStyle: 'enterprise', view: 'detail' },
+      groups: ['入口层', '服务层', '存储层'].map((label, index) => ({
+        id: `layer-${index}`, label, labelSide: 'left' as const,
+      })),
+      elements: [
+        ...['入口', '服务', '数据'].map((text, index) => ({
+          id: `n${index}`, type: 'node' as const, text, groupId: `layer-${index}`,
+          x: 300, y: 60 + index * 230, width: 200, height: 80,
+        })),
+        { id: 'e1', type: 'arrow', from: 'n0', to: 'n1', routing: 'orthogonal', fromAnchor: 'bottom', toAnchor: 'top', label: 'HTTP' },
+        { id: 'e2', type: 'arrow', from: 'n1', to: 'n2', routing: 'orthogonal', fromAnchor: 'bottom', toAnchor: 'top', label: 'SQL' },
+      ],
+    }
+    const candidate = compactEnterpriseLayerSpacing(proposal)
+    assert.notEqual(candidate, proposal, 'a spacious, unlocked proposal can be compacted')
+    assert.ok(candidate.height < proposal.height)
+    assert.deepEqual(candidate.elements.map((item) => item.id), proposal.elements.map((item) => item.id))
+    assert.deepEqual(candidate.elements.filter((item) => item.type === 'arrow').map((item) => [item.from, item.to, item.label]),
+      proposal.elements.filter((item) => item.type === 'arrow').map((item) => [item.from, item.to, item.label]))
+    assertArchitectureLayoutTransition(proposal, candidate, architectureLayoutContract('reflow'))
+    assert.strictEqual(compactEnterpriseLayerSpacing(candidate), candidate, 'repeated compaction is idempotent')
+    assert.strictEqual(compactEnterpriseLayerSpacing({ ...proposal, elements: proposal.elements.map((item) =>
+      item.type === 'node' && item.id === 'n1' ? { ...item, locked: true } : item) }).height, proposal.height,
+    'a locked coordinate rejects the entire proposal instead of partially shifting it')
+    assert.strictEqual(compactEnterpriseLayerSpacing({ ...proposal, architecture: { theme: 'enterprise', diagramStyle: 'engineering' } }).height,
+      proposal.height, 'engineering layouts must not be rewritten as proposals')
+    assert.deepEqual(beautifyArchitectureScene(proposal, { relayout: true }).scene.elements, proposal.elements,
+      'ordinary beautification is not implicit geometry compaction')
+    assert.ok(beautifyArchitectureScene(proposal, { compactLayerSpacing: true }).scene.height < proposal.height,
+      'explicit MCP flag uses the same shared acceptance rule')
   }
 })
 
