@@ -2,9 +2,99 @@
  * Pure candidate generation; acceptance and entire-scene quality scoring
  * remain with the Composer. No layout engine or persisted protocol here.
  */
-import { canvasArrowBoxRoute, canvasSharedSourceStem, type CanvasArrow, type CanvasNode, type CanvasScene } from './canvas.js'
+import { canvasArrowBoxRoute, canvasBundleTrunks, canvasSharedSourceStem, type CanvasArrow, type CanvasNode, type CanvasScene } from './canvas.js'
 import { assessCanvasVisualQuality } from './canvasQuality.js'
 import { assessArchitectureRouteDiagnostics } from './architectureRouteDiagnostics.js'
+
+/** Quality-gated correction for the terminal tangent of newly generated,
+ * independent orthogonal relationships. This is never applied to manually
+ * edited scenes or verified shared trunks. The original graph and viewport
+ * remain unchanged when no globally acceptable correction exists.
+ */
+export function normalizeGeneratedArchitectureTerminals(scene: CanvasScene): CanvasScene {
+  if (!scene.architecture) return scene
+  const nodes = new Map(scene.elements.filter((item): item is CanvasNode => item.type === 'node')
+    .map((item) => [item.id, item]))
+  const originalRoutes = scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow')
+  if (originalRoutes.length < 12) return scene
+  const initial = assessArchitectureRouteDiagnostics(scene)
+  if (!initial.terminalNormalViolations) return scene
+  let best = scene
+  let quality = assessCanvasVisualQuality(scene).metrics
+  let diagnostics = initial
+  const preservedTrunks = canvasSharedSourceStemsSignature(scene)
+  const geometricalKeys = [
+    'nodeOverlaps', 'edgeCrossings', 'edgeOverlaps', 'edgeNodeIntersections',
+    'labelNodeIntersections', 'labelOverlaps', 'labelOverflows',
+  ] as const
+  for (let pass = 0; pass < 2; pass++) {
+    let changes = 0
+    for (const original of originalRoutes) {
+      const arrow = best.elements.find((item): item is CanvasArrow => item.type === 'arrow' && item.id === original.id)
+      if (!arrow || arrow.freehand || arrow.bundleKey || arrow.routing !== 'orthogonal'
+        || !arrow.fromAnchor || arrow.fromAnchor === 'auto'
+        || !arrow.toAnchor || arrow.toAnchor === 'auto' || arrow.labelPosition) continue
+      const source = nodes.get(arrow.from), target = nodes.get(arrow.to)
+      if (!source || !target || source.rotation || target.rotation) continue
+      const route = canvasArrowBoxRoute(source, target, arrow)
+      if (route.length < 3) continue
+      let nextBest: { scene: CanvasScene; metrics: typeof quality; route: typeof diagnostics } | undefined
+      for (const fromEnd of [true, false]) {
+        if (nextBest) break
+        const side = fromEnd ? arrow.fromAnchor : arrow.toAnchor
+        const endpoint = fromEnd ? route[0] : route.at(-1)!
+        const adjacent = fromEnd ? route[1] : route.at(-2)!
+        const normal = side === 'left' ? adjacent.y === endpoint.y && adjacent.x < endpoint.x
+          : side === 'right' ? adjacent.y === endpoint.y && adjacent.x > endpoint.x
+            : side === 'top' ? adjacent.x === endpoint.x && adjacent.y < endpoint.y
+              : adjacent.x === endpoint.x && adjacent.y > endpoint.y
+        if (normal) continue
+        const axis = side === 'top' || side === 'bottom' ? 'y' : 'x'
+        const sign = side === 'top' || side === 'left' ? -1 : 1
+        for (const distance of [12, 20, 28, 36, 48]) {
+          const stub = { ...endpoint, [axis]: endpoint[axis] + sign * distance }
+          const bend = axis === 'y'
+            ? { x: adjacent.x, y: stub.y } : { x: stub.x, y: adjacent.y }
+          const points = fromEnd
+            ? [route[0], stub, bend, ...route.slice(1)]
+            : [...route.slice(0, -1), bend, stub, route.at(-1)!]
+          if (points.some((point) => point.x < 0 || point.y < 0
+            || point.x > scene.width || point.y > scene.height)) continue
+          const updated = { ...arrow, points: points.slice(1, -1) }
+          const candidate = { ...best, elements: best.elements.map((item) =>
+            item.id === arrow.id ? updated : item) }
+          const metrics = assessCanvasVisualQuality(candidate).metrics
+          if (geometricalKeys.some((key) => metrics[key] > quality[key])) continue
+          const candidateRoute = assessArchitectureRouteDiagnostics(candidate)
+          if (candidateRoute.terminalNormalViolations >= diagnostics.terminalNormalViolations
+            || candidateRoute.nonOrthogonalSegments > diagnostics.nonOrthogonalSegments
+            || candidateRoute.unrelatedFrameIntrusionLength > diagnostics.unrelatedFrameIntrusionLength
+            || candidateRoute.frameOverlaps > diagnostics.frameOverlaps
+            || candidateRoute.ingressPortConflicts > diagnostics.ingressPortConflicts
+            || candidateRoute.totalRouteLength > initial.totalRouteLength * 1.01
+            || canvasSharedSourceStemsSignature(candidate) !== preservedTrunks) continue
+          nextBest = { scene: candidate, metrics, route: candidateRoute }
+          // First accepted corridor is enough. We are reducing incorrect
+          // physical terminal tangents, not globally reoptimizing edge cost.
+          break
+        }
+      }
+      if (nextBest) {
+        best = nextBest.scene
+        quality = nextBest.metrics
+        diagnostics = nextBest.route
+        changes++
+      }
+    }
+    if (!changes) break
+  }
+  return best
+}
+
+function canvasSharedSourceStemsSignature(scene: CanvasScene): string {
+  return JSON.stringify(canvasBundleTrunks(scene).map((trunk) => [trunk.id, trunk.path]).sort((a, b) =>
+    String(a[0]).localeCompare(String(b[0]), 'en')))
+}
 
 /** Repair sub-pixel/short diagonal terminal stubs from imported orthogonal
  * routes. This changes waypoints only, never the original ports or topology.

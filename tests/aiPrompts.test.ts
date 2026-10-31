@@ -3,6 +3,7 @@ import test from 'node:test'
 import { buildGenerationPrompt, buildModificationPrompt, buildSubgraphModificationPrompt } from '../src/aiPrompts.js'
 import { detectArchitectureStyle } from '../src/architectureStyle.js'
 import { composeEnterpriseArchitecture } from '../src/enterpriseArchitecture.js'
+import { normalizeGeneratedArchitectureTerminals } from '../src/architectureRouteRepair.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
 import { beautifyArchitectureScene } from '../src/architectureDesign.js'
 import { canvasArchitectureGroupPresentation, canvasArrowLabelLayouts, canvasEnterpriseModuleSvg, canvasEnterpriseModuleTextLayout, canvasGroupFrames, canvasPresentationGroupFrames, canvasSceneToSvg } from '../src/canvas.js'
@@ -241,6 +242,10 @@ test('architecture generation uses topology archetypes and a bounded quality loo
   assert.equal(dense.quality.metrics.edgeNodeIntersections, 0)
   assert.ok(dense.quality.metrics.edgeCrossings < 132 && dense.quality.metrics.edgeOverlaps < 240,
     'relation-aware column candidates must reduce the known fixed-four-column conflict baseline')
+  assert.ok(dense.routeDiagnostics.terminalNormalViolations <= 20,
+    'generated independent relations must reduce tangential entries without loosening geometric collision limits')
+  assert.equal(normalizeGeneratedArchitectureTerminals(dense.scene), dense.scene,
+    'terminal normalization is idempotent; repeated rendering must not migrate edge waypoints')
   assert.equal(dense.scene.width, 1500, 'dense matrix must not become unreadably wide')
   assert.ok(dense.scene.height < 1930, 'multiline module matrix must reduce redundant layer height')
   assert.equal(new Set(dense.scene.elements.flatMap((item) => item.type === 'node'

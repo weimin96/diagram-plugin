@@ -1,6 +1,7 @@
 import type { ArchitectureIntentGraph } from './architectureComposer.js'
 import { buildLayeredTemplateScene, type LayeredTemplateLayer } from './canvasTemplates.js'
 import { routeArchitectureEdges } from './architectureRouting.js'
+import { normalizeGeneratedArchitectureTerminals } from './architectureRouteRepair.js'
 import { assessCanvasVisualQuality } from './canvasQuality.js'
 import { assessArchitectureRouteDiagnostics } from './architectureRouteDiagnostics.js'
 import { assessArchitecturePresentation } from './architecturePresentationQuality.js'
@@ -176,7 +177,13 @@ export function composeEnterpriseArchitecture(intent: ArchitectureIntentGraph) {
         item.type === 'arrow' && Boolean(item.bundleKey)).length },
     }
   }
-  return best
+  const normalized = normalizeGeneratedArchitectureTerminals(best.scene)
+  if (normalized === best.scene) return best
+  const quality = assessCanvasVisualQuality(normalized)
+  const routeDiagnostics = assessArchitectureRouteDiagnostics(normalized)
+  const presentation = assessArchitecturePresentation(normalized)
+  return { ...best, scene: normalized, quality, routeDiagnostics, presentation,
+    visualPlan: planArchitectureVisual(normalized, 'layered', quality, presentation, routeDiagnostics) }
 }
 
 function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array<[string, ArchitectureIntentGraph['nodes']]>, gap: number, requestedColumns?: number) {
