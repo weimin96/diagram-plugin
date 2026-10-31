@@ -4,6 +4,7 @@ import { applyArchitectureTheme, beautifyArchitectureScene, inferArchitectureCom
 import { assessCanvasVisualQuality } from '../src/canvasQuality.js'
 import { anchorPoint, canvasArrowRoutePoints, canvasBundleTrunks, canvasGroupFrames, type CanvasScene } from '../src/canvas.js'
 import { compactEnterpriseLayerSpacing } from '../src/architectureProposalSpacing.js'
+import { balanceEnterpriseProposalColumns } from '../src/architectureProposalBalance.js'
 import { assertArchitectureLayoutTransition, architectureLayoutContract } from '../src/architectureLayoutContract.js'
 
 test('自动布局避让锁定节点，并保留锁定节点的位置和尺寸', () => {
@@ -799,6 +800,49 @@ test("全部主题的外观与手动几何保护", () => {
       'ordinary beautification is not implicit geometry compaction')
     assert.ok(beautifyArchitectureScene(proposal, { compactLayerSpacing: true }).scene.height < proposal.height,
       'explicit MCP flag uses the same shared acceptance rule')
+    assert.strictEqual(balanceEnterpriseProposalColumns(proposal), proposal,
+      'aligned layers without an outlier must not be nudged')
+    const engineering = { ...proposal, architecture: {
+      theme: 'enterprise' as const, diagramStyle: 'engineering' as const, view: 'detail' as const,
+    } }
+    assert.strictEqual(balanceEnterpriseProposalColumns(engineering), engineering,
+      'engineering architecture must remain untouched')
+    const columnOutlier: CanvasScene = {
+      ...proposal, width: 1320, height: 560,
+      elements: [
+        ...[
+          ['a', 240, 60, 'layer-0'], ['b', 500, 60, 'layer-0'],
+          ['c', 800, 210, 'layer-1'], ['d', 1030, 210, 'layer-1'],
+          ['e', 240, 360, 'layer-2'], ['f', 500, 360, 'layer-2'],
+        ].map(([id, x, y, groupId]) => ({
+          id: String(id), type: 'node' as const, text: String(id),
+          x: Number(x), y: Number(y), groupId: String(groupId), width: 120, height: 82,
+        })),
+        { id: 'ac', type: 'arrow', from: 'b', to: 'c', routing: 'orthogonal', fromAnchor: 'bottom',
+          toAnchor: 'top', points: [{ x: 560, y: 177 }, { x: 860, y: 177 }] },
+        { id: 'ce', type: 'arrow', from: 'c', to: 'e', routing: 'orthogonal', fromAnchor: 'bottom',
+          toAnchor: 'top', points: [{ x: 860, y: 327 }, { x: 300, y: 327 }] },
+      ],
+    }
+    const balanced = balanceEnterpriseProposalColumns(columnOutlier)
+    assert.notEqual(balanced, columnOutlier, 'protruding column is safely aligned')
+    assert.ok(balanced.width < columnOutlier.width, 'usable canvas width shrinks with the actual route corridor')
+    assert.deepEqual(balanced.elements.map((item) => item.id), columnOutlier.elements.map((item) => item.id))
+    assert.deepEqual(balanced.elements.filter((item) => item.type === 'arrow').map((item) =>
+      [item.id, item.from, item.to, item.lineStyle]),
+    columnOutlier.elements.filter((item) => item.type === 'arrow').map((item) =>
+      [item.id, item.from, item.to, item.lineStyle]))
+    assertArchitectureLayoutTransition(columnOutlier, balanced, architectureLayoutContract('reflow'))
+    assert.strictEqual(balanceEnterpriseProposalColumns(balanced), balanced,
+      'a repeated explicit balance never keeps pushing modules left')
+    const lockedOutlier: CanvasScene = { ...columnOutlier, elements: columnOutlier.elements.map((item) =>
+      item.type === 'node' && item.id === 'c' ? { ...item, locked: true } : item) }
+    assert.strictEqual(balanceEnterpriseProposalColumns(lockedOutlier), lockedOutlier,
+      'never move a locked manually positioned module')
+    assert.deepEqual(beautifyArchitectureScene(columnOutlier).scene.elements, columnOutlier.elements,
+      'ordinary theme changes do not implicitly reflow the matrix')
+    assert.ok(beautifyArchitectureScene(columnOutlier, { balanceColumns: true }).scene.width < columnOutlier.width,
+      'the MCP beautifier delegates to the same explicit grid/corridor planner')
   }
 })
 

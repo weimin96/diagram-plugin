@@ -20,6 +20,7 @@ import { routeArchitectureEdges } from './architectureRouting.js'
 import { assessCanvasVisualQuality } from './canvasQuality.js'
 import { assessArchitectureRouteDiagnostics } from './architectureRouteDiagnostics.js'
 import { compactEnterpriseLayerSpacing } from './architectureProposalSpacing.js'
+import { balanceEnterpriseProposalColumns } from './architectureProposalBalance.js'
 import { straightenArchitectureTerminalRoutes } from './architectureRouteRepair.js'
 export { routeArchitectureEdges, routeArchitectureArrowIds, routeArchitectureEdgesIncremental } from './architectureRouting.js'
 
@@ -54,6 +55,8 @@ export interface ArchitectureBeautifyOptions {
   alignCardHeights?: boolean
   /** Explicit whole-scene proposal corridor compression with strict geometry veto. */
   compactLayerSpacing?: boolean
+  /** Quality-gated grid balancing and path-preserving outer-corridor reflow. */
+  balanceColumns?: boolean
   /** Explicit, quality-gated repair of short off-axis orthogonal end segments. */
   straightenTerminals?: boolean
 }
@@ -226,7 +229,8 @@ export function beautifyArchitectureScene(scene: CanvasScene, options: Architect
     // scene passes the same geometric regression checks as the original.
     const aligned = options.alignCardHeights === true ? normalizeEnterpriseCardHeights(scene) : scene
     const compacted = options.compactLayerSpacing === true ? compactEnterpriseLayerSpacing(aligned) : aligned
-    const candidate = options.straightenTerminals === true ? straightenArchitectureTerminalRoutes(compacted) : compacted
+    const straightened = options.straightenTerminals === true ? straightenArchitectureTerminalRoutes(compacted) : compacted
+    const candidate = options.balanceColumns === true ? balanceEnterpriseProposalColumns(straightened) : straightened
     const preserved = { ...candidate, architecture: { ...scene.architecture, theme, view, density } }
     return {
       scene: preserved,
@@ -234,7 +238,8 @@ export function beautifyArchitectureScene(scene: CanvasScene, options: Architect
         theme, composition: 'layered', partitions: scene.groups.filter((group) => group.labelSide === 'left').length,
         enrichedNodes: candidate === scene ? 0 : candidate.elements.filter((item, index) =>
           item.type === 'node' && (item.height !== (scene.elements[index] as CanvasNode).height
-            || item.y !== (scene.elements[index] as CanvasNode).y)).length,
+            || item.y !== (scene.elements[index] as CanvasNode).y
+            || item.x !== (scene.elements[index] as CanvasNode).x)).length,
         routedEdges: candidate === scene ? 0 : candidate.elements.filter((item, index) =>
           item.type === 'arrow' && JSON.stringify(item.points) !== JSON.stringify((scene.elements[index] as CanvasArrow).points)).length,
         primaryNodes: scene.elements.filter((item) => item.type !== 'arrow' && item.emphasis === 'primary').length,

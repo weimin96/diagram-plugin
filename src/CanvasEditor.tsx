@@ -19,6 +19,7 @@ import { applyArchitectureTheme as applyArchitectureThemeToScene, beautifyArchit
 import { architecturePartitionFlow } from './architecturePartitionFlow.js'
 import { recommendArchitectureInitialReadingViewport, recommendArchitectureReadingViewport } from './architecturePresentationQuality.js'
 import { compactEnterpriseLayerSpacing } from './architectureProposalSpacing.js'
+import { balanceEnterpriseProposalColumns } from './architectureProposalBalance.js'
 import { straightenArchitectureTerminalRoutes } from './architectureRouteRepair.js'
 import { ARCHITECTURE_NODE_TEMPLATES, architectureNodeTemplate, type ArchitectureNodeTemplate, type ArchitectureNodeTemplateProvider } from './architectureNodeTemplates.js'
 import { anchorPoint, canvasArchitectureCardTemplate, canvasArchitectureGroupPresentation, canvasEnterpriseBandPalette, canvasEnterpriseModuleSvg, canvasArchitectureHeader, canvasArchitectureProjection, canvasArchitectureRelationLabelVisible, canvasArchitectureScopeProjection, canvasArrowBoxRoute, canvasArrowLabelLayouts, canvasArrowPath, canvasArrowRoutePath, canvasArrowRoutePoints, canvasBundleTrunks, canvasCollapsedConnections, canvasCollapsedOwners, canvasGroupFrames, canvasPresentationGroupFrames, canvasIconLabel, canvasIconPaths, canvasIconRefLabel, canvasIconRefMarkup, canvasSemanticLodProjection, resolveCanvasSemanticLod, canvasStencilLabel, canvasStencilVisual, c4Label, parseCanvasScene, serializeCanvasScene, type CanvasAnchor, type CanvasArchitectureDensity, type CanvasArchitectureScope, type CanvasArchitectureView, type CanvasArrow, type CanvasC4Type, type CanvasElement, type CanvasGroup, type CanvasGroupFrame, type CanvasIcon, type CanvasIconRef, type CanvasLineStyle, type CanvasNode, type CanvasNote, type CanvasPoint, type CanvasRouting, type CanvasScene, type CanvasSemanticLodLevel, type CanvasShape, type CanvasStencil, type CanvasTone } from './canvas.js'
@@ -2905,6 +2906,19 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                             setToolbarMenu(null)
                             focusArchitectureScene(candidate)
                           }}>收紧层距</button>
+                        <button type="button" title="协同收紧偏移的分层模块和外侧跨层走廊，完整几何质量不改善时保留原图"
+                          onClick={() => {
+                            const original = currentScene()
+                            const candidate = balanceEnterpriseProposalColumns(original)
+                            if (candidate === original) {
+                              setSpacingFeedback('没有可安全优化的列布局，原图未改动')
+                              return
+                            }
+                            commit(candidate)
+                            setSpacingFeedback('列布局与外围走廊已协同优化，可撤销')
+                            setToolbarMenu(null)
+                            focusArchitectureScene(candidate)
+                          }}>优化列布局</button>
                         <button type="button" title="修正错误的短斜向连接；保留真实关系与节点坐标"
                           onClick={() => {
                             const original = currentScene()
