@@ -14,6 +14,7 @@ const regionNames: Record<NonNullable<ArchitectureIntentGraph['nodes'][number]['
   processing: '处理与服务层', data: '数据与基础设施层',
 }
 const bandGap = 44
+const proposalBandGap = 34
 
 /** Layer membership comes from evidence; only presentation order is negotiable. */
 function orderConnectedModules(
@@ -102,7 +103,7 @@ export function composeEnterpriseArchitecture(intent: ArchitectureIntentGraph) {
   // permutations: a platform container and an access bar have real geometry.
   if (intent.nodes.some((node) => node.visualRole || node.moduleGroup || node.supportLayers)
     || intent.proposalMode === 'proposal' || intent.proposalMode === 'capabilities' || intent.proposalMode === 'hybrid') {
-    return composeLayeredCandidate(intent, originalEntries, bandGap)
+    return composeLayeredCandidate(intent, originalEntries, proposalBandGap)
   }
   if (intent.relations.length < 2) return composeLayeredCandidate(intent, originalEntries, bandGap)
   const connectedOrder = orderConnectedModules(originalEntries, intent.relations, 1)
@@ -111,7 +112,10 @@ export function composeEnterpriseArchitecture(intent: ArchitectureIntentGraph) {
   // The barycentric ordering frequently matches the verified input order.
   // Rerouting the same grid a second time only burns compute without adding a candidate.
   const candidates = reordered ? [originalEntries, connectedOrder] : [originalEntries]
-  const configurations = [bandGap, bandGap + 32, bandGap + 64]
+  // Labelled dependency diagrams need genuine whitespace for edge captions,
+  // unlike the uncluttered proposal overview where those edges are filtered.
+  const minimumGap = intent.relations.some((relation) => relation.label) ? bandGap + 64 : bandGap
+  const configurations = [minimumGap, minimumGap + 32, minimumGap + 64]
   const outputs = candidates.flatMap((entries) => configurations.map((gap) => composeLayeredCandidate(intent, entries, gap)))
   // The historic fixed four-column layout puts 5–8 modules into jagged rows.
   // Try at most two wider, aligned grid geometries; the final routed scene
@@ -219,8 +223,10 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
   const roleById = new Map<string, CanvasProposalRole>(entries.flatMap(([, members]) =>
     members.map((node): [string, CanvasProposalRole] => [node.id, node.visualRole
       ?? (node.moduleGroup ? 'capability-chip'
-        : proposalReading && node.partition === 'data'
-          && (node.icon === 'database' || node.icon === 'cache' || node.icon === 'queue')
+        : proposalReading && ((node.partition === 'data'
+            && (node.icon === 'database' || node.icon === 'cache'
+              || node.icon === 'queue' || node.icon === 'file'))
+          || (node.icon === 'file' && members.some((member) => member.visualRole === 'resource-icon')))
           ? 'resource-icon'
           : proposalReading && members.filter((member) => member.visualRole !== 'support-rail').length === 1
             && node.icon === 'gateway'
@@ -228,6 +234,11 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
   const supportRails = entries.flatMap(([layer, members]) => members
     .filter((node) => roleById.get(node.id) === 'support-rail')
     .map((node) => ({ node, layer })))
+  const governanceAnchor = supportRails.length
+    ? [...new Set(supportRails.map(({ layer }) => layer))]
+      .sort((a, b) => supportRails.filter((item) => item.layer === b).length
+        - supportRails.filter((item) => item.layer === a).length)[0]
+    : undefined
   const layerRows = new Map<string, { top: number; bottom: number }>()
   const maxLayerSize = Math.max(...entries.map(([, nodes]) => nodes.length))
   const compact = maxLayerSize <= 4
@@ -256,7 +267,9 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
     const layerId = `__arch-layer-${layerIndex + 1}`
     if (explicit) {
       const mainMembers = nodes.filter((node) => roleById.get(node.id) !== 'support-rail')
-      const available = 1100
+      // Reserve one adjacent governance panel inside its host layer, never
+      // append another detached column outside the architecture's silhouette.
+      const available = governanceAnchor === entries[layerIndex][0] ? 832 : 1100
       const xStart = leftInset
       const sections = new Map<string, typeof nodes>()
       for (const node of mainMembers) {
@@ -268,22 +281,22 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
       const singles = mainMembers.filter((node) => !node.moduleGroup)
       if (grouped.length) {
         const sectionColumns = Math.min(3, grouped.length)
-        const sectionWidth = Math.floor((available - (sectionColumns - 1) * 20) / sectionColumns)
+          const sectionWidth = Math.floor((available - (sectionColumns - 1) * 14) / sectionColumns)
         const rowHeights = Array.from({ length: Math.ceil(grouped.length / sectionColumns) },
           (_, row) => Math.max(...grouped.slice(row * sectionColumns, (row + 1) * sectionColumns)
-            .map(([, members]) => 50 + Math.ceil(members.length / Math.min(3, members.length)) * 68)))
+            .map(([, members]) => 50 + Math.ceil(members.length / Math.min(3, members.length)) * 62)))
         let groupRowHeight = 0
         grouped.forEach(([key, members], groupIndex) => {
           const inRow = Math.min(3, members.length)
-          const sectionHeight = 50 + Math.ceil(members.length / inRow) * 68
-          const sectionX = xStart + (groupIndex % sectionColumns) * (sectionWidth + 20)
+          const sectionHeight = 50 + Math.ceil(members.length / inRow) * 62
+          const sectionX = xStart + (groupIndex % sectionColumns) * (sectionWidth + 14)
           const sectionRow = Math.floor(groupIndex / sectionColumns)
           const sectionY = rowY + rowHeights.slice(0, sectionRow)
             .reduce((sum, height) => sum + height + 18, 0)
           const sectionId = `__arch-section-${layerIndex + 1}-${groupIndex + 1}`
           nestedGroups.push({
             id: sectionId, label: key.slice(6), parentId: layerId,
-            kind: 'boundary', fillColor: '#f3f6fa',
+            kind: 'boundary', fillColor: '#dce1f8', borderStyle: 'solid',
           })
           members.forEach((node, nodeIndex) => {
             const row = Math.floor(nodeIndex / inRow)
@@ -292,10 +305,10 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
             const { layer: _layer, partition: _partition, visualRole: _role, moduleGroup: _moduleGroup, ...metadata } = node
             elements.push({
               ...metadata, id: node.id, type: 'node', groupId: sectionId,
-              proposalRole: roleById.get(node.id), fontSize: 14,
+              proposalRole: roleById.get(node.id), fontSize: 17,
               x: sectionX + 20 + (nodeIndex % inRow) * (rowWidth + 10),
-              y: sectionY + 32 + row * 68,
-              width: rowWidth, height: 54,
+              y: sectionY + 36 + row * 62,
+              width: rowWidth, height: 48,
             })
           })
           groupRowHeight = Math.max(groupRowHeight, sectionY - rowY + sectionHeight + 18)
@@ -314,7 +327,7 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
           const { layer: _layer, partition: _partition, visualRole: _role, moduleGroup: _moduleGroup, ...metadata } = node
           elements.push({
             ...metadata, id: node.id, type: 'node', groupId: layerId,
-            proposalRole: roleById.get(node.id), fontSize: 15,
+            proposalRole: roleById.get(node.id), fontSize: 17,
             x: band ? xStart : xStart + ((index % perRow) + .5) * (available / perRow) - cardWidth / 2,
             y: rowY + Math.floor(index / perRow) * (cardHeight + 16),
             width: cardWidth, height: cardHeight,
@@ -322,9 +335,11 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
         })
         rowY += Math.ceil(singles.length / perRow) * (cardHeight + 16)
       }
-      const layerHeight = Math.max(96, rowY - y + 8)
+      const governanceHeight = governanceAnchor === entries[layerIndex][0]
+        ? supportRails.length * 60 + 36 : 0
+      const layerHeight = Math.max(96, rowY - y + 8, governanceHeight)
       layerRows.set(entries[layerIndex][0], { top: y, bottom: y + layerHeight })
-      y += layerHeight + gap + 20
+      y += layerHeight + gap + 4
       continue
     }
     nodes.forEach((node, nodeIndex) => {
@@ -342,23 +357,22 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
     layerRows.set(entries[layerIndex][0], {
       top: y, bottom: y + Math.ceil(nodes.length / columns) * (nodeHeight + rowGap),
     })
-    y += Math.ceil(nodes.length / columns) * (nodeHeight + rowGap) + gap + (compact ? 14 : 0)
+    y += Math.ceil(nodes.length / columns) * (nodeHeight + rowGap) + gap + (compact ? 6 : 0)
   }
   if (supportRails.length) {
     // Cross-cutting *semantic* coverage remains on the original nodes, while
     // the summary view shows a single concise governance domain. Three tall
     // side columns are neither readable nor an accurate ownership hierarchy.
     const domainId = '__arch-support-domain'
-    const covered = [...new Set(supportRails.flatMap(({ node, layer }) => node.supportLayers ?? [layer]))]
-    const domainTop = Math.min(...covered.map((label) => layerRows.get(label)!.top))
-    const domainBottom = Math.max(...covered.map((label) => layerRows.get(label)!.bottom))
-    const domainX = leftInset + 1100 + 56
-    const tileHeight = 54
-    const rowGap = 14
+    const anchorRow = layerRows.get(governanceAnchor!)!
+    const domainX = leftInset + 832 + 20
+    const tileHeight = 46
+    const rowGap = 13
     const contentHeight = supportRails.length * (tileHeight + rowGap) - rowGap
-    const domainY = Math.max(domainTop + 32, (domainTop + domainBottom - contentHeight) / 2)
+    const domainY = Math.max(anchorRow.top + 32,
+      (anchorRow.top + anchorRow.bottom - contentHeight) / 2)
     nestedGroups.push({
-      id: domainId, label: '治理与运维', kind: 'boundary', fillColor: '#eef3f8', borderStyle: 'solid',
+      id: domainId, label: '治理与运维', kind: 'boundary', fillColor: '#dceccf', borderStyle: 'solid',
     })
     supportRails.forEach(({ node }, index) => {
       const { layer: _layer, partition: _partition, visualRole: _role,
@@ -366,8 +380,8 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
       elements.push({
         ...metadata, id: node.id, type: 'node', groupId: domainId,
         proposalRole: 'support-item', fontSize: 15,
-        x: domainX + 16, y: domainY + index * (tileHeight + rowGap),
-        width: 208, height: tileHeight,
+        x: domainX + 8, y: domainY + index * (tileHeight + rowGap),
+        width: 210, height: tileHeight,
       })
     })
   }
@@ -385,7 +399,7 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
     groups: [...(template.groups?.map((group, index) => ({ ...group, id: `__arch-layer-${index + 1}` })) ?? []), ...nestedGroups],
     width: Math.max(tightMatrix ? 680 : compact ? 800 : 1500,
       leftInset + columns * (nodeWidth + columnGap) + (tightMatrix ? 36 : 48),
-      supportRails.length ? leftInset + 1100 + 56 + 240 + 26 : 0),
+      supportRails.length ? leftInset + 1100 + 60 : 0),
     height: Math.max(tightMatrix ? 480 : compact ? 520 : 720, y + (tightMatrix ? 22 : compact ? 24 : 40)),
     style: intent.style ?? 'ocean',
     architecture: {

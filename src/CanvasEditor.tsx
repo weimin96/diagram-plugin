@@ -3507,9 +3507,11 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
             const presentation = canvasArchitectureGroupPresentation(renderScene, group)
             const paletteIndex = renderScene.groups?.findIndex((item) => item.id === group.id) ?? groupIndex
             const enterprisePalette = canvasEnterpriseBandPalette(Math.max(0, paletteIndex), darkTheme)
+            const flatDomain = renderScene.architecture?.diagramStyle === 'enterprise'
+              && (group.id.startsWith('__arch-section-') || group.id === '__arch-support-domain')
             const enterpriseLabel = presentation === 'enterprise-band'
               ? layoutArchitectureCardText(group.label || group.id, undefined,
-                Math.max(24, (group.labelRailWidth ?? 132) - 28), group.height, 15, 700)
+                Math.max(170, (group.labelRailWidth ?? 132) - 12), group.height, 22, 700)
               : null
             return (
             <g
@@ -3525,7 +3527,9 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                 height={group.height}
                 rx={presentation === 'enterprise-band' ? 2 : scene.architecture ? group.c4Type === 'software-system' ? 10 : 8 : 20}
                 style={presentation === 'enterprise-band'
-                  ? { fill: enterprisePalette.body, stroke: enterprisePalette.border, strokeWidth: 1, strokeDasharray: 'none' }
+                  ? { fill: enterprisePalette.body, stroke: 'none', strokeWidth: 0, strokeDasharray: 'none' }
+                  : flatDomain
+                    ? { fill: group.fillColor ?? '#e6e8fb', fillOpacity: 1, stroke: 'none', strokeWidth: 0, strokeDasharray: 'none' }
                   : scene.architecture?.diagramStyle === 'enterprise' && (group.parentId || group.borderStyle === 'solid')
                     ? { ...(group.fillColor ? { fill: group.fillColor } : {}), fillOpacity: 1, strokeDasharray: 'none', strokeWidth: 1.5 }
                   : group.fillColor ? { fill: group.fillColor, fillOpacity: 0.86 } : undefined}
@@ -3547,10 +3551,6 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                   }
                 } : undefined}
               /> : null}
-              {presentation === 'enterprise-band' ? <>
-                <rect className="freeform-enterprise-band-rail" x={group.x + 1} y={group.y + 1} width={(group.labelRailWidth ?? 132) - 1} height={group.height - 2} style={{ fill: enterprisePalette.rail, stroke: 'none', strokeDasharray: 'none' }} />
-                <path d={`M${group.x + (group.labelRailWidth ?? 132)} ${group.y}V${group.y + group.height}`} stroke={enterprisePalette.border} strokeWidth={1} />
-              </> : null}
               {group.c4Type === 'software-system' && !group.collapsed ? <rect className="freeform-group-header" x={group.x} y={group.y} width={group.width} height="34" rx={scene.architecture ? 10 : 20} /> : null}
               {!group.collapsed && presentation !== 'compact-region' ? (
                 <rect
@@ -3569,11 +3569,13 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                 />
               ) : null}
               {group.label ? presentation === 'enterprise-band' ? (
-                <text className="freeform-enterprise-band-label" style={{ fill: enterprisePalette.accent }} x={group.x + 16} y={group.y + enterpriseLabel!.titleY}>
-                  {enterpriseLabel!.titleLines.map((line, index) => <tspan key={index} x={group.x + 16} dy={index ? enterpriseLabel!.titleLineHeight : 0}>{line}</tspan>)}
+                <text className="freeform-enterprise-band-label" style={{ fill: enterprisePalette.accent, fontSize: 22, fontWeight: 700 }} x={group.x - 22} y={group.y + enterpriseLabel!.titleY} textAnchor="end">
+                  {enterpriseLabel!.titleLines.map((line, index) => <tspan key={index} x={group.x - 22} dy={index ? enterpriseLabel!.titleLineHeight : 0}>{line}</tspan>)}
                 </text>
               ) : presentation === 'compact-region' ? (
                 <text className="freeform-compact-region-label" x={group.x + 16} y={group.y + 18}>{fitCanvasText(group.label, group.width - 24, 12, 640)}</text>
+              ) : flatDomain ? (
+                <text x={group.x + group.width / 2} y={group.y + 24} textAnchor="middle" style={{ fontSize: 17, fontWeight: 700, fill: darkTheme ? '#dce8f7' : '#263448' }}>{group.label}</text>
               ) : group.collapsed && scene.architecture && group.id.startsWith('arch-') ? (
                 <>
                   <text x={group.x + 16} y={group.y + 35}>{truncate(group.label, 12)}</text>
@@ -3585,7 +3587,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
               {presentation === 'enterprise-band' && !group.collapsed ? (
                 <rect
                   className="freeform-enterprise-band-navigation-hit"
-                  x={group.x} y={group.y} width={group.labelRailWidth ?? 132} height={group.height}
+                  x={group.x - (group.labelRailWidth ?? 132) - 6} y={group.y} width={group.labelRailWidth ?? 132} height={group.height}
                   fill="transparent" pointerEvents="all"
                   role="button" tabIndex={0}
                   aria-label={`聚焦${group.label}关联依赖，双击进入详情`}

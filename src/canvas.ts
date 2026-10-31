@@ -617,13 +617,19 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
     if (architectureMode) {
       if (presentation === 'enterprise-band') {
         const railWidth = group.labelRailWidth ?? 132
-        const label = layoutArchitectureCardText(group.label || group.id, undefined, Math.max(24, railWidth - 28), group.height, 15, 700)
+        const label = layoutArchitectureCardText(group.label || group.id, undefined, Math.max(170, railWidth - 12), group.height, 22, 700)
         const paletteIndex = scene.groups?.findIndex((item) => item.id === group.id) ?? groupIndex
         const ink = canvasEnterpriseBandPalette(Math.max(0, paletteIndex), darkArchitecture)
-        return `<g class="canvas-enterprise-band"><rect x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" rx="2" fill="${ink.body}" stroke="${ink.border}" stroke-width="1"/><rect x="${group.x + 1}" y="${group.y + 1}" width="${Math.max(0, railWidth - 1)}" height="${group.height - 2}" fill="${ink.rail}"/><path d="M${group.x + railWidth} ${group.y}V${group.y + group.height}" stroke="${ink.border}"/><title>${escapeXml(group.label || group.id)}</title><text x="${group.x + 16}" y="${group.y + label.titleY}" font-size="15" font-weight="700" fill="${ink.accent}">${label.titleLines.map((line, index) => `<tspan x="${group.x + 16}" dy="${index ? label.titleLineHeight : 0}">${escapeXml(line)}</tspan>`).join('')}</text></g>`
+        const labelX = group.x - 22
+        return `<g class="canvas-enterprise-band"><rect x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" fill="${ink.body}" stroke="none"/><title>${escapeXml(group.label || group.id)}</title><text x="${labelX}" y="${group.y + label.titleY}" text-anchor="end" font-size="22" font-weight="700" fill="${ink.accent}">${label.titleLines.map((line, index) => `<tspan x="${labelX}" dy="${index ? label.titleLineHeight : 0}">${escapeXml(line)}</tspan>`).join('')}</text></g>`
       }
       if (presentation === 'compact-region')
         return `<g class="canvas-compact-region"><text x="${group.x + 16}" y="${group.y + 18}" font-family="Arial, sans-serif" font-size="12" font-weight="640" fill="${escapeXml(palette.stroke)}" opacity="0.78">${escapeXml(group.label || group.id)}</text></g>`
+      if (scene.architecture?.diagramStyle === 'enterprise'
+        && (group.id.startsWith('__arch-section-') || group.id === '__arch-support-domain')) {
+        const ink = darkArchitecture ? '#dce8f7' : '#263448'
+        return `<g class="canvas-enterprise-domain"><rect x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" fill="${fill}" stroke="none"/><text x="${group.x + group.width / 2}" y="${group.y + 24}" text-anchor="middle" font-size="17" font-weight="700" fill="${ink}">${escapeXml(group.label || group.id)}</text></g>`
+      }
       if (group.collapsed && group.id.startsWith('arch-')) {
         // Generated overview summaries are readable cards, not the faded,
         // empty dashed boundaries used around expanded architecture regions.
@@ -1239,7 +1245,10 @@ export function canvasArrowLabelLayouts(scene: CanvasScene): Map<string, CanvasA
       occupied.add({ x: group.x, y: group.y, width: rail, height: group.height })
       occupied.add({ x: group.x + group.width - rail, y: group.y, width: rail, height: group.height })
       if (presentation === 'enterprise-band') {
-        occupied.add({ x: group.x, y: group.y, width: (group.labelRailWidth ?? 132) + 4, height: group.height })
+        // The reference-style title sits outside the colored content strip.
+        // Reserve its real left-side area, not an obsolete rail over modules.
+        occupied.add({ x: group.x - (group.labelRailWidth ?? 132) - 6,
+          y: group.y, width: (group.labelRailWidth ?? 132) + 4, height: group.height })
       }
     }
   }
@@ -1407,13 +1416,24 @@ export function canvasPresentationGroupFrames(
       const hasNestedContainers = mixedProposal && scene.groups?.some((group) => group.parentId === frame.id)
       return {
         ...frame,
-        x: bandLeft - railWidth,
-        width: bandRight - bandLeft + railWidth,
+        // Reference-led scheme: a detached blue layer title at left, and a
+        // full-width solid content strip. No UI-style title rail in the band.
+        x: bandLeft,
+        width: bandRight - bandLeft,
         y: frame.y + (hasNestedContainers ? -12 : mixedProposal ? 4 : 24),
         height: hasNestedContainers ? Math.max(66, frame.height + 24)
           : mixedProposal ? Math.max(66, frame.height - 12) : bandHeight,
         labelRailWidth: railWidth,
       }
+    }
+    if (mixedProposal && frame.parentId && frame.id.startsWith('__arch-section-')) {
+      // Peer platform panels share the same bottom edge within a matrix row,
+      // even when one platform happens to contain fewer capability tiles.
+      const peers = frames.filter((peer) => peer.parentId === frame.parentId
+        && peer.id.startsWith('__arch-section-')
+        && Math.abs(peer.y - frame.y) < 24)
+      const bottom = Math.max(...peers.map((peer) => peer.y + peer.height))
+      return { ...frame, y: frame.y - 12, height: bottom - frame.y + 12 }
     }
     const generatedRegion = /^arch-(external|experience|application|processing|data)$/.test(frame.id)
       && frame.kind === 'boundary' && !frame.c4Type && !frame.collapsed
@@ -1448,16 +1468,16 @@ export function canvasArchitectureGroupPresentation(
  */
 export function canvasEnterpriseBandPalette(index: number, dark: boolean) {
   const palettes = [
-    ['#f3f7fc', '#e9f0f8', '#496482'],
-    ['#f5f8fb', '#eaf0f6', '#506983'],
-    ['#f0f5fb', '#e6eef8', '#425e7e'],
-    ['#f5f7fb', '#edf1f8', '#526785'],
-    ['#f2f7f9', '#e8f1f5', '#46697c'],
-    ['#f5f8fa', '#ecf2f6', '#536a7a'],
+    ['#f4d6d7', '#f4d6d7', '#426ce0'],
+    ['#e2f2fc', '#e2f2fc', '#426ce0'],
+    ['#ffdb72', '#ffdb72', '#426ce0'],
+    ['#e8eafa', '#e8eafa', '#426ce0'],
+    ['#bfe5d2', '#bfe5d2', '#426ce0'],
+    ['#ffe2bd', '#ffe2bd', '#426ce0'],
   ] as const
   if (dark) return { body: '#242f3b', rail: '#344354', accent: '#c7d8e8', border: '#536579' }
   const [body, rail, accent] = palettes[index % palettes.length]
-  return { body, rail, accent, border: '#d3dfea' }
+  return { body, rail, accent, border: 'none' }
 }
 
 /** Non-destructive relation visibility for domestic proposal presentations.
@@ -1838,19 +1858,19 @@ function canvasEnterpriseProposalPrimitiveSvg(item: CanvasNode, dark: boolean, s
   if (role === 'resource-icon') {
     const size = Math.min(35, Math.max(22, item.height * .39))
     const brand = icon(size, center - size / 2, item.y + Math.max(8, item.height * .13))
-    const typography = layoutArchitectureCardText(item.text, undefined, item.width - 18, item.height, 14, 650)
-    return painted(`${plate(item.fillColor ?? (dark ? '#334b50' : '#e9f4f1'), item.strokeColor ?? '#cbded9', 1, 2)}${brand}${typography.titleLines.map((line, i) => label(line, center, item.y + item.height - 16 - (typography.titleLines.length - i - 1) * 16, 14, 650)).join('')}`)
+    const typography = layoutArchitectureCardText(item.text, undefined, item.width - 18, item.height, 16, 650)
+    return painted(`${plate(item.fillColor ?? (dark ? '#334b50' : '#e9f4f1'), item.strokeColor ?? '#cbded9', 1, 2)}${brand}${typography.titleLines.map((line, i) => label(line, center, item.y + item.height - 16 - (typography.titleLines.length - i - 1) * 17, 16, 650)).join('')}`)
   }
   if (role === 'support-item') {
     const brand = item.icon ? icon(20, item.x + 14, item.y + (item.height - 20) / 2) : ''
-    const layout = layoutArchitectureCardText(item.text, undefined, item.width - (brand ? 52 : 20), item.height, 15, 650)
+    const layout = layoutArchitectureCardText(item.text, undefined, item.width - (brand ? 52 : 20), item.height, 17, 650)
     const x = brand ? item.x + 44 : center
     return painted(`${plate(item.fillColor ?? (dark ? '#2a4255' : '#ffffff'), item.strokeColor ?? '#d3e0eb', 1, 3)}${brand}${layout.titleLines.map((line, i) => label(line, x, item.y + layout.titleY + i * layout.titleLineHeight, layout.titleFontSize, 650, brand ? 'start' : 'middle')).join('')}`)
   }
   // Lightweight functional unit inside an actual nested Canvas group.
   const lines = layoutArchitectureCardText(item.text, showSubtitle ? item.subtitle : undefined,
-    item.width - 14, item.height, 14, 600)
-  return painted(`${plate(item.fillColor ?? (dark ? '#3a5270' : '#e3eaf8'), item.strokeColor ?? '#c4d3ee', 1, 2)}${lines.titleLines.map((line, i) =>
+    item.width - 14, item.height, 17, 600)
+  return painted(`${plate(item.fillColor ?? (dark ? '#3a5270' : '#b9c8fa'), item.strokeColor ?? '#b9c8fa', 0, 1)}${lines.titleLines.map((line, i) =>
     label(line, center, item.y + lines.titleY + i * lines.titleLineHeight, lines.titleFontSize, 600)).join('')}`)
 }
 

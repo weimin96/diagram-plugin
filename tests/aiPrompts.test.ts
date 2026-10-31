@@ -234,9 +234,9 @@ test('architecture generation uses topology archetypes and a bounded quality loo
     'support capabilities appear within one governance container instead of multiple tall columns')
   assert.equal(ops.x, audit.x, 'all governance items align in a single consistent column')
   assert.ok(audit.y >= ops.y + ops.height + 10, 'support items retain regular vertical separation')
-  assert.ok(ops.x > Math.max(...['api', 'auth', 'policy', 'worker', 'db']
-    .map((id) => spanningNodes.get(id)!.x + spanningNodes.get(id)!.width)),
-  'governance domain remains outside all business layer content')
+  assert.ok(ops.x > Math.max(...['auth', 'policy'].map((id) =>
+    spanningNodes.get(id)!.x + spanningNodes.get(id)!.width)),
+  'governance domain occupies a separate column beside its host service modules')
   assert.ok(ops.x + ops.width <= spanning.scene.width && audit.x + audit.width <= spanning.scene.width)
   assert.equal(spanning.quality.metrics.nodeOverlaps, 0)
   assert.equal(spanning.quality.metrics.edgeNodeIntersections, 0)
@@ -256,6 +256,27 @@ test('architecture generation uses topology archetypes and a bounded quality loo
     && contained.y >= outer.y && contained.y + contained.height <= outer.y + outer.height,
   'the presentation layer fully encloses its real nested container')
   assert.match(canvasSceneToSvg(spanning.scene), /proposal-support-item/)
+  assert.match(canvasSceneToSvg(spanning.scene), /class="canvas-enterprise-band".*text-anchor="end"/s,
+    'reference-based scheme uses detached, right-aligned layer titles instead of a label rail')
+  assert.equal(spanningFrames.find((frame) => frame.label === '应用层')?.labelRailWidth !== undefined, true,
+    'detached layer labels keep their navigation hit zone without consuming business content width')
+  const alignedPanels = composeEnterpriseArchitecture({
+    title: '平台矩阵等高示例', proposalMode: 'proposal',
+    nodes: [
+      { id: 'entry', text: '入口', layer: '前端', icon: 'web' },
+      ...Array.from({ length: 7 }, (_, i) => ({ id: `a${i}`, text: `管理能力${i}`, layer: '服务中台', moduleGroup: '管理平台' })),
+      ...Array.from({ length: 4 }, (_, i) => ({ id: `b${i}`, text: `服务能力${i}`, layer: '服务中台', moduleGroup: '业务平台' })),
+      { id: 'db', text: '数据库', layer: '数据资源', icon: 'database', partition: 'data' as const },
+      { id: 'file', text: '对象存储', layer: '数据资源', icon: 'file', partition: 'data' as const },
+    ], relations: [],
+  })
+  const panels = canvasPresentationGroupFrames(alignedPanels.scene)
+    .filter((frame) => frame.label === '管理平台' || frame.label === '业务平台')
+  assert.equal(panels.length, 2)
+  assert.equal(panels[0].height, panels[1].height,
+    'platform backgrounds share their bottom edge even with unequal tile counts')
+  assert.equal((alignedPanels.scene.elements.find((node) => node.id === 'file') as CanvasNode).proposalRole,
+    'resource-icon', 'data-tier file/object storage uses the same icon tile as other data resources')
   const crossLayer = composeEnterpriseArchitecture({
     ...spanningIntent,
     title: '跳过中间层的真实依赖',
