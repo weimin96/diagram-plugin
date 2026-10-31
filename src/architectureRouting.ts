@@ -62,7 +62,7 @@ export function restoreArchitectureMovedSourceTrunk(
     const obstacles = [
       ...[...boxes.values()].filter((item) => item.id !== source.id && item.id !== target.id)
         .map((item) => expandRect(item, 18)),
-      ...routingGroupObstacles(source, target, frames, groups),
+      ...routingGroupObstacles(source, target, frames, groups, isProposalReading(candidate)),
     ]
     const occupied: RouteSegment[] = []
     for (const other of arrows) {
@@ -128,6 +128,7 @@ function routeArchitectureEdgeSubset(
   const arrows = scene.elements.filter((item): item is CanvasArrow => item.type === 'arrow')
   const groupFrames = new Map(canvasGroupFrames(scene).map((frame) => [frame.id, frame]))
   const groups = new Map((scene.groups ?? []).map((group) => [group.id, group]))
+  const avoidProposalBands = isProposalReading(scene)
   const routed = new Map<string, CanvasArrow>()
   const occupied: RouteSegment[] = []
   const fanout = countArrowEndpoints(arrows, 'from')
@@ -156,7 +157,7 @@ function routeArchitectureEdgeSubset(
   const remainingRouteOrder = only || !highDensityRouting ? routeOrder : routeOrder.filter((arrow) => !isIntraGroupArrow(arrow, boxes))
 
   for (const arrow of localRouteOrder) {
-    const result = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts, portReservations, visibilityFallback)
+    const result = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts, portReservations, visibilityFallback, avoidProposalBands)
     if (result) routed.set(arrow.id, result)
   }
 
@@ -168,17 +169,18 @@ function routeArchitectureEdgeSubset(
       groupFrames,
       groups,
       highDensityRouting,
+      avoidProposalBands,
     )
     for (const [id, arrow] of bundled) routed.set(id, arrow)
     for (const arrow of arrows) {
       if (!crossGroupBundleIds.has(arrow.id) || routed.has(arrow.id)) continue
-      const fallback = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts, portReservations, visibilityFallback)
+      const fallback = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts, portReservations, visibilityFallback, avoidProposalBands)
       if (fallback) routed.set(arrow.id, fallback)
     }
   }
 
   for (const arrow of remainingRouteOrder) {
-    const result = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts, portReservations, visibilityFallback)
+    const result = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts, portReservations, visibilityFallback, avoidProposalBands)
     if (result) routed.set(arrow.id, result)
   }
 
@@ -187,7 +189,7 @@ function routeArchitectureEdgeSubset(
     for (const [id, arrow] of bundled) routed.set(id, arrow)
     for (const arrow of arrows) {
       if (!groupedFanoutIds.has(arrow.id) || routed.has(arrow.id)) continue
-      const fallback = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts, portReservations, visibilityFallback)
+      const fallback = routeArchitectureArrow(arrow, boxes, occupied, fanout, fanin, groupFrames, groups, nodePorts, portReservations, visibilityFallback, avoidProposalBands)
       if (fallback) routed.set(arrow.id, fallback)
     }
   }
@@ -215,6 +217,7 @@ function routeArchitectureArrow(
   nodePorts = false,
   portReservations?: PortReservations,
   visibilityFallback = false,
+  avoidProposalBands = false,
 ): CanvasArrow | undefined {
   const from = boxes.get(arrow.from)
   const to = boxes.get(arrow.to)
@@ -230,7 +233,7 @@ function routeArchitectureArrow(
     .filter((item) => item.id !== from.id && item.id !== to.id)
     .map((item) => expandRect(item, 18))
   const bundleKey = architectureArrowBundleKey(from, to, fanout, fanin)
-  const groupObstacles = routingGroupObstacles(from, to, groupFrames, groups)
+  const groupObstacles = routingGroupObstacles(from, to, groupFrames, groups, avoidProposalBands)
   const obstacles = [...nodeObstacles, ...groupObstacles]
   const fromFrame = from.groupId ? groupFrames.get(from.groupId) : undefined
   const toFrame = to.groupId ? groupFrames.get(to.groupId) : undefined
@@ -387,6 +390,7 @@ function routeCrossGroupBundles(
   groupFrames: Map<string, CanvasGroupFrame>,
   groups: Map<string, CanvasGroup>,
   preferAlignedBundles: boolean,
+  avoidProposalBands: boolean,
 ): Map<string, CanvasArrow> {
   const grouped = new Map<string, CanvasArrow[]>()
   for (const arrow of arrows) {
@@ -433,7 +437,7 @@ function routeCrossGroupBundles(
       const targetPort = trunk.targetPort
       const obstacles = [
         ...[...boxes.values()].filter((item) => item.id !== from.id && item.id !== to.id).map((item) => expandRect(item, 10)),
-        ...routingGroupObstacles(from, to, groupFrames, groups),
+        ...routingGroupObstacles(from, to, groupFrames, groups, avoidProposalBands),
       ]
       const sourceRoute = findOrthogonalRoute(
         start,
@@ -790,14 +794,24 @@ function routingGroupObstacles(
   to: CanvasNode | CanvasNote,
   frames: Map<string, CanvasGroupFrame>,
   groups: Map<string, CanvasGroup>,
+  avoidProposalBands = false,
 ): RouteRect[] {
   return [...frames.values()].flatMap((frame) => {
     const group = groups.get(frame.id)
     if (!group || group.c4Type === 'software-system') return []
-    if (group.kind !== 'boundary' && !group.c4Type) return []
+    // A proposal layer has the same physical routing boundary semantics as
+    // an authored boundary, even though its Canvas kind is a regular group.
+    // Otherwise cross-layer edges cut through unrelated intermediate bands.
+    if (group.kind !== 'boundary' && !group.c4Type
+      && !(avoidProposalBands && group.labelSide === 'left')) return []
     if (groupRelatedToNode(frame.id, from.groupId, groups) || groupRelatedToNode(frame.id, to.groupId, groups)) return []
     return [expandRect(frame, 10)]
   })
+}
+
+function isProposalReading(scene: CanvasScene): boolean {
+  return scene.architecture?.diagramStyle === 'enterprise'
+    && Boolean(scene.architecture.proposalMode && scene.architecture.proposalMode !== 'dependencies')
 }
 
 function groupRelatedToNode(groupId: string, nodeGroupId: string | undefined, groups: Map<string, CanvasGroup>): boolean {

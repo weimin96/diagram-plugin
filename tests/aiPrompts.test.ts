@@ -193,7 +193,7 @@ test('architecture generation uses topology archetypes and a bounded quality loo
     'dependency view renders regular modules but retains original roles in data')
   assert.equal(reopened.elements.find((item) => item.id === 'gateway')?.type, 'node')
   assert.equal((reopened.elements.find((item) => item.id === 'gateway') as CanvasNode).proposalRole, 'gateway-band')
-  const spanning = composeEnterpriseArchitecture({
+  const spanningIntent: Parameters<typeof composeEnterpriseArchitecture>[0] = {
     title: '跨层支撑与自动组合', proposalMode: 'proposal',
     nodes: [
       { id: 'entry', text: '浏览器入口', layer: '入口层', icon: 'web' },
@@ -211,7 +211,8 @@ test('architecture generation uses topology archetypes and a bounded quality loo
       { from: 'entry', to: 'api' }, { from: 'api', to: 'auth' },
       { from: 'auth', to: 'worker' }, { from: 'worker', to: 'db' },
     ],
-  })
+  }
+  const spanning = composeEnterpriseArchitecture(spanningIntent)
   const spanningNodes = new Map(spanning.scene.elements.filter((item): item is CanvasNode =>
     item.type === 'node').map((node) => [node.id, node]))
   const ops = spanningNodes.get('ops')!, audit = spanningNodes.get('audit')!
@@ -247,6 +248,15 @@ test('architecture generation uses topology archetypes and a bounded quality loo
     && contained.y >= outer.y && contained.y + contained.height <= outer.y + outer.height,
   'the presentation layer fully encloses its real nested container')
   assert.match(canvasSceneToSvg(spanning.scene), /proposal-support-rail/)
+  const crossLayer = composeEnterpriseArchitecture({
+    ...spanningIntent,
+    title: '跳过中间层的真实依赖',
+    relations: [{ from: 'auth', to: 'db' }],
+  })
+  assert.equal(crossLayer.scene.elements.filter((item) => item.type === 'arrow').length, 1)
+  assert.equal(crossLayer.routeDiagnostics.unrelatedFrameIntrusionLength, 0,
+    'verified proposal layers must be respected as routing obstacles even without kind=boundary')
+  assert.equal(crossLayer.quality.metrics.edgeNodeIntersections, 0)
   assert.match(canvasEnterpriseModuleSvg(ops, false, true),
     /style="fill:#b8dfc7;stroke:#6aa986;stroke-width:1\.2"/,
     'support rails carry their authoritative paint into the editable SVG DOM')
