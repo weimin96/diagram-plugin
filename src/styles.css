@@ -710,10 +710,14 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
   stroke: #a5c8df !important;
 }
 .freeform-relation-lens.is-layer {
-  max-width: min(96%, 560px);
+  left: 12px;
+  transform: none;
+  max-width: min(540px, calc(100% - 185px));
+  gap: 6px;
+  padding: 6px 8px;
 }
 .freeform-relation-lens.is-layer > span:first-child {
-  max-width: 170px;
+  max-width: 118px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;

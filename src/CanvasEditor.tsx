@@ -1845,14 +1845,11 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   }
 
   function toggleEnterpriseLayerReading(groupId: string) {
-    if (layerReadingId === groupId) {
-      setLayerReadingId(null)
-      setSelectedIds([])
-      setSelectedGroupTarget(null)
-      return
-    }
-    selectGroup(groupId)
-    setLayerReadingId(groupId)
+    // Reading a layer must never invoke group-edit selection or camera fit.
+    // The user can still double-click the rail to enter the editable scope.
+    setLayerReadingId((current) => current === groupId ? null : groupId)
+    setSelectedIds([])
+    setSelectedGroupTarget(null)
     setKeyDependenciesOnly(false)
   }
 
@@ -2846,8 +2843,8 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                   <section className="freeform-compact-control-row">
                     <span>依赖关系</span>
                     <div className="freeform-menu-grid two">
-                      <button type="button" aria-pressed={!keyDependenciesOnly}
-                        className={!keyDependenciesOnly ? 'is-selected' : ''}
+                      <button type="button" aria-pressed={!keyDependenciesOnly && !layerReading}
+                        className={!keyDependenciesOnly && !layerReading ? 'is-selected' : ''}
                         onClick={() => { setKeyDependenciesOnly(false); setLayerReadingId(null) }}>全部</button>
                       <button type="button" aria-pressed={keyDependenciesOnly}
                         disabled={!keyDependencyLens?.arrowIds.size}
