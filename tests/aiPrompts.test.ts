@@ -247,6 +247,12 @@ test('architecture generation uses topology archetypes and a bounded quality loo
     && contained.y >= outer.y && contained.y + contained.height <= outer.y + outer.height,
   'the presentation layer fully encloses its real nested container')
   assert.match(canvasSceneToSvg(spanning.scene), /proposal-support-rail/)
+  assert.match(canvasEnterpriseModuleSvg(ops, false, true),
+    /style="fill:#b8dfc7;stroke:#6aa986;stroke-width:1\.2"/,
+    'support rails carry their authoritative paint into the editable SVG DOM')
+  assert.match(canvasEnterpriseModuleSvg(api, false, true),
+    /style="fill:#fbd36d;stroke:#dbaa3e;stroke-width:1\.2"/,
+    'access bars cannot fall back to the generic white editor card')
   assert.throws(() => composeEnterpriseArchitecture({
     ...spanning.scene, title: '非法范围',
     nodes: [

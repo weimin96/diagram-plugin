@@ -1769,19 +1769,24 @@ function canvasEnterpriseProposalPrimitiveSvg(item: CanvasNode, dark: boolean, s
         ? `<g transform="translate(${x} ${y}) scale(${size / 24})" fill="none" stroke="${dark ? '#8ad7ef' : '#0b99bd'}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${canvasIconPaths(item.icon).map((path) => `<path d="${path}"/>`).join('')}</g>`
         : ''
   const painted = (body: string) => `<g class="canvas-enterprise-module proposal-${role}" opacity="${item.opacity ?? 1}"><title>${title}</title>${body}</g>`
+  // CSS in the editable SVG has generic .freeform-box rect rules. Paint
+  // attributes alone lose to them, while SVG export has no such stylesheet.
+  // An inline declaration keeps exactly the same authored palette in both.
+  const plate = (fill: string, border: string, width: number, radius: number) =>
+    `<rect ${common} rx="${radius}" fill="${escapeXml(fill)}" stroke="${escapeXml(border)}" stroke-width="${width}" style="fill:${escapeXml(fill)};stroke:${escapeXml(border)};stroke-width:${width}"/>`
   if (role === 'gateway-band') {
     const full = layoutArchitectureCardText(item.text, showSubtitle ? item.subtitle : undefined,
       item.width - 36, item.height, 17, 700)
     const brand = (item.icon || item.iconRef || item.stencil) ? icon(25, item.x + 20, item.y + (item.height - 25) / 2) : ''
     const x = brand ? item.x + 58 : center
     const anchor = brand ? 'start' : 'middle'
-    return painted(`<rect ${common} rx="2" fill="${item.fillColor ?? (dark ? '#66552a' : '#fbd36d')}" stroke="${item.strokeColor ?? '#dbaa3e'}" stroke-width="1.2"/>${brand}${full.titleLines.map((line, i) => label(line, x, item.y + full.titleY + i * full.titleLineHeight, full.titleFontSize, 700, anchor)).join('')}`)
+    return painted(`${plate(item.fillColor ?? (dark ? '#66552a' : '#fbd36d'), item.strokeColor ?? '#dbaa3e', 1.2, 2)}${brand}${full.titleLines.map((line, i) => label(line, x, item.y + full.titleY + i * full.titleLineHeight, full.titleFontSize, 700, anchor)).join('')}`)
   }
   if (role === 'support-rail') {
     const chars = Array.from(item.text)
     const heightPerChar = Math.min(23, (item.height - 28) / Math.max(1, chars.length))
     const vertical = chars.length <= 12 && heightPerChar >= 15
-    return painted(`<rect ${common} rx="2" fill="${item.fillColor ?? (dark ? '#315b46' : '#b8dfc7')}" stroke="${item.strokeColor ?? '#6aa986'}" stroke-width="1.2"/>${vertical
+    return painted(`${plate(item.fillColor ?? (dark ? '#315b46' : '#b8dfc7'), item.strokeColor ?? '#6aa986', 1.2, 2)}${vertical
       ? chars.map((char, i) => label(char, center, item.y + (item.height - (chars.length - 1) * heightPerChar) / 2 + i * heightPerChar + 5, 16, 700)).join('')
       : `<g transform="translate(${center} ${item.y + item.height / 2}) rotate(-90)">${label(item.text, 0, 5, 16, 700)}</g>`}`)
   }
@@ -1789,12 +1794,12 @@ function canvasEnterpriseProposalPrimitiveSvg(item: CanvasNode, dark: boolean, s
     const size = Math.min(35, Math.max(22, item.height * .39))
     const brand = icon(size, center - size / 2, item.y + Math.max(8, item.height * .13))
     const typography = layoutArchitectureCardText(item.text, undefined, item.width - 18, item.height, 14, 650)
-    return painted(`<rect ${common} rx="2" fill="${item.fillColor ?? (dark ? '#334b50' : '#e2f1ef')}" stroke="${item.strokeColor ?? '#b7d4cb'}" stroke-width="1"/>${brand}${typography.titleLines.map((line, i) => label(line, center, item.y + item.height - 16 - (typography.titleLines.length - i - 1) * 16, 14, 650)).join('')}`)
+    return painted(`${plate(item.fillColor ?? (dark ? '#334b50' : '#e2f1ef'), item.strokeColor ?? '#b7d4cb', 1, 2)}${brand}${typography.titleLines.map((line, i) => label(line, center, item.y + item.height - 16 - (typography.titleLines.length - i - 1) * 16, 14, 650)).join('')}`)
   }
   // Lightweight functional unit inside an actual nested Canvas group.
   const lines = layoutArchitectureCardText(item.text, showSubtitle ? item.subtitle : undefined,
     item.width - 14, item.height, 14, 600)
-  return painted(`<rect ${common} rx="1" fill="${item.fillColor ?? (dark ? '#3a5270' : '#bdcafa')}" stroke="${item.strokeColor ?? '#9fb4e8'}" stroke-width="1"/>${lines.titleLines.map((line, i) =>
+  return painted(`${plate(item.fillColor ?? (dark ? '#3a5270' : '#bdcafa'), item.strokeColor ?? '#9fb4e8', 1, 1)}${lines.titleLines.map((line, i) =>
     label(line, center, item.y + lines.titleY + i * lines.titleLineHeight, lines.titleFontSize, 600)).join('')}`)
 }
 

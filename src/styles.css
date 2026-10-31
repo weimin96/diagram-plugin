@@ -1520,6 +1520,12 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
   stroke-dasharray: none;
   opacity: 1;
 }
+/* Nested proposal containers use solid, complete frames in both editing and
+   export; dashed outlines belong to engineering/C4 boundaries. */
+.freeform-editor.architecture-diagram-enterprise .freeform-group-frame.has-parent > rect:first-of-type {
+  stroke-dasharray: none !important;
+  stroke-width: 1.5;
+}
 .freeform-editor.is-architecture-mode .freeform-group-frame.is-enterprise-band.is-selected > rect:first-of-type {
   stroke: var(--accent);
   stroke-width: 1.6;
