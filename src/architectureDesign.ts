@@ -243,6 +243,7 @@ export function beautifyArchitectureScene(scene: CanvasScene, options: Architect
         : { lanes: undefined }),
     } : {}),
     architecture: {
+      ...(scene.architecture?.diagramStyle ? { diagramStyle: scene.architecture.diagramStyle } : {}),
       theme,
       ...(theme === 'presentation' ? { presentation: true } : {}),
       view,

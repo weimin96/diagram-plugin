@@ -12,11 +12,7 @@ const regionNames: Record<NonNullable<ArchitectureIntentGraph['nodes'][number]['
   external: '外部与参与方', experience: '访问与接入层', application: '业务应用层',
   processing: '处理与服务层', data: '数据与基础设施层',
 }
-const regionColors = ['#e7f1fc', '#e7f4f1', '#f0ecfc', '#fdf0e0', '#e7f0f8', '#f5edf3']
-const nodeHeight = 88
-const rowGap = 24
-const leftInset = 220
-const topInset = 90
+const regionColors = ['#e5effb', '#e5f3f0', '#edf2f7']
 const bandGap = 44
 
 /** Layer membership comes from evidence; only presentation order is negotiable. */
@@ -158,9 +154,15 @@ export function composeEnterpriseArchitecture(intent: ArchitectureIntentGraph) {
 }
 
 function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array<[string, ArchitectureIntentGraph['nodes']]>, gap: number) {
-  const columns = 4
-  const nodeWidth = 248
-  const columnGap = 28
+  const maxLayerSize = Math.max(...entries.map(([, nodes]) => nodes.length))
+  const compact = maxLayerSize <= 4
+  const columns = compact ? Math.max(2, maxLayerSize) : 4
+  const nodeWidth = compact ? 206 : 248
+  const nodeHeight = compact ? 74 : 88
+  const columnGap = compact ? 22 : 28
+  const rowGap = compact ? 22 : 24
+  const leftInset = compact ? 202 : 220
+  const topInset = compact ? 84 : 90
   const specs: LayeredTemplateLayer[] = entries.map(([label, nodes], index) => ({
     label, fillColor: regionColors[index % regionColors.length],
     nodes: nodes.map((node) => ({ text: node.text, subtitle: node.subtitle, icon: node.icon, width: nodeWidth, height: nodeHeight })),
@@ -183,7 +185,7 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
         y: y + Math.floor(nodeIndex / columns) * (nodeHeight + rowGap),
       })
     })
-    y += Math.ceil(nodes.length / columns) * (nodeHeight + rowGap) + gap
+    y += Math.ceil(nodes.length / columns) * (nodeHeight + rowGap) + gap + (compact ? 14 : 0)
   }
   const primaryRelations = new Set((intent.primaryPath ?? []).slice(1).map((node, index) => `${intent.primaryPath![index]}\u0000${node}`))
   const arrows: CanvasArrow[] = intent.relations.map((relation, index) => ({
@@ -197,8 +199,8 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
   const scene = routeArchitectureEdges({
     ...template,
     groups: template.groups?.map((group, index) => ({ ...group, id: `__arch-layer-${index + 1}` })),
-    width: Math.max(1500, leftInset + columns * (nodeWidth + columnGap) + 48),
-    height: Math.max(720, y + 40),
+    width: Math.max(compact ? 800 : 1500, leftInset + columns * (nodeWidth + columnGap) + 48),
+    height: Math.max(compact ? 520 : 720, y + (compact ? 24 : 40)),
     style: intent.style ?? 'ocean',
     architecture: {
       theme: intent.theme ?? 'presentation', diagramStyle: 'enterprise', view: 'detail', density: intent.density ?? 'auto',

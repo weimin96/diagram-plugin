@@ -19,7 +19,7 @@ import { applyArchitectureTheme as applyArchitectureThemeToScene, beautifyArchit
 import { architecturePartitionFlow } from './architecturePartitionFlow.js'
 import { recommendArchitectureInitialReadingViewport, recommendArchitectureReadingViewport } from './architecturePresentationQuality.js'
 import { ARCHITECTURE_NODE_TEMPLATES, architectureNodeTemplate, type ArchitectureNodeTemplate, type ArchitectureNodeTemplateProvider } from './architectureNodeTemplates.js'
-import { anchorPoint, canvasArchitectureCardTemplate, canvasArchitectureHeader, canvasArchitectureProjection, canvasArchitectureRelationLabelVisible, canvasArchitectureScopeProjection, canvasArrowBoxRoute, canvasArrowLabelLayouts, canvasArrowPath, canvasArrowRoutePath, canvasArrowRoutePoints, canvasBundleTrunks, canvasCollapsedConnections, canvasCollapsedOwners, canvasGroupFrames, canvasPresentationGroupFrames, canvasIconLabel, canvasIconPaths, canvasIconRefLabel, canvasIconRefMarkup, canvasSemanticLodProjection, resolveCanvasSemanticLod, canvasStencilLabel, canvasStencilVisual, c4Label, parseCanvasScene, serializeCanvasScene, type CanvasAnchor, type CanvasArchitectureDensity, type CanvasArchitectureScope, type CanvasArchitectureView, type CanvasArrow, type CanvasC4Type, type CanvasElement, type CanvasGroup, type CanvasGroupFrame, type CanvasIcon, type CanvasIconRef, type CanvasLineStyle, type CanvasNode, type CanvasNote, type CanvasPoint, type CanvasRouting, type CanvasScene, type CanvasSemanticLodLevel, type CanvasShape, type CanvasStencil, type CanvasTone } from './canvas.js'
+import { anchorPoint, canvasArchitectureCardTemplate, canvasArchitectureGroupPresentation, canvasArchitectureHeader, canvasArchitectureProjection, canvasArchitectureRelationLabelVisible, canvasArchitectureScopeProjection, canvasArrowBoxRoute, canvasArrowLabelLayouts, canvasArrowPath, canvasArrowRoutePath, canvasArrowRoutePoints, canvasBundleTrunks, canvasCollapsedConnections, canvasCollapsedOwners, canvasGroupFrames, canvasPresentationGroupFrames, canvasIconLabel, canvasIconPaths, canvasIconRefLabel, canvasIconRefMarkup, canvasSemanticLodProjection, resolveCanvasSemanticLod, canvasStencilLabel, canvasStencilVisual, c4Label, parseCanvasScene, serializeCanvasScene, type CanvasAnchor, type CanvasArchitectureDensity, type CanvasArchitectureScope, type CanvasArchitectureView, type CanvasArrow, type CanvasC4Type, type CanvasElement, type CanvasGroup, type CanvasGroupFrame, type CanvasIcon, type CanvasIconRef, type CanvasLineStyle, type CanvasNode, type CanvasNote, type CanvasPoint, type CanvasRouting, type CanvasScene, type CanvasSemanticLodLevel, type CanvasShape, type CanvasStencil, type CanvasTone } from './canvas.js'
 import { CANVAS_ICON_CATALOG, type CanvasIconSource } from './iconRegistry.js'
 import { alignCanvasSelection, assignCanvasSelectionToLane, canvasRotationFromPointer, clearCanvasLanes, computeCanvasSmartSnap, copyCanvasSelection, createCanvasLanePreset, deleteCanvasSelection, distributeCanvasSelection, expandCanvasGroupSelection, groupCanvasSelection, insertCanvasArchitectureNodeTemplate, insertCanvasArchitectureTemplate, insertCanvasNodeOnArrow, layoutCanvasNeighborhood, layoutCanvasScene, layoutCanvasSelection, nextCanvasElementId, pasteCanvasSelection, reconnectCanvasArrow, reflowCanvasNeighborhood, reorderCanvasSelection, resizeCanvasTransformBox, reverseCanvasArrow, scaleCanvasTransformBoxes, separateCanvasSelection, setCanvasC4CollapseLevel, setCanvasGroupParent, traceCanvasGraph, ungroupCanvasSelection, updateCanvasGroup, updateCanvasLane, type CanvasArchitectureTemplate, type CanvasC4CollapseLevel, type CanvasLayoutMode, type CanvasResizeHandle, type CanvasSpacingGuide, type CanvasTraceDirection, type CanvasTransformBox } from './canvasOperations.js'
 import { ShapeLibrary, ShapePreview } from './ShapeLibrary.js'
@@ -1351,10 +1351,12 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   function applyArchitectureTheme(theme: ArchitectureTheme) {
     const current = currentScene()
     const themed = applyArchitectureThemeToScene(current, theme)
+    const { presentation: _previousPresentation, ...appearance } = current.architecture ?? {}
     setArchitectureTheme(theme)
     commit({
       ...themed,
       architecture: {
+        ...appearance,
         theme,
         ...(theme === 'presentation' ? { presentation: true } : {}),
         view: current.architecture?.view ?? architectureView,
@@ -1368,6 +1370,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
     commit({
       ...current,
       architecture: {
+        ...current.architecture,
         theme: current.architecture?.theme ?? architectureTheme,
         ...(current.architecture?.presentation ? { presentation: true } : {}),
         view: patch.view ?? current.architecture?.view ?? architectureView,
@@ -1377,6 +1380,11 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   }
 
   function applyArchitectureDensity(density: CanvasArchitectureDensity) {
+    if (currentScene().architecture?.diagramStyle === 'enterprise') {
+      updateArchitectureAppearance({ density })
+      setArchitectureDensity(density)
+      return
+    }
     const result = beautifyArchitectureScene(currentScene(), {
       theme: architectureTheme,
       view: architectureView,
@@ -3361,20 +3369,24 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
           })}
           {viewportGroupBounds.filter((group) => (
             !groupHiddenByCollapsedAncestor(group.id, renderScene.groups ?? [])
-          )).map((group) => (
+          )).map((group) => {
+            const presentation = canvasArchitectureGroupPresentation(renderScene, group)
+            return (
             <g
               key={group.id}
-              className={`freeform-group-frame kind-${group.kind ?? 'group'} c4-${group.c4Type ?? 'none'}${scene.groupBorderStyle === 'solid' ? ' has-solid-frame' : ''}${group.parentId ? ' has-parent' : ''}${group.collapsed ? ' is-collapsed' : ''}${autoCollapsedGroupIds.has(group.id) ? ' is-lod-summary' : ''} tone-${group.tone ?? 'muted'}${selectedGroupId === group.id || selectedGroupIds.includes(group.id) ? ' is-selected' : ''}${traceResult ? group.memberIds.some((id) => tracedNodeIds.has(id)) ? ' is-traced' : ' is-trace-dimmed' : ''}`}
+              className={`freeform-group-frame kind-${group.kind ?? 'group'} c4-${group.c4Type ?? 'none'}${presentation === 'enterprise-band' ? ' is-enterprise-band' : presentation === 'compact-region' ? ' is-compact-region' : ''}${scene.groupBorderStyle === 'solid' ? ' has-solid-frame' : ''}${group.parentId ? ' has-parent' : ''}${group.collapsed ? ' is-collapsed' : ''}${autoCollapsedGroupIds.has(group.id) ? ' is-lod-summary' : ''} tone-${group.tone ?? 'muted'}${selectedGroupId === group.id || selectedGroupIds.includes(group.id) ? ' is-selected' : ''}${traceResult ? group.memberIds.some((id) => tracedNodeIds.has(id)) ? ' is-traced' : ' is-trace-dimmed' : ''}`}
               pointerEvents="none"
             >
               {group.description ? <title>{group.description}</title> : null}
-              <rect
+              {presentation !== 'compact-region' ? <rect
                 x={group.x}
                 y={group.y}
                 width={group.width}
                 height={group.height}
                 rx={scene.architecture ? group.c4Type === 'software-system' ? 10 : 8 : 20}
-                style={group.fillColor ? { fill: group.fillColor, fillOpacity: 0.86 } : undefined}
+                style={presentation === 'enterprise-band'
+                  ? { fill: darkTheme ? '#222d3a' : '#f8fafc', stroke: darkTheme ? '#425164' : '#d9e2ec', strokeWidth: 1, strokeDasharray: 'none' }
+                  : group.fillColor ? { fill: group.fillColor, fillOpacity: 0.86 } : undefined}
                 pointerEvents={group.collapsed ? 'all' : 'none'}
                 onClick={group.collapsed ? (event) => {
                   event.stopPropagation()
@@ -3392,9 +3404,14 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                     setSelectedGroupTarget(group.id)
                   }
                 } : undefined}
-              />
+              /> : null}
+              {presentation === 'enterprise-band' ? <>
+                <rect className="freeform-enterprise-band-rail" x={group.x + 1} y={group.y + 1} width={131} height={group.height - 2} rx={6} style={{ fill: darkTheme ? '#2a3b4c' : group.fillColor ?? '#e9f1fa', stroke: 'none', strokeDasharray: 'none' }} />
+                <path d={`M${group.x + 132} ${group.y + 1}V${group.y + group.height - 1}`} stroke={darkTheme ? '#425164' : '#d9e2ec'} strokeWidth={1} />
+                <rect className="freeform-enterprise-band-accent" x={group.x + 1} y={group.y + 13} width={4} height={Math.max(12, group.height - 26)} rx={2} style={{ fill: visualSkin?.stroke ?? '#2867a8', stroke: 'none' }} />
+              </> : null}
               {group.c4Type === 'software-system' && !group.collapsed ? <rect className="freeform-group-header" x={group.x} y={group.y} width={group.width} height="34" rx={scene.architecture ? 10 : 20} /> : null}
-              {!group.collapsed ? (
+              {!group.collapsed && presentation !== 'compact-region' ? (
                 <rect
                   className={`freeform-group-navigation-hit${scene.architecture ? ' is-drillable' : ''}`}
                   x={group.x}
@@ -3410,7 +3427,11 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                   }}
                 />
               ) : null}
-              {group.label ? group.collapsed && scene.architecture && group.id.startsWith('arch-') ? (
+              {group.label ? presentation === 'enterprise-band' ? (
+                <text className="freeform-enterprise-band-label" x={group.x + 20} y={group.y + group.height / 2 + 5}>{fitCanvasText(group.label, 110, 15, 720)}</text>
+              ) : presentation === 'compact-region' ? (
+                <text className="freeform-compact-region-label" x={group.x + 16} y={group.y + 18}>{fitCanvasText(group.label, group.width - 24, 12, 640)}</text>
+              ) : group.collapsed && scene.architecture && group.id.startsWith('arch-') ? (
                 <>
                   <text x={group.x + 16} y={group.y + 35}>{truncate(group.label, 12)}</text>
                   <text className="freeform-group-member-count" x={group.x + group.width - 14} y={group.y + 35} textAnchor="end">{group.memberIds.length} 个组件</text>
@@ -3419,7 +3440,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                 <text x={group.x - 12} y={group.y + group.height / 2} textAnchor="end" dominantBaseline="middle" className="freeform-group-left-label" style={{ fontSize: group.labelFontSize, fill: group.labelColor }}>{fitCanvasText(group.label, Math.max(60, group.x - 20), group.labelFontSize ?? 17, 730)}</text>
               ) : <text x={group.x + 32} y={group.y + (group.labelFontSize ?? 11.5) + 6} style={{ fontSize: group.labelFontSize, fill: group.labelColor }}>{fitCanvasText(`${group.label}${autoCollapsedGroupIds.has(group.id) ? ` · ${group.memberIds.length} 节点` : !scene.architecture && group.c4Type ? ` · ${c4Label(group.c4Type)}` : ''}${group.collapsed ? scene.architecture ? ' · 双击下钻' : autoCollapsedGroupIds.has(group.id) ? ' · 双击进入' : ' · 双击展开' : ''}`, Math.max(60, group.width - 34), group.labelFontSize ?? 11.5, 650)}</text> : null}
             </g>
-          ))}
+          )})}
           {relationBundleTrunks.map((bundle) => (
             <path
               key={bundle.id}

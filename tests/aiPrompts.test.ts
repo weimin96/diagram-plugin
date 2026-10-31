@@ -4,7 +4,7 @@ import { buildGenerationPrompt, buildModificationPrompt, buildSubgraphModificati
 import { detectArchitectureStyle } from '../src/architectureStyle.js'
 import { composeEnterpriseArchitecture } from '../src/enterpriseArchitecture.js'
 import { composeArchitectureGraph } from '../src/architectureComposer.js'
-import { canvasGroupFrames, canvasPresentationGroupFrames } from '../src/canvas.js'
+import { canvasArchitectureGroupPresentation, canvasArrowLabelLayouts, canvasGroupFrames, canvasPresentationGroupFrames, canvasSceneToSvg } from '../src/canvas.js'
 import type { DiagramDocument } from '../src/types.js'
 
 test('builds a Canvas-specific generation contract without Mermaid instructions', () => {
@@ -127,11 +127,23 @@ test('architecture generation uses topology archetypes and a bounded quality loo
   }
   assert.deepEqual(enterprise.scene.groups?.map((group) => group.label), ['接入层', '应用层', '数据层'])
   assert.equal(enterprise.scene.groups?.every((group) => group.labelSide === 'left'), true)
+  assert.ok(canvasSceneToSvg(enterprise.scene).includes('canvas-enterprise-band'))
+  assert.equal(canvasPresentationGroupFrames(enterprise.scene).every((frame) =>
+    canvasArchitectureGroupPresentation(enterprise.scene, frame) === 'enterprise-band'), true)
+  assert.ok(enterprise.scene.width < 1000, 'small proposal architecture should use a compact canvas')
   const verifiedPath = composeEnterpriseArchitecture({ ...intent, primaryPath: ['Web', 'API', 'DB'] })
   assert.equal(verifiedPath.scene.elements.filter((item) => item.type === 'node' && item.emphasis === 'primary').length, 3)
   assert.equal(verifiedPath.scene.elements.filter((item) => item.type === 'arrow' && item.emphasis === 'primary').length, 2)
   assert.equal(verifiedPath.summary.resolvedDensity, 'comfortable')
   assert.notEqual(engineering.scene.groups?.[0]?.labelSide, 'left')
+  const engineFrames = canvasPresentationGroupFrames(engineering.scene)
+  assert.ok(engineFrames.some((frame) => frame.memberIds.length === 1
+    && canvasArchitectureGroupPresentation(engineering.scene, frame) === 'compact-region'))
+  assert.ok(canvasSceneToSvg(engineering.scene).includes('canvas-compact-region'))
+  const legacyEngineering = { ...engineering.scene, architecture: { ...engineering.scene.architecture!, diagramStyle: undefined } }
+  assert.ok(canvasPresentationGroupFrames(legacyEngineering).some((frame) =>
+    canvasArchitectureGroupPresentation(legacyEngineering, frame) === 'compact-region'),
+  'existing generated engineering diagrams without an explicit style should display compact auto-regions')
   assert.throws(() => composeEnterpriseArchitecture({ ...intent, nodes: intent.nodes.map((node) => ({ ...node, layer: '应用层' })) }), /至少需要两个/)
 
   const unequalLayers = composeEnterpriseArchitecture({
@@ -148,6 +160,13 @@ test('architecture generation uses topology archetypes and a bounded quality loo
   assert.equal(new Set(visualFrames.map((frame) => frame.x)).size, 1, '展示分层对齐左侧')
   assert.equal(unequalLayers.scene.elements.filter((item) => item.type === 'node').length, 8)
   assert.equal(unequalLayers.scene.elements.filter((item) => item.type === 'arrow').length, 0)
+  assert.ok(visualFrames.every((frame) => frame.x >= 0 && frame.height > 0))
+
+  const labelled = composeEnterpriseArchitecture({
+    ...intent,
+    relations: [{ from: 'Web', to: 'API', label: 'HTTPS / REST' }, { from: 'API', to: 'DB', label: 'SQL' }],
+  })
+  assert.equal(canvasArrowLabelLayouts(labelled.scene).size, 2, 'small diagram labels remain readable between bands')
 
   const denseNodes = Array.from({ length: 36 }, (_, index) => ({
     id: `Module${index}`, text: `模块${index}`, layer: `第${Math.floor(index / 6) + 1}层`,

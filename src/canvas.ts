@@ -569,6 +569,7 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
   }).join('')
   const groups = canvasPresentationGroupFrames(scene, groupFrames)
     .filter((group) => !isInsideCollapsedAncestor(group.id, scene.groups ?? [])).map((group) => {
+    const presentation = canvasArchitectureGroupPresentation(scene, group)
     const palette = architectureMode
       ? canvasArchitectureTonePalette(group.tone, { panel, text, border, note }, 'node')
       : canvasTonePalette(group.tone, { panel, text, border, note }, 'node')
@@ -587,6 +588,15 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
     const collapsed = group.collapsed ? ' · 已折叠' : ''
     const fill = group.fillColor ? escapeXml(group.fillColor) : architectureMode || group.collapsed || softwareSystem || container ? escapeXml(palette.fill) : 'none'
     if (architectureMode) {
+      if (presentation === 'enterprise-band') {
+        const label = fitCanvasText(group.label || group.id, 110, 15, 720)
+        const rail = darkArchitecture ? '#2a3b4c' : group.fillColor ? escapeXml(group.fillColor) : '#e9f1fa'
+        const accent = visualSkin?.stroke ?? '#2867a8'
+        const frameStroke = darkArchitecture ? '#425164' : '#d9e2ec'
+        return `<g class="canvas-enterprise-band"><rect x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" rx="8" fill="${darkArchitecture ? '#222d3a' : '#f8fafc'}" stroke="${frameStroke}" stroke-width="1"/><path d="M${group.x + 132} ${group.y + 1}V${group.y + group.height - 1}" stroke="${frameStroke}"/><path d="M${group.x + 132} ${group.y + 1}H${group.x + 8}Q${group.x + 1} ${group.y + 1} ${group.x + 1} ${group.y + 8}V${group.y + group.height - 8}Q${group.x + 1} ${group.y + group.height - 1} ${group.x + 8} ${group.y + group.height - 1}H${group.x + 132}Z" fill="${rail}"/><rect x="${group.x + 1}" y="${group.y + 13}" width="4" height="${Math.max(12, group.height - 26)}" rx="2" fill="${escapeXml(accent)}"/><text x="${group.x + 20}" y="${group.y + group.height / 2 + 5}" font-size="15" font-weight="720" fill="${darkArchitecture ? '#ecf3fa' : '#29445f'}">${escapeXml(label)}</text></g>`
+      }
+      if (presentation === 'compact-region')
+        return `<g class="canvas-compact-region"><text x="${group.x + 16}" y="${group.y + 18}" font-family="Arial, sans-serif" font-size="12" font-weight="640" fill="${escapeXml(palette.stroke)}" opacity="0.78">${escapeXml(group.label || group.id)}</text></g>`
       if (group.collapsed && group.id.startsWith('arch-')) {
         // Generated overview summaries are readable cards, not the faded,
         // empty dashed boundaries used around expanded architecture regions.
@@ -1192,6 +1202,20 @@ export function canvasArrowLabelLayouts(scene: CanvasScene): Map<string, CanvasA
   const collapsedOwners = canvasCollapsedOwners(scene)
   const boxes = new Map(scene.elements.filter((item): item is CanvasNode | CanvasNote => item.type !== 'arrow' && !collapsedOwners.has(item.id)).map((item) => [item.id, item]))
   const occupied = new CanvasRectIndex([...boxes.values()].map((item) => ({ x: item.x - 8, y: item.y - 8, width: item.width + 16, height: item.height + 16 })))
+  if (scene.architecture) {
+    for (const group of canvasPresentationGroupFrames(scene)) {
+      const presentation = canvasArchitectureGroupPresentation(scene, group)
+      if (presentation === 'compact-region' || group.collapsed) continue
+      const rail = 8
+      occupied.add({ x: group.x, y: group.y, width: group.width, height: rail })
+      occupied.add({ x: group.x, y: group.y + group.height - rail, width: group.width, height: rail })
+      occupied.add({ x: group.x, y: group.y, width: rail, height: group.height })
+      occupied.add({ x: group.x + group.width - rail, y: group.y, width: rail, height: group.height })
+      if (presentation === 'enterprise-band') {
+        occupied.add({ x: group.x, y: group.y, width: 136, height: group.height })
+      }
+    }
+  }
   const arrows = scene.elements
     .filter((item): item is CanvasArrow => item.type === 'arrow' && Boolean(item.label))
     .slice()
@@ -1247,6 +1271,9 @@ export function canvasArrowLabelLayouts(scene: CanvasScene): Map<string, CanvasA
       if (placed) break
     }
     if (!placed) {
+      // Keep the truthful label on the arrow's data/tooltip, but avoid forcing
+      // unreadable text through a system boundary when no legal placement exists.
+      if (scene.architecture) continue
       const segment = segments[0]
       const routeStart = route[0]
       const routeEnd = route.at(-1)!
@@ -1334,9 +1361,15 @@ export function canvasPresentationGroupFrames(
   const bandLeft = Math.min(...enterpriseBands.map((frame) => frame.x))
   const bandRight = Math.max(...enterpriseBands.map((frame) => frame.x + frame.width))
   return frames.map((frame) => {
-    // The proposal view needs aligned visual bands even when each layer has a
-    // different number of modules. Routing still uses exact member extents.
-    if (enterpriseBands.includes(frame)) return { ...frame, x: bandLeft, width: bandRight - bandLeft }
+    // The proposal view uses aligned bands with a dedicated label rail. These
+    // are presentation bounds only: routing keeps exact member extents.
+    if (enterpriseBands.includes(frame)) return {
+      ...frame,
+      x: bandLeft - 132,
+      width: bandRight - bandLeft + 132,
+      y: frame.y + 24,
+      height: frame.height - 32,
+    }
     const generatedRegion = /^arch-(external|experience|application|processing|data)$/.test(frame.id)
       && frame.kind === 'boundary' && !frame.c4Type && !frame.collapsed
     if (generatedRegion && frame.height >= 92) {
@@ -1350,6 +1383,19 @@ export function canvasPresentationGroupFrames(
     }
     return frame
   })
+}
+
+export function canvasArchitectureGroupPresentation(
+  scene: CanvasScene, group: CanvasGroupFrame,
+): 'enterprise-band' | 'compact-region' | 'boundary' {
+  if (!scene.architecture || group.collapsed) return 'boundary'
+  if (scene.architecture.diagramStyle === 'enterprise' && group.id.startsWith('__arch-layer-') && group.labelSide === 'left')
+    return 'enterprise-band'
+  if ((scene.architecture.diagramStyle === 'engineering' || scene.architecture.diagramStyle === undefined)
+    && /^arch-(external|experience|application|processing|data)$/.test(group.id)
+    && !group.c4Type && group.memberIds.length === 1)
+    return 'compact-region'
+  return 'boundary'
 }
 
 export function canvasCollapsedOwners(scene: CanvasScene): Map<string, string> {

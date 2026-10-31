@@ -1460,3 +1460,29 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 
 /* Solid frame toggle must beat architecture-mode group styling. */
 .freeform-editor.is-architecture-mode .freeform-group-frame.has-solid-frame > rect:first-of-type { stroke-dasharray: none; }
+
+/* Proposal bands are a separate presentation grammar from engineering boundaries. */
+.freeform-editor.is-architecture-mode .freeform-group-frame.is-enterprise-band > rect:first-of-type {
+  stroke-dasharray: none;
+  opacity: 1;
+}
+.freeform-editor.is-architecture-mode .freeform-group-frame.is-enterprise-band .freeform-enterprise-band-label {
+  fill: #29445f;
+  font-size: 15px;
+  font-weight: 720;
+  opacity: 1;
+}
+.freeform-editor.is-architecture-mode .freeform-group-frame.is-compact-region .freeform-compact-region-label {
+  fill: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 640;
+  opacity: .78;
+}
+.freeform-editor.is-architecture-mode .freeform-group-frame.is-enterprise-band .freeform-enterprise-band-rail,
+.freeform-editor.is-architecture-mode .freeform-group-frame.is-enterprise-band .freeform-enterprise-band-accent {
+  stroke: none;
+  stroke-dasharray: none;
+}
+:root[data-theme='dark'] .freeform-editor.is-architecture-mode .freeform-group-frame.is-enterprise-band .freeform-enterprise-band-label {
+  fill: #ecf3fa;
+}
