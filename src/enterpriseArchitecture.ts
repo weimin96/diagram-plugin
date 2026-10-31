@@ -7,7 +7,7 @@ import { assessArchitectureRouteDiagnostics } from './architectureRouteDiagnosti
 import { assessArchitecturePresentation } from './architecturePresentationQuality.js'
 import { planArchitectureVisual } from './architectureVisualPlan.js'
 import { canvasVisualSkin } from './diagramVisualStyles.js'
-import { canvasEnterpriseBandPalette, canvasEnterpriseModuleTextLayout, resolveCanvasArchitectureDensity, type CanvasArrow, type CanvasNode, type CanvasProposalRole, type CanvasScene } from './canvas.js'
+import { canvasEnterpriseBandPalette, canvasEnterpriseReferenceColors, canvasEnterpriseModuleTextLayout, resolveCanvasArchitectureDensity, type CanvasArrow, type CanvasNode, type CanvasProposalRole, type CanvasScene } from './canvas.js'
 
 const regionNames: Record<NonNullable<ArchitectureIntentGraph['nodes'][number]['partition']>, string> = {
   external: '外部与参与方', experience: '访问与接入层', application: '业务应用层',
@@ -296,7 +296,7 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
           const sectionId = `__arch-section-${layerIndex + 1}-${groupIndex + 1}`
           nestedGroups.push({
             id: sectionId, label: key.slice(6), parentId: layerId,
-            kind: 'boundary', fillColor: '#dce1f8', borderStyle: 'solid',
+            kind: 'boundary', fillColor: canvasEnterpriseReferenceColors.platform, borderStyle: 'solid',
           })
           members.forEach((node, nodeIndex) => {
             const row = Math.floor(nodeIndex / inRow)
@@ -372,7 +372,8 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
     const domainY = Math.max(anchorRow.top + 32,
       (anchorRow.top + anchorRow.bottom - contentHeight) / 2)
     nestedGroups.push({
-      id: domainId, label: '治理与运维', kind: 'boundary', fillColor: '#dceccf', borderStyle: 'solid',
+      id: domainId, label: '治理与运维', kind: 'boundary',
+      fillColor: canvasEnterpriseReferenceColors.governance, borderStyle: 'solid',
     })
     supportRails.forEach(({ node }, index) => {
       const { layer: _layer, partition: _partition, visualRole: _role,

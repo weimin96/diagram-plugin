@@ -1,4 +1,5 @@
 import { routeArchitectureArrowIds, routeArchitectureEdges, routeArchitectureEdgesIncremental } from './architectureRouting.js'
+import { canvasEnterpriseReferenceColors } from './canvas.js'
 import { canvasVisualSkin, canvasStyledBox, canvasFillTextColor, diagramVisualStyles, type DiagramVisualStyle } from './diagramVisualStyles.js'
 import { canvasArrowLabelText, fitCanvasText, layoutArchitectureCardText } from './canvasLabelText.js'
 import { canvasNodeRelations, resolveCanvasRelationshipFocus, searchCanvasRelations } from './canvasRelationshipFocus.js'
@@ -3529,7 +3530,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                 style={presentation === 'enterprise-band'
                   ? { fill: enterprisePalette.body, stroke: 'none', strokeWidth: 0, strokeDasharray: 'none' }
                   : flatDomain
-                    ? { fill: group.fillColor ?? '#e6e8fb', fillOpacity: 1, stroke: 'none', strokeWidth: 0, strokeDasharray: 'none' }
+                    ? { fill: group.fillColor ?? canvasEnterpriseReferenceColors.platform, fillOpacity: 1, stroke: 'none', strokeWidth: 0, strokeDasharray: 'none' }
                   : scene.architecture?.diagramStyle === 'enterprise' && (group.parentId || group.borderStyle === 'solid')
                     ? { ...(group.fillColor ? { fill: group.fillColor } : {}), fillOpacity: 1, strokeDasharray: 'none', strokeWidth: 1.5 }
                   : group.fillColor ? { fill: group.fillColor, fillOpacity: 0.86 } : undefined}

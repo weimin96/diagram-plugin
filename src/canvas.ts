@@ -1463,21 +1463,30 @@ export function canvasArchitectureGroupPresentation(
   return 'boundary'
 }
 
+/** Domestic proposal reference palette: one source for generation, editor and
+ * SVG export. Saturation is deliberate; individual authored color overrides
+ * remain authoritative. */
+export const canvasEnterpriseReferenceColors = {
+  layers: ['#F4CDCF', '#DDF0FA', '#FFD164', '#E5E6F9', '#AFE0C5', '#FFD6A8'],
+  layerLabel: '#406DD9',
+  platform: '#E7E8FA',
+  capability: '#AEC1F7',
+  governance: '#B6DD9B',
+  gateway: '#FFCB51',
+  resource: '#FFD6A8',
+  surface: '#FFFFFF',
+  surfaceBorder: '#E5EAF0',
+  ink: '#25313D',
+  icon: '#10B6CD',
+} as const
+
 /** Shared proposal-layer ink for the editable editor and exported SVG.
  * The palette belongs to the presentation, not to a node's semantic data.
  */
 export function canvasEnterpriseBandPalette(index: number, dark: boolean) {
-  const palettes = [
-    ['#f4d6d7', '#f4d6d7', '#426ce0'],
-    ['#e2f2fc', '#e2f2fc', '#426ce0'],
-    ['#ffdb72', '#ffdb72', '#426ce0'],
-    ['#e8eafa', '#e8eafa', '#426ce0'],
-    ['#bfe5d2', '#bfe5d2', '#426ce0'],
-    ['#ffe2bd', '#ffe2bd', '#426ce0'],
-  ] as const
   if (dark) return { body: '#242f3b', rail: '#344354', accent: '#c7d8e8', border: '#536579' }
-  const [body, rail, accent] = palettes[index % palettes.length]
-  return { body, rail, accent, border: 'none' }
+  const body = canvasEnterpriseReferenceColors.layers[index % canvasEnterpriseReferenceColors.layers.length]
+  return { body, rail: body, accent: canvasEnterpriseReferenceColors.layerLabel, border: 'none' }
 }
 
 /** Non-destructive relation visibility for domestic proposal presentations.
@@ -1793,11 +1802,11 @@ export function canvasEnterpriseModuleSvg(item: CanvasNode, dark: boolean, showS
   } satisfies Record<CanvasArchitectureCardKind, [string, string]>)[template.kind]
   const primary = item.emphasis === 'primary'
   const { hasIcon, tile, tileX, tileY, textX, typography } = canvasEnterpriseModuleTextLayout(item, showSubtitle)
-  const ink = item.textColor ?? (dark ? '#edf4fc' : '#293d55')
+  const ink = item.textColor ?? (dark ? '#edf4fc' : canvasEnterpriseReferenceColors.ink)
   const fill = item.fillColor && item.fillColor.toLowerCase() !== '#ffffff'
-    ? item.fillColor : dark ? (primary ? '#304557' : '#263645') : primary ? category[1] : '#ffffff'
+    ? item.fillColor : dark ? (primary ? '#304557' : '#263645') : primary ? category[1] : canvasEnterpriseReferenceColors.surface
   const border = item.strokeColor && item.strokeColor !== '#cfd8e3'
-    ? item.strokeColor : dark ? (primary ? category[0] : '#607388') : primary ? category[0] : '#a8b7c7'
+    ? item.strokeColor : dark ? (primary ? category[0] : '#607388') : primary ? category[0] : canvasEnterpriseReferenceColors.surfaceBorder
   const logoSize = Math.min(25, tile - 7)
   const logoX = tileX + (tile - logoSize) / 2
   const logoY = tileY + (tile - logoSize) / 2
@@ -1819,7 +1828,7 @@ export function canvasEnterpriseModuleSvg(item: CanvasNode, dark: boolean, showS
 function canvasEnterpriseProposalPrimitiveSvg(item: CanvasNode, dark: boolean, showSubtitle: boolean): string {
   const role = item.proposalRole!
   const title = escapeXml([item.text, item.subtitle, item.description].filter(Boolean).join(' · '))
-  const ink = escapeXml(item.textColor ?? (dark ? '#f1f5fb' : '#263950'))
+  const ink = escapeXml(item.textColor ?? (dark ? '#f1f5fb' : canvasEnterpriseReferenceColors.ink))
   const common = `x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}"`
   const label = (text: string, x: number, y: number, size: number, weight: number, anchor: 'start' | 'middle' = 'middle') =>
     `<text x="${x}" y="${y}" text-anchor="${anchor}" font-size="${size}" font-weight="${weight}" fill="${ink}">${escapeXml(text)}</text>`
@@ -1830,8 +1839,8 @@ function canvasEnterpriseProposalPrimitiveSvg(item: CanvasNode, dark: boolean, s
     ? architectureIconRefMark(item.iconRef, x, y, size, '#207bba', dark)
     : item.stencil
       ? architectureStencilMark(item.stencil, x, y, size, '#207bba', dark)
-      : item.icon
-        ? `<g transform="translate(${x} ${y}) scale(${size / 24})" fill="none" stroke="${dark ? '#8ad7ef' : '#0b99bd'}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${canvasIconPaths(item.icon).map((path) => `<path d="${path}"/>`).join('')}</g>`
+    : item.icon
+        ? `<g transform="translate(${x} ${y}) scale(${size / 24})" fill="none" stroke="${dark ? '#8ad7ef' : canvasEnterpriseReferenceColors.icon}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${canvasIconPaths(item.icon).map((path) => `<path d="${path}"/>`).join('')}</g>`
         : ''
   const painted = (body: string) => `<g class="canvas-enterprise-module proposal-${role}" opacity="${item.opacity ?? 1}"><title>${title}</title>${body}</g>`
   // CSS in the editable SVG has generic .freeform-box rect rules. Paint
@@ -1845,7 +1854,7 @@ function canvasEnterpriseProposalPrimitiveSvg(item: CanvasNode, dark: boolean, s
     const brand = (item.icon || item.iconRef || item.stencil) ? icon(25, item.x + 20, item.y + (item.height - 25) / 2) : ''
     const x = brand ? item.x + 58 : center
     const anchor = brand ? 'start' : 'middle'
-    return painted(`${plate(item.fillColor ?? (dark ? '#66552a' : '#fbd36d'), item.strokeColor ?? '#dbaa3e', 1.2, 2)}${brand}${full.titleLines.map((line, i) => label(line, x, item.y + full.titleY + i * full.titleLineHeight, full.titleFontSize, 700, anchor)).join('')}`)
+    return painted(`${plate(item.fillColor ?? (dark ? '#66552a' : canvasEnterpriseReferenceColors.gateway), item.strokeColor ?? (dark ? '#dbaa3e' : 'none'), dark ? 1.2 : 0, 0)}${brand}${full.titleLines.map((line, i) => label(line, x, item.y + full.titleY + i * full.titleLineHeight, full.titleFontSize, 700, anchor)).join('')}`)
   }
   if (role === 'support-rail') {
     const chars = Array.from(item.text)
@@ -1859,18 +1868,18 @@ function canvasEnterpriseProposalPrimitiveSvg(item: CanvasNode, dark: boolean, s
     const size = Math.min(35, Math.max(22, item.height * .39))
     const brand = icon(size, center - size / 2, item.y + Math.max(8, item.height * .13))
     const typography = layoutArchitectureCardText(item.text, undefined, item.width - 18, item.height, 16, 650)
-    return painted(`${plate(item.fillColor ?? (dark ? '#334b50' : '#e9f4f1'), item.strokeColor ?? '#cbded9', 1, 2)}${brand}${typography.titleLines.map((line, i) => label(line, center, item.y + item.height - 16 - (typography.titleLines.length - i - 1) * 17, 16, 650)).join('')}`)
+    return painted(`${plate(item.fillColor ?? (dark ? '#334b50' : 'transparent'), item.strokeColor ?? 'none', 0, 0)}${brand}${typography.titleLines.map((line, i) => label(line, center, item.y + item.height - 16 - (typography.titleLines.length - i - 1) * 17, 16, 650)).join('')}`)
   }
   if (role === 'support-item') {
     const brand = item.icon ? icon(20, item.x + 14, item.y + (item.height - 20) / 2) : ''
     const layout = layoutArchitectureCardText(item.text, undefined, item.width - (brand ? 52 : 20), item.height, 17, 650)
     const x = brand ? item.x + 44 : center
-    return painted(`${plate(item.fillColor ?? (dark ? '#2a4255' : '#ffffff'), item.strokeColor ?? '#d3e0eb', 1, 3)}${brand}${layout.titleLines.map((line, i) => label(line, x, item.y + layout.titleY + i * layout.titleLineHeight, layout.titleFontSize, 650, brand ? 'start' : 'middle')).join('')}`)
+    return painted(`${plate(item.fillColor ?? (dark ? '#2a4255' : canvasEnterpriseReferenceColors.surface), item.strokeColor ?? (dark ? '#d3e0eb' : 'none'), dark ? 1 : 0, 0)}${brand}${layout.titleLines.map((line, i) => label(line, x, item.y + layout.titleY + i * layout.titleLineHeight, layout.titleFontSize, 650, brand ? 'start' : 'middle')).join('')}`)
   }
   // Lightweight functional unit inside an actual nested Canvas group.
   const lines = layoutArchitectureCardText(item.text, showSubtitle ? item.subtitle : undefined,
     item.width - 14, item.height, 17, 600)
-  return painted(`${plate(item.fillColor ?? (dark ? '#3a5270' : '#b9c8fa'), item.strokeColor ?? '#b9c8fa', 0, 1)}${lines.titleLines.map((line, i) =>
+  return painted(`${plate(item.fillColor ?? (dark ? '#3a5270' : canvasEnterpriseReferenceColors.capability), item.strokeColor ?? 'none', 0, 0)}${lines.titleLines.map((line, i) =>
     label(line, center, item.y + lines.titleY + i * lines.titleLineHeight, lines.titleFontSize, 600)).join('')}`)
 }
 

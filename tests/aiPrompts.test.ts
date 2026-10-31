@@ -295,10 +295,10 @@ test('architecture generation uses topology archetypes and a bounded quality loo
     ...spanning.scene, architecture: { ...spanning.scene.architecture!, proposalMode: 'hybrid' },
   })?.size, 4, 'hybrid mode shows bounded real adjacent dependencies')
   assert.match(canvasEnterpriseModuleSvg(ops, false, true),
-    /style="fill:#ffffff;stroke:#d3e0eb;stroke-width:1"/,
+    /style="fill:#FFFFFF;stroke:none;stroke-width:0"/,
     'governance items carry the same neutral paint into the editable SVG DOM')
   assert.match(canvasEnterpriseModuleSvg(api, false, true),
-    /style="fill:#fbd36d;stroke:#dbaa3e;stroke-width:1\.2"/,
+    /style="fill:#FFCB51;stroke:none;stroke-width:0"/,
     'access bars cannot fall back to the generic white editor card')
   assert.throws(() => composeEnterpriseArchitecture({
     ...spanning.scene, title: '非法范围',
