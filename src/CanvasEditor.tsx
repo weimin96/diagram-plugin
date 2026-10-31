@@ -3071,7 +3071,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
   </>
 
   return (
-    <div ref={editorRef} className={`freeform-editor workbench-${workbench} architecture-view-${architectureProjection.view} architecture-density-${architectureProjection.density} architecture-theme-${architectureTheme} lod-${semanticLodLevel}${scene.architecture ? ' is-architecture-mode' : ''}${relationFocus ? ' has-relation-lens' : ''}${keyDependencyActive ? ' has-key-dependency-lens' : ''}${architectureScope ? ' has-architecture-scope' : ''}${playbackStep ? ' is-ai-playback' : ''}`} tabIndex={0} inert={!active || undefined} aria-label="自由画布编辑器" aria-busy={imageImporting || undefined} onPaste={handleEditorPaste}>
+    <div ref={editorRef} className={`freeform-editor workbench-${workbench} architecture-view-${architectureProjection.view} architecture-density-${architectureProjection.density} architecture-theme-${architectureTheme}${scene.architecture?.diagramStyle === 'enterprise' ? ' architecture-diagram-enterprise' : ''} lod-${semanticLodLevel}${scene.architecture ? ' is-architecture-mode' : ''}${relationFocus ? ' has-relation-lens' : ''}${keyDependencyActive ? ' has-key-dependency-lens' : ''}${architectureScope ? ' has-architecture-scope' : ''}${playbackStep ? ' is-ai-playback' : ''}`} tabIndex={0} inert={!active || undefined} aria-label="自由画布编辑器" aria-busy={imageImporting || undefined} onPaste={handleEditorPaste}>
       <div ref={surfaceRef} className="freeform-surface">
         <input
           ref={imageInputRef}

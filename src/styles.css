@@ -826,6 +826,9 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .freeform-box.card-kind-generic .freeform-card-kind-band { fill: color-mix(in srgb, var(--text-tertiary) 72%, transparent); }
 .freeform-box.card-kind-external > rect:first-of-type,
 .freeform-box.card-kind-messaging > rect:first-of-type { stroke-dasharray: 7 5; }
+.freeform-editor.architecture-diagram-enterprise .freeform-box.is-architecture-card > rect:first-of-type {
+  stroke-dasharray: none;
+}
 .freeform-box.tone-accent .freeform-card-accent { fill: #6366f1; }
 .freeform-box.tone-success .freeform-card-accent { fill: #10b981; }
 .freeform-box.tone-warning .freeform-card-accent { fill: #f59e0b; }
