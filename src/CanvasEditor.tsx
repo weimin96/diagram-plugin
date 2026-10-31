@@ -3526,7 +3526,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                 rx={presentation === 'enterprise-band' ? 2 : scene.architecture ? group.c4Type === 'software-system' ? 10 : 8 : 20}
                 style={presentation === 'enterprise-band'
                   ? { fill: enterprisePalette.body, stroke: enterprisePalette.border, strokeWidth: 1, strokeDasharray: 'none' }
-                  : scene.architecture?.diagramStyle === 'enterprise' && group.parentId
+                  : scene.architecture?.diagramStyle === 'enterprise' && (group.parentId || group.borderStyle === 'solid')
                     ? { ...(group.fillColor ? { fill: group.fillColor } : {}), fillOpacity: 1, strokeDasharray: 'none', strokeWidth: 1.5 }
                   : group.fillColor ? { fill: group.fillColor, fillOpacity: 0.86 } : undefined}
                 pointerEvents={group.collapsed ? 'all' : 'none'}
