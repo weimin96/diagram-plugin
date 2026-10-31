@@ -133,6 +133,9 @@ test('过宽架构总览初次打开自动聚焦可读区域，其他画布和�
   assert.equal(assessArchitecturePresentation(enterprise).estimatedTitlePxAtFit, 8)
   const enterpriseCamera = recommendArchitectureInitialReadingViewport(enterprise, enterprise, 900, 600)
   assert.ok(enterpriseCamera && enterpriseCamera.zoom > 1, '密集企业分层图从可读主链区域打开')
+  const narrowCamera = recommendArchitectureInitialReadingViewport(enterprise, enterprise, 420, 550)
+  assert.ok(narrowCamera && narrowCamera.zoom <= 2.25,
+    'narrow embedded editor must retain context rather than opening on one oversized node')
   assert.ok(16 * enterpriseCamera.zoom * Math.min(900 / enterprise.width, 600 / enterprise.height) >= 11.5)
   assert.equal(recommendArchitectureInitialReadingViewport({ ...enterprise, width: 900, height: 600 }, enterprise, 900, 600), null)
   assert.equal(recommendArchitectureInitialReadingViewport({ ...overview, architecture: undefined }, overview, 900, 600), null)

@@ -91,7 +91,11 @@ export function recommendArchitectureInitialReadingViewport(
     && (assessArchitecturePresentation(scene).estimatedTitlePxAtFit < 11
       || visibleScene.groups?.some((group) => group.collapsed && group.id.startsWith('arch-')))
   if (!enterpriseDetail && !unreadableOverview) return null
-  return recommendArchitectureReadingViewport(visibleScene, viewportWidth, viewportHeight, 1)
+  // An editor embedded beside a chat is narrow: opening at 3–4x shows one
+  // huge card and loses the architectural context. Start with a bounded
+  // inspection scale and let the explicit “主链” action zoom further.
+  return recommendArchitectureReadingViewport(visibleScene, viewportWidth, viewportHeight, 1,
+    11.5, scene.architecture.diagramStyle === 'enterprise' ? 2.25 : 4)
 }
 
 /** Boost generated titles only when they still fit their cards. Never upscale existing files implicitly. */
