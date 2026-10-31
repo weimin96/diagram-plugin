@@ -128,7 +128,15 @@ test('architecture generation uses topology archetypes and a bounded quality loo
   }
   assert.deepEqual(enterprise.scene.groups?.map((group) => group.label), ['接入层', '应用层', '数据层'])
   assert.equal(enterprise.scene.groups?.every((group) => group.labelSide === 'left'), true)
-  assert.ok(canvasSceneToSvg(enterprise.scene).includes('canvas-enterprise-band'))
+  const proposalSvg = canvasSceneToSvg(enterprise.scene)
+  assert.ok(proposalSvg.includes('canvas-enterprise-band'))
+  assert.equal((proposalSvg.match(/class="canvas-enterprise-module"/g) ?? []).length, 3,
+    'proposal modules use matrix cells rather than engineering icon cards')
+  assert.equal((proposalSvg.match(/class="canvas-enterprise-band"/g) ?? []).length, 3)
+  assert.match(proposalSvg, /text-anchor="middle" font-size="15"/)
+  assert.doesNotMatch(proposalSvg, /class="canvas-enterprise-module"[^]*?class="freeform-icon-ref"/)
+  assert.doesNotMatch(canvasSceneToSvg(engineering.scene), /class="canvas-enterprise-module"/,
+    'engineering/C4 cards must not inherit domestic proposal cell markup')
   assert.equal(canvasPresentationGroupFrames(enterprise.scene).every((frame) =>
     canvasArchitectureGroupPresentation(enterprise.scene, frame) === 'enterprise-band'), true)
   assert.ok(enterprise.scene.width < 1000, 'small proposal architecture should use a compact canvas')
@@ -163,6 +171,10 @@ test('architecture generation uses topology archetypes and a bounded quality loo
   assert.equal(unequalLayers.scene.elements.filter((item) => item.type === 'node').length, 8)
   assert.equal(unequalLayers.scene.elements.filter((item) => item.type === 'arrow').length, 0)
   assert.ok(visualFrames.every((frame) => frame.x >= 0 && frame.height > 0))
+  const matrixNodes = unequalLayers.scene.elements.filter((item) => item.type === 'node')
+  assert.equal(new Set(matrixNodes.map((item) => item.width)).size, 1)
+  assert.equal(new Set(matrixNodes.map((item) => item.height)).size, 1)
+  assert.equal(matrixNodes[0].width, 182, 'relation-free proposal schemes use the dense module matrix')
 
   const renamedGroups = new Map(unequalLayers.scene.groups!.map((group, index) => [group.id, `L${index + 1}`]))
   const scriptedScene = {

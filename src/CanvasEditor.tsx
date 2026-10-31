@@ -21,7 +21,7 @@ import { recommendArchitectureInitialReadingViewport, recommendArchitectureReadi
 import { compactEnterpriseLayerSpacing } from './architectureProposalSpacing.js'
 import { straightenArchitectureTerminalRoutes } from './architectureRouteRepair.js'
 import { ARCHITECTURE_NODE_TEMPLATES, architectureNodeTemplate, type ArchitectureNodeTemplate, type ArchitectureNodeTemplateProvider } from './architectureNodeTemplates.js'
-import { anchorPoint, canvasArchitectureCardTemplate, canvasArchitectureGroupPresentation, canvasArchitectureHeader, canvasArchitectureProjection, canvasArchitectureRelationLabelVisible, canvasArchitectureScopeProjection, canvasArrowBoxRoute, canvasArrowLabelLayouts, canvasArrowPath, canvasArrowRoutePath, canvasArrowRoutePoints, canvasBundleTrunks, canvasCollapsedConnections, canvasCollapsedOwners, canvasGroupFrames, canvasPresentationGroupFrames, canvasIconLabel, canvasIconPaths, canvasIconRefLabel, canvasIconRefMarkup, canvasSemanticLodProjection, resolveCanvasSemanticLod, canvasStencilLabel, canvasStencilVisual, c4Label, parseCanvasScene, serializeCanvasScene, type CanvasAnchor, type CanvasArchitectureDensity, type CanvasArchitectureScope, type CanvasArchitectureView, type CanvasArrow, type CanvasC4Type, type CanvasElement, type CanvasGroup, type CanvasGroupFrame, type CanvasIcon, type CanvasIconRef, type CanvasLineStyle, type CanvasNode, type CanvasNote, type CanvasPoint, type CanvasRouting, type CanvasScene, type CanvasSemanticLodLevel, type CanvasShape, type CanvasStencil, type CanvasTone } from './canvas.js'
+import { anchorPoint, canvasArchitectureCardTemplate, canvasArchitectureGroupPresentation, canvasEnterpriseBandPalette, canvasArchitectureHeader, canvasArchitectureProjection, canvasArchitectureRelationLabelVisible, canvasArchitectureScopeProjection, canvasArrowBoxRoute, canvasArrowLabelLayouts, canvasArrowPath, canvasArrowRoutePath, canvasArrowRoutePoints, canvasBundleTrunks, canvasCollapsedConnections, canvasCollapsedOwners, canvasGroupFrames, canvasPresentationGroupFrames, canvasIconLabel, canvasIconPaths, canvasIconRefLabel, canvasIconRefMarkup, canvasSemanticLodProjection, resolveCanvasSemanticLod, canvasStencilLabel, canvasStencilVisual, c4Label, parseCanvasScene, serializeCanvasScene, type CanvasAnchor, type CanvasArchitectureDensity, type CanvasArchitectureScope, type CanvasArchitectureView, type CanvasArrow, type CanvasC4Type, type CanvasElement, type CanvasGroup, type CanvasGroupFrame, type CanvasIcon, type CanvasIconRef, type CanvasLineStyle, type CanvasNode, type CanvasNote, type CanvasPoint, type CanvasRouting, type CanvasScene, type CanvasSemanticLodLevel, type CanvasShape, type CanvasStencil, type CanvasTone } from './canvas.js'
 import { CANVAS_ICON_CATALOG, type CanvasIconSource } from './iconRegistry.js'
 import { alignCanvasSelection, assignCanvasSelectionToLane, canvasRotationFromPointer, clearCanvasLanes, computeCanvasSmartSnap, copyCanvasSelection, createCanvasLanePreset, deleteCanvasSelection, distributeCanvasSelection, expandCanvasGroupSelection, groupCanvasSelection, insertCanvasArchitectureNodeTemplate, insertCanvasArchitectureTemplate, insertCanvasNodeOnArrow, layoutCanvasNeighborhood, layoutCanvasScene, layoutCanvasSelection, nextCanvasElementId, pasteCanvasSelection, reconnectCanvasArrow, reflowCanvasNeighborhood, reorderCanvasSelection, resizeCanvasTransformBox, reverseCanvasArrow, scaleCanvasTransformBoxes, separateCanvasSelection, setCanvasC4CollapseLevel, setCanvasGroupParent, traceCanvasGraph, ungroupCanvasSelection, updateCanvasGroup, updateCanvasLane, type CanvasArchitectureTemplate, type CanvasC4CollapseLevel, type CanvasLayoutMode, type CanvasResizeHandle, type CanvasSpacingGuide, type CanvasTraceDirection, type CanvasTransformBox } from './canvasOperations.js'
 import { ShapeLibrary, ShapePreview } from './ShapeLibrary.js'
@@ -249,11 +249,12 @@ function relationLabelScene(scene: CanvasScene, architecture: boolean, level: Ca
 }
 
 
-const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, darkTheme, architecture, architectureTheme, architectureView, density, titleScale, level, selected, imageSource }: {
+const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, darkTheme, architecture, proposal, architectureTheme, architectureView, density, titleScale, level, selected, imageSource }: {
   item: CanvasNode | CanvasNote
   visualStyle?: DiagramVisualStyle
   darkTheme: boolean
   architecture: boolean
+  proposal?: boolean
   architectureTheme?: ArchitectureTheme
   architectureView?: CanvasArchitectureView
   density: CanvasArchitectureDensity
@@ -275,7 +276,7 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
   const cardTemplate = canvasArchitectureCardTemplate(displayItem)
   const cardMeta = displayItem.iconRef ? canvasIconRefLabel(displayItem.iconRef) : displayItem.stencil ? canvasStencilLabel(displayItem.stencil) : architectureCard ? cardTemplate.label : displayItem.icon ? canvasIconLabel(displayItem.icon) : undefined
   // Actor, external and technical nodes share a common card/icon/title grid.
-  const architectureMark = Boolean(architecture && architectureCard && (displayItem.iconRef || displayItem.stencil || displayItem.icon))
+  const architectureMark = Boolean(architecture && !proposal && architectureCard && (displayItem.iconRef || displayItem.stencil || displayItem.icon))
   const titleColor = architectureMark && !originalItem.fillColor
     ? darkTheme ? '#f8fafc' : '#243247'
     : canvasFillTextColor(displayItem.fillColor, skin?.text ?? (darkTheme ? '#f8fafc' : '#243247'))
@@ -290,17 +291,17 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
   const architectureMarkSize = density === 'dense' ? 30 : density === 'compact' ? 34 : 38
   const architectureMarkX = 14
   const architectureMarkY = (displayItem.height - architectureMarkSize) / 2
-  const architectureTextX = architectureMark ? architectureMarkX + architectureMarkSize + 12 : architectureCard ? 16 : displayItem.width / 2
+  const architectureTextX = proposal ? displayItem.width / 2 : architectureMark ? architectureMarkX + architectureMarkSize + 12 : architectureCard ? 16 : displayItem.width / 2
   const architectureTitleY = architectureMark ? displayItem.height / 2 + (showCardSubtitle ? -10 : 4) : architectureCard ? (showCardSubtitle ? 55 : Math.max(54, displayItem.height / 2 + 5)) : displayItem.height / 2
   const titleFontSize = displayItem.fontSize ?? 15
   const subtitleFontSize = displayItem.fontSize ? Math.max(9, displayItem.fontSize * 0.72) : 11
-  const architectureTextWidth = architectureCard
+  const architectureTextWidth = proposal ? Math.max(28, displayItem.width - 20) : architectureCard
     ? Math.max(28, displayItem.width - architectureTextX - 14)
     : Math.max(28, displayItem.width - 28)
-  const cardTypography = architecture && architectureCard
+  const cardTypography = architecture && (architectureCard || proposal)
     ? layoutArchitectureCardText(displayText, showCardSubtitle ? displayItem.subtitle : undefined,
       architectureTextWidth, displayItem.height,
-      displayItem.fontSize ?? 14 * (titleScale ?? 1), displayItem.fontWeight ?? 650)
+      proposal ? Math.max(14, displayItem.fontSize ?? 15) : displayItem.fontSize ?? 14 * (titleScale ?? 1), displayItem.fontWeight ?? 650)
     : null
   const titleText = architectureCard && !cardTypography ? fitCanvasText(displayText, architectureTextWidth, titleFontSize, displayItem.fontWeight ?? 600) : displayText
   const subtitleText = displayItem.subtitle ? fitCanvasText(displayItem.subtitle, architectureTextWidth, subtitleFontSize, 500) : ''
@@ -316,9 +317,9 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
                   ? <image href={imageSource} width={displayItem.width} height={displayItem.height} preserveAspectRatio={imageFit === 'cover' ? 'xMidYMid slice' : 'xMidYMid meet'} clipPath={`url(#canvas-image-${displayItem.id})`} />
                   : <text className="freeform-image-placeholder" x={displayItem.width / 2} y={displayItem.height / 2} textAnchor="middle" dominantBaseline="middle">图片加载中</text>}
                 <rect className="freeform-image-outline" width={displayItem.width} height={displayItem.height} rx={displayItem.cornerRadius ?? 8} />
-              </> : displayItem.shapeRef ? <CanvasBoxShape item={displayItem} /> : <rect width={displayItem.width} height={displayItem.height} rx={displayItem.cornerRadius ?? (displayItem.shape === 'square' ? 3 : displayItem.shape === 'pill' ? displayItem.height / 2 : architecture && architectureMark ? 9 : 14)} />}
+              </> : displayItem.shapeRef && !proposal ? <CanvasBoxShape item={displayItem} /> : <rect width={displayItem.width} height={displayItem.height} rx={proposal ? 3 : displayItem.cornerRadius ?? (displayItem.shape === 'square' ? 3 : displayItem.shape === 'pill' ? displayItem.height / 2 : architecture && architectureMark ? 9 : 14)} />}
               {!architecture && !visualStyle && displayItem.emphasis === 'primary' ? <rect className="freeform-card-accent" width="5" height={displayItem.height} rx="3" /> : null}
-              {architecture && displayItem.type === 'node' && displayItem.emphasis === 'primary'
+              {architecture && !proposal && displayItem.type === 'node' && displayItem.emphasis === 'primary'
                 && !displayItem.shapeRef && !architectureMark
                 ? <rect className="freeform-architecture-primary-rule" width="5" height={displayItem.height} rx="3" /> : null}
               {!architecture && architectureCard ? <rect className="freeform-card-kind-band" x="12" y={displayItem.height - 4} width={Math.max(24, displayItem.width - 24)} height="2" rx="1" /> : null}
@@ -337,9 +338,9 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
                     {canvasIconPaths(displayItem.icon).map((path, index) => <path key={`${displayItem.icon}-${index}`} d={path} />)}
                   </g>
                 </g>
-              ) : displayItem.iconRef && iconRefMarkup && showRoleIcon ? (
+              ) : !proposal && displayItem.iconRef && iconRefMarkup && showRoleIcon ? (
                 <g className="freeform-icon-ref" transform="translate(8 8) scale(.8333)" dangerouslySetInnerHTML={{ __html: iconRefMarkup }} />
-              ) : displayItem.icon && showRoleIcon ? (
+              ) : !proposal && displayItem.icon && showRoleIcon ? (
                 <g className="freeform-node-role" transform="translate(18 18)">
                   <circle r="10" />
                   <g className="freeform-node-role-symbol" transform="translate(-7 -7) scale(.5833)">
@@ -369,7 +370,7 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
                     ? ({ technical: 12, presentation: 14, editorial: 14.5 } as Partial<Record<ArchitectureTheme, number>>)[architectureTheme ?? 'enterprise'] ?? 13
                     : density === 'dense' ? 12 : density === 'compact' ? 13 : 14) * titleScale,
                 } : {}),
-              }} className={architectureCard ? 'freeform-node-title' : undefined} x={architectureTextX} y={cardTypography?.titleY ?? architectureTitleY} textAnchor={architectureCard ? 'start' : 'middle'} dominantBaseline={architectureCard ? undefined : 'middle'}>
+              }} className={architectureCard || proposal ? 'freeform-node-title' : undefined} x={architectureTextX} y={cardTypography?.titleY ?? architectureTitleY} textAnchor={proposal ? 'middle' : architectureCard ? 'start' : 'middle'} dominantBaseline={architectureCard || proposal ? undefined : 'middle'}>
                 {cardTypography ? cardTypography.titleLines.map((line, index) =>
                   <tspan key={index} x={architectureTextX} dy={index ? cardTypography.titleLineHeight : 0}>{line}</tspan>)
                   : plainTitleLines
@@ -380,7 +381,7 @@ const CanvasBoxArtwork = memo(function CanvasBoxArtwork({ item, visualStyle, dar
               {showCardSubtitle && (!cardTypography || cardTypography.subtitleLines.length) ? <text className="freeform-node-subtitle" style={cardTypography
                 ? { fontSize: cardTypography.subtitleFontSize, fill: displayItem.textColor }
                 : displayItem.type === 'node' && (displayItem.fontSize || displayItem.textColor) ? { fontSize: subtitleFontSize, fill: displayItem.textColor } : undefined}
-                x={architectureTextX} y={cardTypography?.subtitleY ?? (architectureMark ? architectureTitleY + 25 : displayItem.height - 12)} textAnchor={architectureCard ? 'start' : 'middle'}>
+                x={architectureTextX} y={cardTypography?.subtitleY ?? (architectureMark ? architectureTitleY + 25 : displayItem.height - 12)} textAnchor={proposal ? 'middle' : architectureCard ? 'start' : 'middle'}>
                 {cardTypography ? cardTypography.subtitleLines.map((line, index) =>
                   <tspan key={index} x={architectureTextX} dy={index ? cardTypography.subtitleLineHeight : 0}>{line}</tspan>) : subtitleText}
               </text> : null}
@@ -3418,8 +3419,10 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
           })}
           {viewportGroupBounds.filter((group) => (
             !groupHiddenByCollapsedAncestor(group.id, renderScene.groups ?? [])
-          )).map((group) => {
+          )).map((group, groupIndex) => {
             const presentation = canvasArchitectureGroupPresentation(renderScene, group)
+            const paletteIndex = renderScene.groups?.findIndex((item) => item.id === group.id) ?? groupIndex
+            const enterprisePalette = canvasEnterpriseBandPalette(Math.max(0, paletteIndex), darkTheme)
             const enterpriseLabel = presentation === 'enterprise-band'
               ? layoutArchitectureCardText(group.label || group.id, undefined,
                 Math.max(24, (group.labelRailWidth ?? 132) - 28), group.height, 15, 700)
@@ -3436,9 +3439,9 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                 y={group.y}
                 width={group.width}
                 height={group.height}
-                rx={scene.architecture ? group.c4Type === 'software-system' ? 10 : 8 : 20}
+                rx={presentation === 'enterprise-band' ? 2 : scene.architecture ? group.c4Type === 'software-system' ? 10 : 8 : 20}
                 style={presentation === 'enterprise-band'
-                  ? { fill: darkTheme ? '#222d3a' : '#f8fafc', stroke: darkTheme ? '#425164' : '#d9e2ec', strokeWidth: 1, strokeDasharray: 'none' }
+                  ? { fill: enterprisePalette.body, stroke: enterprisePalette.border, strokeWidth: 1, strokeDasharray: 'none' }
                   : group.fillColor ? { fill: group.fillColor, fillOpacity: 0.86 } : undefined}
                 pointerEvents={group.collapsed ? 'all' : 'none'}
                 onClick={group.collapsed ? (event) => {
@@ -3459,8 +3462,8 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                 } : undefined}
               /> : null}
               {presentation === 'enterprise-band' ? <>
-                <rect className="freeform-enterprise-band-rail" x={group.x + 1} y={group.y + 1} width={(group.labelRailWidth ?? 132) - 1} height={group.height - 2} rx={6} style={{ fill: darkTheme ? '#2a3340' : '#eef2f6', stroke: 'none', strokeDasharray: 'none' }} />
-                <path d={`M${group.x + (group.labelRailWidth ?? 132)} ${group.y + 1}V${group.y + group.height - 1}`} stroke={darkTheme ? '#425164' : '#d9e2ec'} strokeWidth={1} />
+                <rect className="freeform-enterprise-band-rail" x={group.x + 1} y={group.y + 1} width={(group.labelRailWidth ?? 132) - 1} height={group.height - 2} style={{ fill: enterprisePalette.rail, stroke: 'none', strokeDasharray: 'none' }} />
+                <path d={`M${group.x + (group.labelRailWidth ?? 132)} ${group.y}V${group.y + group.height}`} stroke={enterprisePalette.border} strokeWidth={1} />
               </> : null}
               {group.c4Type === 'software-system' && !group.collapsed ? <rect className="freeform-group-header" x={group.x} y={group.y} width={group.width} height="34" rx={scene.architecture ? 10 : 20} /> : null}
               {!group.collapsed && presentation !== 'compact-region' ? (
@@ -3480,7 +3483,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
                 />
               ) : null}
               {group.label ? presentation === 'enterprise-band' ? (
-                <text className="freeform-enterprise-band-label" x={group.x + 16} y={group.y + enterpriseLabel!.titleY}>
+                <text className="freeform-enterprise-band-label" style={{ fill: enterprisePalette.accent }} x={group.x + 16} y={group.y + enterpriseLabel!.titleY}>
                   {enterpriseLabel!.titleLines.map((line, index) => <tspan key={index} x={group.x + 16} dy={index ? enterpriseLabel!.titleLineHeight : 0}>{line}</tspan>)}
                 </text>
               ) : presentation === 'compact-region' ? (
@@ -3647,6 +3650,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
             const displayY = displayItem.y
             const imagePath = displayItem.type === 'note' ? displayItem.imagePath : undefined
             const imageSource = imagePath ? imageSources[imagePath] : undefined
+            const proposalModule = scene.architecture?.diagramStyle === 'enterprise' && displayItem.type === 'node' && !displayItem.shapeRef
             const architectureCard = displayItem.type === 'node' && Boolean(displayItem.iconRef || displayItem.icon || displayItem.stencil || displayItem.c4Type)
             const cardTemplate = canvasArchitectureCardTemplate(displayItem)
             const architectureMark = Boolean(scene.architecture && architectureCard && (displayItem.iconRef || displayItem.stencil || displayItem.icon))
@@ -3656,7 +3660,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
             <g
               key={item.id}
               data-element-id={item.id}
-              className={`freeform-box freeform-${displayItem.type} tone-${displayItem.tone ?? 'default'} shape-${displayItem.shape ?? 'rounded'} emphasis-${displayItem.emphasis ?? 'secondary'}${displayItem.type === 'note' && displayItem.textOnly ? ' is-text-only' : ''}${imagePath ? ' is-image' : ''}${architectureCard ? ` is-architecture-card card-kind-${cardTemplate.kind}` : ''}${architectureMark ? ' is-architecture-mark' : ''}${displayItem.iconRef ? ' has-icon-ref' : displayItem.stencil ? ' has-stencil-logo' : ''}${displayItem.fillColor ? ' has-custom-fill' : ''}${displayItem.strokeColor ? ' has-custom-stroke' : ''}${displayItem.strokeWidth ? ' has-custom-stroke-width' : ''}${displayItem.locked ? ' is-locked' : ''}${selectedIds.includes(item.id) ? ' is-selected' : ''}${dragCollisionIds.has(item.id) ? ' is-collision' : ''}${connectFrom === item.id ? ' is-connect-source' : ''}${arrowEndpointPreview?.targetId === item.id ? ' is-reconnect-target' : ''}${keyDependencyActive && !keyDependencyLens?.nodeIds.has(item.id) ? ' is-key-dimmed' : ''}${relationFocus ? item.id === relationFocus.from ? ' is-relation-source' : item.id === relationFocus.to ? ' is-relation-target' : ' is-relation-dimmed' : ''}${traceResult ? tracedNodeIds.has(item.id) ? ` is-traced trace-depth-${Math.min(3, traceResult.distanceById[item.id] ?? 0)}` : ' is-trace-dimmed' : ''}${highlightedIds.has(item.id) ? ' is-updated' : ''}`}
+              className={`freeform-box freeform-${displayItem.type} tone-${displayItem.tone ?? 'default'} shape-${displayItem.shape ?? 'rounded'} emphasis-${displayItem.emphasis ?? 'secondary'}${proposalModule ? ' is-enterprise-module' : ''}${displayItem.type === 'note' && displayItem.textOnly ? ' is-text-only' : ''}${imagePath ? ' is-image' : ''}${architectureCard ? ` is-architecture-card card-kind-${cardTemplate.kind}` : ''}${architectureMark && !proposalModule ? ' is-architecture-mark' : ''}${displayItem.iconRef ? ' has-icon-ref' : displayItem.stencil ? ' has-stencil-logo' : ''}${displayItem.fillColor ? ' has-custom-fill' : ''}${displayItem.strokeColor ? ' has-custom-stroke' : ''}${displayItem.strokeWidth ? ' has-custom-stroke-width' : ''}${displayItem.locked ? ' is-locked' : ''}${selectedIds.includes(item.id) ? ' is-selected' : ''}${dragCollisionIds.has(item.id) ? ' is-collision' : ''}${connectFrom === item.id ? ' is-connect-source' : ''}${arrowEndpointPreview?.targetId === item.id ? ' is-reconnect-target' : ''}${keyDependencyActive && !keyDependencyLens?.nodeIds.has(item.id) ? ' is-key-dimmed' : ''}${relationFocus ? item.id === relationFocus.from ? ' is-relation-source' : item.id === relationFocus.to ? ' is-relation-target' : ' is-relation-dimmed' : ''}${traceResult ? tracedNodeIds.has(item.id) ? ` is-traced trace-depth-${Math.min(3, traceResult.distanceById[item.id] ?? 0)}` : ' is-trace-dimmed' : ''}${highlightedIds.has(item.id) ? ' is-updated' : ''}`}
               style={{ ...canvasBoxVisualStyle(displayItem), ...(skin && displayItem.type === 'node' ? { filter: skin.shadow, ...(selectedIds.includes(item.id) ? { '--canvas-box-stroke': 'var(--accent)' } : {}) } : {}) }}
               transform={`translate(${displayX} ${displayY})${displayItem.rotation ? ` rotate(${displayItem.rotation} ${displayItem.width / 2} ${displayItem.height / 2})` : ''}`}
               onContextMenu={(event) => openContextMenu(event, item.id)}
@@ -3676,7 +3680,7 @@ export function CanvasEditor({ source, active = true, onChange, onSelectionChang
               onPointerUp={finishGesture}
               onPointerCancel={cancelGesture}
             >
-              <CanvasBoxArtwork item={originalItem} visualStyle={scene.style} darkTheme={darkTheme} architecture={Boolean(scene.architecture)} architectureTheme={scene.architecture?.theme} architectureView={architectureProjection.view} density={architectureProjection.density} titleScale={scene.architecture?.titleScale} level={semanticLodLevel} selected={selectedForLod} imageSource={imageSource} />
+              <CanvasBoxArtwork item={originalItem} visualStyle={scene.style} darkTheme={darkTheme} architecture={Boolean(scene.architecture)} proposal={proposalModule} architectureTheme={scene.architecture?.theme} architectureView={architectureProjection.view} density={architectureProjection.density} titleScale={scene.architecture?.titleScale} level={semanticLodLevel} selected={selectedForLod} imageSource={imageSource} />
               {showAnchorPoints ? <g className="freeform-anchor-points">
                   <circle cx={displayItem.width / 2} cy={0} r="7" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => handleAnchorClick(event, item.id, 'top')} />
                   <circle cx={displayItem.width} cy={displayItem.height / 2} r="7" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => handleAnchorClick(event, item.id, 'right')} />

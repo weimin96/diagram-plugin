@@ -16,6 +16,8 @@ R2 隔离的逻辑走廊优先排列实验覆盖 4 个不同真实源码子图�
 
 ## 架构与输出
 
+- 国内企业方案图视觉重构：已确认 `architecture.diagramStyle=enterprise` 的普通节点不再复用 C4/云平台的大图标卡片，而以**小圆角矩阵模块、居中标题、按需显示的副标题**表达分层方案。图标、技术种类和完整说明仍留在 `.diagram.json`，不删除来源事实；显式手工 `shapeRef` 维持原形状。层板采用六个稳定的低饱和色系和较醒目的层名栏，由 `canvasEnterpriseBandPalette` 同时驱动 Canvas 编辑器与 SVG。无关系的能力清单使用 182×70 紧凑矩阵，最多六列；有真实关系的图维持原有节点尺寸与路由空间，防止为了更密而产生交叉。19 节点/19 关系场景对比试验中，强制压成 182px 会使交叉 0→1、独立重叠 1→6，因此不允许用于关系图。国际工程/C4 风格不受企业方案矩阵视觉影响。
+
 - 语义入口：`diagram.composeArchitecture` 接收实际存在的节点、关系、证据和可选经确认的主路径、功能分区；`ArchitectureIntentGraph` 是权威输入。
 - 构图：`architectureComposer.ts` 协调完整候选；`architectureDesign.ts` 负责场景/节点/分区；`architectureRouting.ts` 与 `architectureOrthogonalSolver.ts` 负责端口、线段和可见通道；`architectureRouteRepair.ts` 仅提出局部几何候选。
 - 质量：`canvasQuality.ts`、`architectureRouteDiagnostics.ts`、`architecturePresentationQuality.ts` 和 `architectureVisualPlan.ts` 检查**最终** Canvas。`visualPlan.review.blockers` 是机器审查阻断的唯一输出，不得以未阻断的几何指标代替交付批准。

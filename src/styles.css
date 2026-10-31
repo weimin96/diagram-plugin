@@ -1480,7 +1480,7 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
   opacity: 1;
 }
 .freeform-editor.is-architecture-mode .freeform-group-frame.is-enterprise-band .freeform-enterprise-band-label {
-  fill: #344254;
+  fill: #36556c;
   font-size: 15px;
   font-weight: 700;
   opacity: 1;
@@ -1507,4 +1507,39 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 }
 :root[data-theme='dark'] .freeform-editor.is-architecture-mode .freeform-group-frame.is-enterprise-band .freeform-enterprise-band-label {
   fill: #ecf3fa;
+}
+
+/* Proposal modules are a compact scheme matrix, not product UI cards.
+   Scope here so C4 and engineering icon cards retain their own grammar. */
+.freeform-editor.architecture-diagram-enterprise .freeform-box.is-enterprise-module > rect:first-of-type {
+  rx: 3;
+  filter: none;
+  stroke-dasharray: none;
+  stroke-width: 1;
+}
+.freeform-editor.architecture-diagram-enterprise .freeform-box.is-enterprise-module:not(.has-custom-fill) > rect:first-of-type {
+  fill: #fff;
+}
+.freeform-editor.architecture-diagram-enterprise .freeform-box.is-enterprise-module.emphasis-primary:not(.has-custom-fill) > rect:first-of-type {
+  fill: #f0f7fc;
+}
+.freeform-editor.architecture-diagram-enterprise .freeform-box.is-enterprise-module:not(.has-custom-stroke) > rect:first-of-type {
+  stroke: #a4bacd;
+}
+.freeform-editor.architecture-diagram-enterprise .freeform-box.is-enterprise-module .freeform-node-title {
+  font-size: 15px;
+  font-weight: 660;
+  fill: #273f56;
+  letter-spacing: 0;
+}
+.freeform-editor.architecture-diagram-enterprise .freeform-box.is-enterprise-module .freeform-node-subtitle {
+  font-size: 11px;
+  fill: #56687a;
+}
+:root[data-theme='dark'] .freeform-editor.architecture-diagram-enterprise .freeform-box.is-enterprise-module:not(.has-custom-fill) > rect:first-of-type {
+  fill: #2b3947;
+}
+:root[data-theme='dark'] .freeform-editor.architecture-diagram-enterprise .freeform-box.is-enterprise-module .freeform-node-title,
+:root[data-theme='dark'] .freeform-editor.architecture-diagram-enterprise .freeform-box.is-enterprise-module .freeform-node-subtitle {
+  fill: #eaf2fb;
 }

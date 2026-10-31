@@ -533,6 +533,8 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
       return wrapRotation(`<g opacity="${item.opacity ?? 1}"><clipPath id="clip-${escapeXml(item.id)}"><rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="${radius}"/></clipPath><g clip-path="url(#clip-${escapeXml(item.id)})">${content}</g><rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="${radius}" fill="none" stroke="${escapeXml(item.strokeColor ?? border)}" stroke-width="${item.strokeWidth ?? 1}"/></g>`)
     }
     const architectureCard = item.type === 'node' && Boolean(item.iconRef || item.icon || item.stencil || item.c4Type)
+    if (architectureMode && scene.architecture?.diagramStyle === 'enterprise' && item.type === 'node' && !item.shapeRef)
+      return wrapRotation(renderEnterpriseProposalModule(item, darkArchitecture, projection.view !== 'overview'))
     if (architectureMode && architectureCard) return wrapRotation(renderArchitectureCanvasNode(item,
       { ...palette, text: item.fillColor ? palette.text : darkArchitecture ? '#f8fafc' : '#243247' },
       projection.density, architectureTheme, skin?.font, scene.architecture?.titleScale ?? 1,
@@ -576,7 +578,7 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
     return wrapRotation(`<g opacity="${opacity}"${skin ? ` style="filter:${skin.shadow};font-family:${skin.font}"` : ''}>${shapeMarkup}${primaryTint}${accent}${cardBand}${icon}${stencil}${c4}${texts}${subtitle}</g>`)
   }).join('')
   const groups = canvasPresentationGroupFrames(scene, groupFrames)
-    .filter((group) => !isInsideCollapsedAncestor(group.id, scene.groups ?? [])).map((group) => {
+    .filter((group) => !isInsideCollapsedAncestor(group.id, scene.groups ?? [])).map((group, groupIndex) => {
     const presentation = canvasArchitectureGroupPresentation(scene, group)
     const palette = architectureMode
       ? canvasArchitectureTonePalette(group.tone, { panel, text, border, note }, 'node')
@@ -599,10 +601,9 @@ export function canvasSceneToSvg(scene: CanvasScene, colors?: { background?: str
       if (presentation === 'enterprise-band') {
         const railWidth = group.labelRailWidth ?? 132
         const label = layoutArchitectureCardText(group.label || group.id, undefined, Math.max(24, railWidth - 28), group.height, 15, 700)
-        const rail = darkArchitecture ? '#2a3340' : '#eef2f6'
-        const frameStroke = darkArchitecture ? '#425164' : '#d9e2ec'
-        const labelColor = darkArchitecture ? '#eaf0f7' : '#344254'
-        return `<g class="canvas-enterprise-band"><rect x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" rx="7" fill="${darkArchitecture ? '#222d3a' : '#f8fafc'}" stroke="${frameStroke}" stroke-width="1"/><rect x="${group.x + 1}" y="${group.y + 1}" width="${Math.max(0, railWidth - 1)}" height="${group.height - 2}" rx="6" fill="${rail}"/><path d="M${group.x + railWidth} ${group.y}V${group.y + group.height}" stroke="${frameStroke}"/><title>${escapeXml(group.label || group.id)}</title><text x="${group.x + 16}" y="${group.y + label.titleY}" font-size="15" font-weight="700" fill="${labelColor}">${label.titleLines.map((line, index) => `<tspan x="${group.x + 16}" dy="${index ? label.titleLineHeight : 0}">${escapeXml(line)}</tspan>`).join('')}</text></g>`
+        const paletteIndex = scene.groups?.findIndex((item) => item.id === group.id) ?? groupIndex
+        const ink = canvasEnterpriseBandPalette(Math.max(0, paletteIndex), darkArchitecture)
+        return `<g class="canvas-enterprise-band"><rect x="${group.x}" y="${group.y}" width="${group.width}" height="${group.height}" rx="2" fill="${ink.body}" stroke="${ink.border}" stroke-width="1"/><rect x="${group.x + 1}" y="${group.y + 1}" width="${Math.max(0, railWidth - 1)}" height="${group.height - 2}" fill="${ink.rail}"/><path d="M${group.x + railWidth} ${group.y}V${group.y + group.height}" stroke="${ink.border}"/><title>${escapeXml(group.label || group.id)}</title><text x="${group.x + 16}" y="${group.y + label.titleY}" font-size="15" font-weight="700" fill="${ink.accent}">${label.titleLines.map((line, index) => `<tspan x="${group.x + 16}" dy="${index ? label.titleLineHeight : 0}">${escapeXml(line)}</tspan>`).join('')}</text></g>`
       }
       if (presentation === 'compact-region')
         return `<g class="canvas-compact-region"><text x="${group.x + 16}" y="${group.y + 18}" font-family="Arial, sans-serif" font-size="12" font-weight="640" fill="${escapeXml(palette.stroke)}" opacity="0.78">${escapeXml(group.label || group.id)}</text></g>`
@@ -1415,6 +1416,23 @@ export function canvasArchitectureGroupPresentation(
   return 'boundary'
 }
 
+/** Shared proposal-layer ink for the editable editor and exported SVG.
+ * The palette belongs to the presentation, not to a node's semantic data.
+ */
+export function canvasEnterpriseBandPalette(index: number, dark: boolean) {
+  const palettes = [
+    ['#e3eff8', '#d1e3f1', '#345d7a'],
+    ['#e6f1eb', '#d6e8dc', '#33634e'],
+    ['#e8eef9', '#d7e2f4', '#3c5781'],
+    ['#f3eaf4', '#e9dced', '#704d76'],
+    ['#e8f2f2', '#d4e7e7', '#32676c'],
+    ['#f5eee2', '#ebe0cd', '#786039'],
+  ] as const
+  if (dark) return { body: '#242f3b', rail: '#344354', accent: '#c7d8e8', border: '#536579' }
+  const [body, rail, accent] = palettes[index % palettes.length]
+  return { body, rail, accent, border: '#afc4d6' }
+}
+
 export function canvasCollapsedOwners(scene: CanvasScene): Map<string, string> {
   const groups = new Map((scene.groups ?? []).map((group) => [group.id, group]))
   const result = new Map<string, string>()
@@ -1648,6 +1666,23 @@ function shapeRadius(shape: CanvasShape | undefined, height: number): number {
   if (shape === 'square') return 3
   if (shape === 'pill') return Math.max(12, height / 2)
   return 12
+}
+
+/** A compact proposal matrix cell, deliberately distinct from a C4/technical card.
+ * Icon metadata remains in the document and is available to detail panels.
+ */
+function renderEnterpriseProposalModule(item: CanvasNode, dark: boolean, showSubtitle: boolean): string {
+  const center = item.x + item.width / 2
+  const ink = dark ? '#eaf2fb' : '#273f56'
+  const title = layoutArchitectureCardText(item.text, showSubtitle ? item.subtitle : undefined,
+    Math.max(28, item.width - 20), item.height, Math.max(14, item.fontSize ?? 15), item.fontWeight ?? 660)
+  const fill = item.fillColor && item.fillColor.toLowerCase() !== '#ffffff'
+    ? item.fillColor : dark ? '#2b3947' : item.emphasis === 'primary' ? '#f0f7fc' : '#ffffff'
+  const stroke = item.strokeColor && item.strokeColor !== '#cfd8e3'
+    ? item.strokeColor : dark ? '#738aa0' : '#a4bacd'
+  const line = (texts: string[], start: number, fontSize: number, step: number, weight: number, opacity = 1) =>
+    texts.length ? `<text x="${center}" y="${item.y + start}" text-anchor="middle" font-size="${fontSize}" font-weight="${weight}" fill="${escapeXml(item.textColor ?? ink)}" opacity="${opacity}">${texts.map((text, index) => `<tspan x="${center}" dy="${index ? step : 0}">${escapeXml(text)}</tspan>`).join('')}</text>` : ''
+  return `<g class="canvas-enterprise-module"><title>${escapeXml([item.text, item.subtitle].filter(Boolean).join(' · '))}</title><rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" rx="3" fill="${escapeXml(fill)}" stroke="${escapeXml(stroke)}" stroke-width="${item.emphasis === 'primary' ? 1.7 : 1}"/>${line(title.titleLines, title.titleY, title.titleFontSize, title.titleLineHeight, item.fontWeight ?? 660)}${line(title.subtitleLines, title.subtitleY, title.subtitleFontSize, title.subtitleLineHeight, 500, .82)}</g>`
 }
 
 function renderArchitectureCanvasNode(

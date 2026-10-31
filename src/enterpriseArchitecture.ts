@@ -12,7 +12,7 @@ const regionNames: Record<NonNullable<ArchitectureIntentGraph['nodes'][number]['
   external: '外部与参与方', experience: '访问与接入层', application: '业务应用层',
   processing: '处理与服务层', data: '数据与基础设施层',
 }
-const regionColors = ['#e5effb', '#e5f3f0', '#edf2f7']
+const regionColors = ['#e3eff8', '#e6f1eb', '#e8eef9', '#f3eaf4', '#e8f2f2', '#f5eee2']
 const bandGap = 44
 
 /** Layer membership comes from evidence; only presentation order is negotiable. */
@@ -156,13 +156,14 @@ export function composeEnterpriseArchitecture(intent: ArchitectureIntentGraph) {
 function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array<[string, ArchitectureIntentGraph['nodes']]>, gap: number) {
   const maxLayerSize = Math.max(...entries.map(([, nodes]) => nodes.length))
   const compact = maxLayerSize <= 4
-  const columns = compact ? Math.max(2, maxLayerSize) : 4
-  const nodeWidth = compact ? 206 : 248
-  const nodeHeight = compact ? 74 : 88
-  const columnGap = compact ? 22 : 28
-  const rowGap = compact ? 22 : 24
-  const leftInset = compact ? 202 : 220
-  const topInset = compact ? 84 : 90
+  const tightMatrix = intent.relations.length === 0
+  const columns = tightMatrix ? Math.min(6, Math.max(2, maxLayerSize)) : compact ? Math.max(2, maxLayerSize) : 4
+  const nodeWidth = tightMatrix ? 182 : compact ? 206 : 248
+  const nodeHeight = tightMatrix ? 70 : compact ? 74 : 88
+  const columnGap = tightMatrix ? 16 : compact ? 22 : 28
+  const rowGap = tightMatrix ? 18 : compact ? 22 : 24
+  const leftInset = tightMatrix ? 192 : compact ? 202 : 220
+  const topInset = tightMatrix ? 82 : compact ? 84 : 90
   const specs: LayeredTemplateLayer[] = entries.map(([label, nodes], index) => ({
     label, fillColor: regionColors[index % regionColors.length],
     nodes: nodes.map((node) => ({ text: node.text, subtitle: node.subtitle, icon: node.icon, width: nodeWidth, height: nodeHeight })),
@@ -179,7 +180,7 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
       const { layer: _layer, partition: _partition, ...metadata } = node
       elements.push({
         ...seed, ...metadata, id: node.id, groupId: `__arch-layer-${layerIndex + 1}`,
-        fontSize: 16,
+        fontSize: 15,
         ...(primaryNodes.has(node.id) ? { emphasis: 'primary' as const, strokeColor: primaryStroke, strokeWidth: 2 } : {}),
         x: leftInset + (nodeIndex % columns) * (nodeWidth + columnGap),
         y: y + Math.floor(nodeIndex / columns) * (nodeHeight + rowGap),
@@ -199,8 +200,8 @@ function composeLayeredCandidate(intent: ArchitectureIntentGraph, entries: Array
   const scene = routeArchitectureEdges({
     ...template,
     groups: template.groups?.map((group, index) => ({ ...group, id: `__arch-layer-${index + 1}` })),
-    width: Math.max(compact ? 800 : 1500, leftInset + columns * (nodeWidth + columnGap) + 48),
-    height: Math.max(compact ? 520 : 720, y + (compact ? 24 : 40)),
+    width: Math.max(tightMatrix ? 680 : compact ? 800 : 1500, leftInset + columns * (nodeWidth + columnGap) + (tightMatrix ? 36 : 48)),
+    height: Math.max(tightMatrix ? 480 : compact ? 520 : 720, y + (tightMatrix ? 22 : compact ? 24 : 40)),
     style: intent.style ?? 'ocean',
     architecture: {
       theme: intent.theme ?? 'presentation', diagramStyle: 'enterprise', view: 'detail', density: intent.density ?? 'auto',
