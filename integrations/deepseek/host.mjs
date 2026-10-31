@@ -4,7 +4,9 @@ import path from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { createMcpToolDefinition } from '@deepseek-ai/dsh-mcp-client'
-import { boundArguments, inspectionDirectory, isModelTool, toolName } from './bridge.mjs'
+import { boundArguments, confirmedArchitectureStyle, inspectionDirectory, isModelTool, toolName } from './bridge.mjs'
+import { architectureStyleQuestion } from '../../src/architectureStyle.ts'
+import { isArchitectureIntent } from '../../src/architectureSkill.ts'
 
 export const name = 'diagram'
 export const inject = ['tools', 'connection', 'sessionController', 'workingDirectory', 'systemPrompt']
@@ -52,6 +54,27 @@ export async function apply(ctx) {
       call: async (args, execution) => {
         if (!execution.agent) throw new Error('Diagram 工具必须由会话调用。')
         const context = await sessionContext(execution.agent.session.id, execution.signal, execution.agent)
+        if (tool.name === 'diagram.composeArchitecture' || tool.name === 'diagram.create' || tool.name === 'diagram.designGuide') {
+          const inspection = await ctx.sessionController.inspect(context.sessionId, execution.signal)
+          const { text, style } = confirmedArchitectureStyle(inspection)
+          const architectureRequest = isArchitectureIntent(text)
+          const composing = tool.name === 'diagram.composeArchitecture'
+          const creating = tool.name === 'diagram.create'
+          const guiding = tool.name === 'diagram.designGuide'
+          if (composing || (creating && architectureRequest)
+            || (guiding && (architectureRequest || isArchitectureIntent(args.intent ?? '')))) {
+            if (!style) return {
+              content: [{ type: 'text', text: architectureStyleQuestion + '\n请先向用户询问，收到用户回答前不要调用任何创建或修改图表的工具。' }],
+              isError: !guiding,
+              structuredContent: { kind: 'architecture-style-required', question: architectureStyleQuestion },
+            }
+            if ((composing || guiding) && args.architectureStyle && args.architectureStyle !== style)
+              throw new Error('架构风格与用户本轮明确选择不一致，请使用用户选择的风格。')
+            if (composing && args.architectureStyle !== style)
+              throw new Error('必须使用用户实际选择的 architectureStyle，而不是模型自行填写的风格。')
+            if (guiding) args = { ...args, architectureStyle: style }
+          }
+        }
         const result = await call(tool.name, args, context, execution.signal)
         if (tool.name === 'diagram.thread' && !result.isError) {
           openRequests.delete(context.sessionId)

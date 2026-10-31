@@ -257,6 +257,8 @@ DeepSeek Harness 需要执行真实 `read_image` 工具调用并在原始 JSONL 
 
 **Codex：** `pnpm plugin:install` 安装源码版本；Desktop 已开启时使用 `pnpm plugin:install:desktop` 刷新。公开 npm 版通过 `npx -y @weimin96/diagram-plugin@latest install --codex` 安装。注意不要同时开启 `diagram-plugin-local` 与 `diagram-plugin-npm`。
 
+**DeepSeek 架构风格确认：** 用户从聊天直接要求画架构图时，DeepSeek Host 在 `diagram.designGuide`、`diagram.create` 和 `diagram.composeArchitecture` 工具入口读取原生会话中最新的真人 `user/message`，核对用户是否明确指定「国内企业方案风格」或「国际工程架构风格」（明确 C4 视为工程架构）。模型自行填写 `architectureStyle` 不等于用户确认；未指定时先回答选择问题，不得创建文件。用户仅回答「第一种/第二种」时需要上一轮助手确实提问过两种风格。避免事后生成完才询问。侧栏显式选择风格则通过其生成提示传入用户会话，仍沿用既有引擎；仅限制 DeepSeek 的模型工具入口，不影响用户手动编辑或现有文件的打开。
+
 **DSH Desktop：** 退出 Desktop、运行 `pnpm build`，再执行：
 
 ```sh

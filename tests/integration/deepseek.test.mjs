@@ -5,7 +5,7 @@ import path from 'node:path'
 import os from 'node:os'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
-import { boundArguments, inspectionDirectory, isModelTool, toolName } from '../../integrations/deepseek/bridge.mjs'
+import { boundArguments, confirmedArchitectureStyle, inspectionDirectory, isModelTool, toolName } from '../../integrations/deepseek/bridge.mjs'
 
 async function connect() {
   const client = new Client({ name: 'diagram-integration', version: '1.0.0' })
@@ -29,6 +29,23 @@ test('DeepSeek 适配拒绝跨工作区操作，模型不暴露面板内部工�
     assert.equal(isModelTool({}), true)
     assert.equal(toolName('diagram.proposeUpdate'), 'diagram_proposeUpdate')
     assert.equal(inspectionDirectory({ meta: { cwd: '/original' }, events: [{ type: 'working-directory/change', data: { cwd: '/changed' } }] }), '/changed')
+    const human = (text) => ({ type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text }] } })
+    const model = (text) => ({ type: 'assistant/message', data: { content: [{ type: 'text', text }] } })
+    const session = (events) => ({ events })
+    assert.equal(confirmedArchitectureStyle(session([human('创建简单测试架构图')])).style, undefined,
+      'the model must not infer a style from an ambiguous architecture request')
+    assert.equal(confirmedArchitectureStyle(session([human('按国内企业方案风格画系统架构图')])).style, 'enterprise')
+    assert.equal(confirmedArchitectureStyle(session([human('画 C4 Container 架构')])).style, 'engineering')
+    assert.equal(confirmedArchitectureStyle(session([human('我要比较国内企业方案风格与国际工程架构风格')])).style, undefined)
+    assert.equal(confirmedArchitectureStyle(session([
+      human('画一张架构图'), model('想画哪种架构图？国内企业方案风格还是国际工程架构风格？'), human('第二种'),
+    ])).style, 'engineering')
+    assert.equal(confirmedArchitectureStyle(session([
+      human('画架构图'), model('先选择风格'), human('第二种'),
+    ])).style, undefined, 'numeric choices without a verified preceding question are not authoritative')
+    assert.equal(confirmedArchitectureStyle(session([
+      human('画架构图'), { type: 'user/message', data: { source: { kind: 'tool' }, content: [{ type: 'text', text: '国际工程架构风格' }] } },
+    ])).style, undefined, 'synthetic user-role entries cannot authorize a style')
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
